@@ -162,9 +162,19 @@ test("sync-templates creates internal Design and Test surfaces when no external 
   assert.equal(payload.ok, true);
   assert.equal(payload.wrote, true);
   assert.equal(existsSync(path.join(fixture.control, "docs/workspace/current/design-handoff-board.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/AGENTS.md")), true);
   assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/README.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/docs/design-window-operating-policy.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/docs/workspace-alignment-checklist.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/templates/original-plan-template.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/templates/requirement-design-template.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/templates/workspace-signal-template.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/templates/workspace-handoff-template.md")), true);
   assert.equal(existsSync(path.join(fixture.control, "docs/workspace/current/test-exchange.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/testing/AGENTS.md")), true);
   assert.equal(existsSync(path.join(fixture.control, "docs/workspace/testing/README.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/testing/docs/testing-operation-policy.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/testing/templates/test-handoff-template.md")), true);
 });
 
 test("external Design and Test directories get only alignment templates", () => {
@@ -190,6 +200,14 @@ test("external Design and Test directories get only alignment templates", () => 
   const payload = runJson(fixture, ["sync-templates", "--all", "--write"]);
   assert.equal(payload.ok, true);
   assert.equal(existsSync(path.join(design, "docs/current/workspace-handoff-board.md")), true);
+  assert.equal(existsSync(path.join(design, "docs/design-window-operating-policy.md")), true);
+  assert.equal(existsSync(path.join(design, "docs/workspace-alignment-checklist.md")), true);
+  assert.equal(existsSync(path.join(design, "templates/original-plan-template.md")), true);
+  assert.equal(existsSync(path.join(design, "templates/requirement-design-template.md")), true);
+  assert.equal(existsSync(path.join(design, "templates/workspace-signal-template.md")), true);
+  assert.equal(existsSync(path.join(design, "templates/workspace-handoff-template.md")), true);
   assert.equal(existsSync(path.join(testWindow, "docs/current/test-window-alignment.md")), true);
+  assert.equal(existsSync(path.join(testWindow, "docs/testing-operation-policy.md")), true);
+  assert.equal(existsSync(path.join(testWindow, "templates/test-handoff-template.md")), true);
   assert.equal(existsSync(path.join(testWindow, "docs/current/test-exchange.md")), false);
 });

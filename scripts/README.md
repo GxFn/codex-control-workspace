@@ -78,7 +78,11 @@ Current scripts:
   managed scope block into each configured child `AGENTS.md`. `DesignWindow`
   and `TestWindow` may be configured as external sibling directories, or kept
   internal with workspace-owned templates when the user has no separate design
-  / test directory. It defaults to dry-run and refuses to write outside the
+  / test directory. `sync-templates` creates the full required Design/Test
+  support surfaces for either mode: Design operating policy, original-plan /
+  requirement-design / signal / handoff templates, handoff board, Test
+  operation policy, test handoff template, and external alignment notes where
+  applicable. It defaults to dry-run and refuses to write outside the
   configured parent workspace. Use `discover`, `status`, `configure`,
   `prompts`, `write-agents`, and `sync-templates`.
 - `visible-dispatch.mjs`: local state manager for Visible Automation Dispatch.

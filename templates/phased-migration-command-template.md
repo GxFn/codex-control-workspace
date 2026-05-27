@@ -149,7 +149,9 @@ git log --oneline -8
 | `AgentWindow` | 观察 / 无任务 / 主线任务 | 否 |  |
 | `DashboardWindow` | 观察 / 无任务 / 主线任务 | 否 |  |
 | `PluginWindow` | 观察 / 无任务 / 主线任务 | 否 |  |
+| `DesignWindow` | 无任务 / 观察 / 需求设计 | 否 | 只有需要需求讨论、signal 判断或 handoff 草案时才发送。 |
 | `TestWindow` | 阻塞 / 待启动 / 无任务 | 否 |  |
+| `RealTestProject` | 无任务 / 观察 | 否 | 真实项目只作为受保护测试目标，不直接派发。 |
 
 ## 窗口分派
 
@@ -162,7 +164,9 @@ git log --oneline -8
 | `AgentWindow`<br>无任务 |  |
 | `DashboardWindow`<br>无任务 |  |
 | `PluginWindow`<br>无任务 |  |
+| `DesignWindow`<br>无任务 |  |
 | `TestWindow`<br>无任务 |  |
+| `RealTestProject`<br>无任务 | 不改真实项目源码。 |
 
 ## 可复制提示词
 

@@ -35,7 +35,10 @@ Use this reference when creating, moving, syncing, or archiving ControlWorkspace
 - `docs/workspace/current/workspace-current-status.md` is a short current snapshot, not the place for large historical backfill.
 - `docs/workspace/current/global-todo-board.md` is the cross-plan TODO / Backlog ledger.
 - `docs/workspace/current/test-exchange.md` is the total-control exchange point for real `TestWindow` handoffs and evidence.
-- `DesignWindow/docs/current/` holds Design-side drafts, signals, and handoff boards. Total control receives them, then decides whether to write workspace formal ledgers.
+- `docs/workspace/design/` is the internal `DesignWindow` surface when no external design repository is configured. It must include local rules, operating policy, alignment checklist, and original-plan / requirement-design / signal / handoff templates.
+- `docs/workspace/testing/` is the internal `TestWindow` surface when no external test repository is configured. It must include local rules, testing operation policy, and the test handoff template.
+- External `DesignWindow/docs/current/` holds Design-side drafts, signals, and handoff boards. Total control receives them, then decides whether to write workspace formal ledgers.
+- External `TestWindow/docs/` holds real-scenario test policies, reports, probe scripts, and evidence when a separate test repository is configured.
 
 ## Requirement And Goal Documents
 
@@ -147,6 +150,8 @@ Use only these task states:
 
 ## Maintenance Commands
 
+- Sync internal/external Design and Test support surfaces:
+  `node scripts/control-workspace-install.mjs sync-templates --all --write`
 - Sync current plan mirrors:
   `node scripts/sync-current-plan.mjs --check`
   `node scripts/sync-current-plan.mjs --write`

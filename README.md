@@ -76,7 +76,7 @@ node scripts/control-workspace-install.mjs configure --repo DesignWindow=../Desi
 node scripts/control-workspace-install.mjs sync-templates --all --write
 ```
 
-External design/test directories receive only the minimum alignment files needed by the control scripts. Internal mode keeps the design handoff board and test exchange inside this repository.
+External design/test directories receive only the minimum alignment files needed by the control scripts: Design operating policy, Design original-plan / requirement-design / signal / handoff templates, the Design handoff board, Test operation policy, Test handoff template, and Test alignment notes. Internal mode keeps the same functional surfaces inside this repository, with `docs/workspace/design/` and `docs/workspace/testing/` acting as built-in DesignWindow/TestWindow entries.
 
 ## Design Rules
 

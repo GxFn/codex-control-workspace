@@ -27,6 +27,7 @@ Send to: none
 | `AgentWindow`<br>no task | Not sent. |
 | `DashboardWindow`<br>no task | Not sent. |
 | `PluginWindow`<br>no task | Not sent. |
+| `DesignWindow`<br>no task | Not sent. |
 | `TestWindow`<br>no task | Not sent. |
 | `RealTestProject`<br>no task | Do not touch protected real project code. |
 

@@ -69,7 +69,7 @@ node scripts/control-workspace-install.mjs sync-templates --all --write
 - `docs/workspace/design/`
 - `docs/workspace/testing/`
 
-外部模式不会复制整套 workspace，只在外部 Design/Test 目录下创建总控对齐所需的最小模板，例如 Design handoff board 或 Test alignment 说明。
+外部模式不会复制整套 workspace，只在外部 Design/Test 目录下创建总控对齐所需的最小文件：Design 运行规则、original-plan / requirement-design / signal / handoff 模板、Design handoff board、Test 运行规则、Test handoff 模板和 Test alignment 说明。内部模式则在本仓库内提供同等功能入口，让没有独立 Design / Test 仓库的用户也能跑完整流程。
 
 生成给子窗口的提示词：
 

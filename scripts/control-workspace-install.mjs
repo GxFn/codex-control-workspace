@@ -503,7 +503,10 @@ function internalDesignReadme(config) {
 Use this directory when the user does not have an external ${config.designWindow} repository.
 
 - Handoff board: \`${config.designHandoffBoard}\`
-- Requirement design template: \`templates/requirement-design-template.md\`
+- Local rules: \`AGENTS.md\`
+- Operating policy: \`docs/design-window-operating-policy.md\`
+- Alignment checklist: \`docs/workspace-alignment-checklist.md\`
+- Templates: \`templates/original-plan-template.md\`, \`templates/requirement-design-template.md\`, \`templates/workspace-signal-template.md\`, and \`templates/workspace-handoff-template.md\`
 - Control imports: \`node scripts/import-design-handoffs.mjs --write\`
 `;
 }
@@ -514,6 +517,8 @@ function internalTestingReadme(config) {
 Use this directory when the user does not have an external ${config.testWindow} repository.
 
 - Test exchange: \`${config.testExchangePath}\`
+- Local rules: \`AGENTS.md\`
+- Testing operation policy: \`docs/testing-operation-policy.md\`
 - Test handoff template: \`templates/test-handoff-template.md\`
 - Rule: only create real test handoffs when a real scenario is required.
 `;
@@ -545,6 +550,14 @@ This repository can act as an external test window for ${config.workspaceName}.
 `;
 }
 
+function readControlFile(controlRoot, relativePath) {
+  const targetFile = path.join(controlRoot, relativePath);
+  if (existsSync(targetFile)) {
+    return readFileSync(targetFile, "utf8");
+  }
+  return readFileSync(path.join(defaultControlRoot, relativePath), "utf8");
+}
+
 function ensureTextFile(file, content, label) {
   const exists = existsSync(file);
   const changed = !exists;
@@ -563,6 +576,63 @@ function ensureTextFile(file, content, label) {
 
 function repoForWindow(config, windowName) {
   return normalizedRepositories(config).find((repo) => repo.windowName === windowName) ?? null;
+}
+
+function syncRelativeFile(controlRoot, targetRoot, relativePath, label) {
+  return ensureTextFile(
+    path.join(targetRoot, relativePath),
+    readControlFile(controlRoot, relativePath),
+    label,
+  );
+}
+
+function syncDesignSupportFiles(context, repoRoot, mode) {
+  const prefix = mode === "internal" ? "internal design" : "external design";
+  const files = [
+    ...(mode === "internal"
+      ? [
+          ensureTextFile(path.join(repoRoot, "AGENTS.md"), readControlFile(context.controlRoot, "docs/workspace/design/AGENTS.md"), `${prefix} agents`),
+          ensureTextFile(path.join(repoRoot, "README.md"), internalDesignReadme(context.config), `${prefix} readme`),
+        ]
+      : []),
+    ensureTextFile(
+      path.join(repoRoot, "docs/design-window-operating-policy.md"),
+      readControlFile(context.controlRoot, "docs/workspace/design/docs/design-window-operating-policy.md"),
+      `${prefix} operating policy`,
+    ),
+    ensureTextFile(
+      path.join(repoRoot, "docs/workspace-alignment-checklist.md"),
+      readControlFile(context.controlRoot, "docs/workspace/design/docs/workspace-alignment-checklist.md"),
+      `${prefix} alignment checklist`,
+    ),
+    syncRelativeFile(context.controlRoot, repoRoot, "templates/original-plan-template.md", `${prefix} original plan template`),
+    syncRelativeFile(context.controlRoot, repoRoot, "templates/requirement-design-template.md", `${prefix} requirement design template`),
+    syncRelativeFile(context.controlRoot, repoRoot, "templates/workspace-signal-template.md", `${prefix} workspace signal template`),
+    syncRelativeFile(context.controlRoot, repoRoot, "templates/workspace-handoff-template.md", `${prefix} workspace handoff template`),
+  ];
+  return files;
+}
+
+function syncTestSupportFiles(context, repoRoot, mode) {
+  const prefix = mode === "internal" ? "internal test" : "external test";
+  const files = [
+    ...(mode === "internal"
+      ? [
+          ensureTextFile(path.join(repoRoot, "AGENTS.md"), readControlFile(context.controlRoot, "docs/workspace/testing/AGENTS.md"), `${prefix} agents`),
+          ensureTextFile(path.join(repoRoot, "README.md"), internalTestingReadme(context.config), `${prefix} readme`),
+        ]
+      : []),
+    ensureTextFile(
+      path.join(repoRoot, "docs/testing-operation-policy.md"),
+      readControlFile(context.controlRoot, "docs/workspace/testing/docs/testing-operation-policy.md"),
+      `${prefix} testing operation policy`,
+    ),
+    syncRelativeFile(context.controlRoot, repoRoot, "templates/test-handoff-template.md", `${prefix} test handoff template`),
+  ];
+  if (mode === "external") {
+    files.push(ensureTextFile(path.join(repoRoot, "docs/current/test-window-alignment.md"), externalTestAlignment({ windowName: context.config.testWindow }, context.config), "external test alignment"));
+  }
+  return files;
 }
 
 function syncTemplatesPayload() {
@@ -594,8 +664,8 @@ function syncTemplatesPayload() {
         continue;
       }
       results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(boardPath, designBoardTemplate(), "design handoff board") });
-      if (repo.mode === "internal") {
-        results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(path.join(repoRoot, "README.md"), internalDesignReadme(context.config), "internal design readme") });
+      for (const result of syncDesignSupportFiles(context, repoRoot, repo.mode)) {
+        results.push({ windowName, mode: repo.mode, ok: true, ...result });
       }
     }
 
@@ -613,10 +683,8 @@ function syncTemplatesPayload() {
         continue;
       }
       results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(path.resolve(context.controlRoot, context.config.testExchangePath), testExchangeTemplate(), "test exchange") });
-      if (repo.mode === "internal") {
-        results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(path.join(repoRoot, "README.md"), internalTestingReadme(context.config), "internal testing readme") });
-      } else {
-        results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(path.join(repoRoot, "docs/current/test-window-alignment.md"), externalTestAlignment(repo, context.config), "external test alignment") });
+      for (const result of syncTestSupportFiles(context, repoRoot, repo.mode)) {
+        results.push({ windowName, mode: repo.mode, ok: true, ...result });
       }
     }
   }

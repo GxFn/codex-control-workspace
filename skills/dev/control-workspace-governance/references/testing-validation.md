@@ -53,8 +53,8 @@ workspace governance work.
 
 ## Related Entrypoints
 
-- 测试交流规则：`docs/workspace/test-exchange-policy.md`
-- 测试执行长期规则：`TestWindow/docs/testing-operation-policy.md`
+- 测试交流入口：`docs/workspace/current/test-exchange.md`
+- 测试执行长期规则：内部模式为 `docs/workspace/testing/docs/testing-operation-policy.md`；外部模式为 `TestWindow/docs/testing-operation-policy.md`
 - 默认测试参数：`TestWindow/config/defaults.json`
 - 测试单模板：`templates/test-handoff-template.md`
 - 机械校验：`scripts/check-test-boundary.mjs`

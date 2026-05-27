@@ -74,7 +74,9 @@
 | `AgentWindow`<br>状态 |  |
 | `DashboardWindow`<br>状态 |  |
 | `PluginWindow`<br>状态 |  |
+| `DesignWindow`<br>状态 |  |
 | `TestWindow`<br>状态 |  |
+| `RealTestProject`<br>状态 |  |
 
 补充说明：
 
@@ -159,7 +161,9 @@
 | `AgentWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划。 |
 | `DashboardWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划。 |
 | `PluginWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划。 |
+| `DesignWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划；只有需要补需求设计 / signal / handoff 时才发送。 |
 | `TestWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划；真实测试项目只作为测试目标项目，不作为独立派发窗口。 |
+| `RealTestProject`<br>暂停 | 真实项目受保护，不直接派发。 |
 
 ## 可复制提示词
 
@@ -169,7 +173,7 @@
 等待用户确认任务级最终目标与阶段计划；当前不派发。确认后提示词必须要求执行窗口先读取目标仓库 AGENTS.md 并明确当前窗口定位。
 ```
 
-不发送给：`BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow`、`PluginWindow`、`TestWindow`。
+不发送给：`BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow`、`PluginWindow`、`DesignWindow`、`TestWindow`、`RealTestProject`。
 
 ## 回填区
 
