@@ -1,36 +1,72 @@
-# Codex Control Workspace 中文说明
+<div align="center">
 
-这是一个本地优先的 Codex 多窗口总控工作区，用来协调同一个项目族里的多个仓库、多个 Codex 窗口、任务包、验收、TODO、测试边界和可选自动化。
+# Codex Control Workspace
+
+一个本地优先的 Codex 多窗口总控工作区，用可见、可接管的自动化持续推进多仓库协作。
+
+[English](README.md)
+
+</div>
+
+---
+
+- [为什么](#为什么) · [安装形态](#安装形态) · [开始安装](#开始安装) · [它如何工作](#它如何工作) · [可见自动化派发](#可见自动化派发) · [日常使用](#日常使用) · [目录职责](#目录职责) · [设计取向](#设计取向)
+
+## 为什么
+
+一个 Codex 窗口很适合处理一个仓库。真实产品工作通常没有这么整齐。
+
+一个需求可能同时涉及插件入口、本地 daemon、共享 core、Dashboard、需求设计窗口和真实项目测试窗口。如果每个窗口只靠自己的上下文往前走，计划很容易漂移：一个窗口做了薄接口，另一个窗口等不到证据，测试窗口验证了错误问题，总控则不断改状态文档，却没有把真实闭环跑通。
+
+Codex Control Workspace 提供的是一个**总控面**：
+
+```text
+用户目标
+   ↓
+总控计划
+   ↓
+任务包 → 同级 Codex 子窗口
+   ↓
+证据回填 → 总控验收
+   ↓
+下一阶段、继续派发、归档或停止
+```
+
+它刻意保持朴素：没有托管服务，没有数据库，没有隐藏调度器。核心就是 `AGENTS.md`、Markdown 账本、小型 Node 脚本、Codex skill，以及可选的 Codex heartbeat 自动化。所有判断面都在文件里，可以读、可以改、可以复核。
+
+真正的优势是“人优先的连续性”。有人在 Mac 前时，可以随时查看进度、调整范围、直接改代码或关闭自动化；自动化永远排在开发者现场判断之后。没有人在 Mac 前且已开启无人值守模式时，总控才会在子窗口完成后继续验收证据、接受或打回、补计划、创建下一阶段任务包、再次派发，直到用户最终目标完成、出现硬门禁，或没有可领取 TODO。自动化服务于总控判断，而不是替代总控判断。
 
 ## 安装形态
 
-这个 GitHub 仓库不应该包裹你的产品子仓库。推荐形态是：你先准备一个父目录，然后把 `codex-control-workspace/` 和其它仓库并列放置。
+不要把产品仓库塞进这个仓库里。推荐做法是把 `codex-control-workspace/` 放在项目族父目录下，和它要管理的仓库并列：
 
 ```text
 MyWorkspace/
-  codex-control-workspace/
+  AGENTS.md                  # 解包后的总控入口
+  codex-control-workspace/   # 本仓库
   ProductRepo/
   CoreRepo/
   PluginRepo/
   DesignRepo/
   TestRepo/
+  workspace-ledger/          # 项目专属长期账本
 ```
 
-旧 Alembic 项目也按同样方式理解：`codex-control-workspace/` 是一个独立总控仓库，旁边才是 `Alembic`、`AlembicCore`、`AlembicPlugin` 等产品仓库。
+这个 GitHub 仓库只保存通用总控能力。项目运行中的当前计划放在 `.workspace-active/`，本机运行态放在 `.workspace-local/`，长期历史和项目专属文档放在同级 `workspace-ledger/`。
 
-## 用 Codex 交互式安装
+## 开始安装
 
-建议让 Codex 做安装助手，而不是手动猜目录：
+建议让 Codex 做安装助手，而不是手动猜目录。把下面这段交给 Codex：
 
 ```text
 你是 codex-control-workspace 安装助手。
-先读取 README.zh-CN.md、README.md、AGENTS.md、workspace.config.json、scripts/README.md。
+先读取 README.md、README.zh-CN.md、AGENTS.md、workspace.config.json、scripts/README.md。
 运行 node scripts/control-workspace-install.mjs discover --json。
-列出同级目录、建议窗口名、已有 AGENTS.md 状态和职责建议。
-等待我确认目录范围和窗口职责后，再运行 configure --write 或 write-agents --write。
+列出同级仓库、建议窗口名、已有 AGENTS.md 状态和职责建议。
+等待我确认目录范围和窗口职责后，再运行 configure、sync-root-agents、sync-templates 或 write-agents。
 ```
 
-常用命令：
+先做只读探测：
 
 ```sh
 cd MyWorkspace/codex-control-workspace
@@ -38,20 +74,7 @@ node scripts/control-workspace-install.mjs discover --json
 node scripts/control-workspace-install.mjs status --json
 ```
 
-用户确认后，写入配置。若用户没有独立需求设计目录和测试目录，使用内部模式：
-
-```sh
-node scripts/control-workspace-install.mjs configure \
-  --repo BaseWindow=../ProductRepo \
-  --repo PluginWindow=../PluginRepo \
-  --internal-design \
-  --internal-test \
-  --write
-node scripts/control-workspace-install.mjs sync-root-agents --write
-node scripts/control-workspace-install.mjs sync-templates --all --write
-```
-
-若用户已有独立 Design / Test 目录，只把它们作为同级外部目录接入，并同步必要模板：
+确认范围后，写入窗口配置：
 
 ```sh
 node scripts/control-workspace-install.mjs configure \
@@ -60,77 +83,105 @@ node scripts/control-workspace-install.mjs configure \
   --repo DesignWindow=../DesignRepo \
   --repo TestWindow=../TestRepo \
   --write
+
 node scripts/control-workspace-install.mjs sync-root-agents --write
 node scripts/control-workspace-install.mjs sync-templates --all --write
-```
-
-内部模式会使用本仓库内的活跃文档面和同级长期账本：
-
-- `.workspace-active/workspace/current/design-handoff-board.md`
-- `.workspace-active/workspace/current/test-exchange.md`
-- `../workspace-ledger/design/`
-- `../workspace-ledger/testing/`
-
-外部模式不会复制整套 workspace，只在外部 Design/Test 目录下创建总控对齐所需的最小文件：Design 运行规则、original-plan / requirement-design / signal / handoff 模板、Design handoff board、Test 运行规则、Test handoff 模板和 Test alignment 说明。内部模式则在本仓库内提供同等功能入口，让没有独立 Design / Test 仓库的用户也能跑完整流程。
-
-父级工作区必须有自己的 `AGENTS.md`。运行 `sync-root-agents --write` 会把 `codex-control-workspace/AGENTS.md` 解包到父目录 `AGENTS.md`，并把内部路径改成指向 `codex-control-workspace/`。这样你打开父级 workspace 时，Codex 会自动加载总控规则；其它脚本、skill、模板和活跃账本仍保存在 `codex-control-workspace/` 内。
-
-生成给子窗口的提示词：
-
-```sh
 node scripts/control-workspace-install.mjs prompts
-node scripts/control-workspace-install.mjs prompts --window BaseWindow
+node scripts/control-workspace-install.mjs write-agents --all --write
 ```
 
-写入或刷新同级仓库的 `AGENTS.md` scope 管理块：
+如果你没有独立的需求设计仓库或测试仓库，可以使用内部入口：
 
 ```sh
-node scripts/control-workspace-install.mjs write-agents --all --write
-node scripts/control-workspace-install.mjs write-agents --window PluginWindow --write
+node scripts/control-workspace-install.mjs configure \
+  --repo BaseWindow=../ProductRepo \
+  --repo PluginWindow=../PluginRepo \
+  --internal-design \
+  --internal-test \
+  --write
 ```
 
-`write-agents` 默认是 dry-run；只有带 `--write` 才会写文件。脚本只会写 `workspace.config.json` 指定父目录内的同级仓库，且只维护带 `codex-control-workspace:scope` 标记的管理块，不会覆盖子仓库原有规则正文。
+`write-agents` 只维护同级仓库 `AGENTS.md` 中带 `codex-control-workspace:scope` 标记的管理块，不会覆盖子仓库原有规则正文。
 
-## 子窗口提示词用途
+## 它如何工作
 
-`prompts` 会为每个配置仓库生成一段简短提示词。它要求子窗口：
+### 总控入口
 
-- 确认自己所在目录和窗口名；
-- 读取本目录 `AGENTS.md`；
-- 必要时用安装脚本刷新 scope 管理块；
-- 只在自己的目录范围和职责内工作；
-- 发现目录或职责不一致时停止并回报总控。
+父目录的 `AGENTS.md` 是 Codex 自动读取的总控契约。它由本仓库 `AGENTS.md` 解包生成，规定总控在派发、测试、验收、归档和自动化之前必须如何思考。
 
-这让总控仓库可以保持通用，而每个子仓库通过自己的 `AGENTS.md` 明确范围和职责。
+最硬的规则保留在这里，因为它们约束的是总控本身：不能用脚本输出代替判断，不能接受薄弱证据，不能把空壳连接包装成完成，不能在边界不清时把任务丢给别的窗口。
+
+### 当前工作面
+
+`.workspace-active/workspace/index.md` 是当前总控入口。它挂载当前计划、当前状态、TODO、测试交流、Design inbox 和自动化状态。
+
+当前计划是短期文件，只描述这一轮目标、任务包、窗口覆盖、producer / consumer 顺序、验证命令和回填要求。完成后，有长期价值的证据再收束到 `../workspace-ledger/`。
+
+### 子窗口
+
+每个子仓库保留自己的 `AGENTS.md`。安装脚本会写入一个紧凑的管理块，让子窗口知道：
+
+- 总控仓库在哪里；
+- 自己对应哪个窗口名；
+- 当前计划和长期账本在哪里；
+- VAD 任务如何 claim / finish；
+- 什么情况必须停止并回报总控。
+
+子窗口仍然拥有自己的仓库。它可以读代码、实现、测试，也可以在自己的边界内使用 Codex 子 agent。总控只验收它统一回填的原始证据。
+
+## 可见自动化派发
+
+Visible Automation Dispatch，简称 VAD，用 Codex heartbeat 唤醒真实子窗口，但每一步仍然可见。
+
+脚本层负责本地状态：
+
+```sh
+node scripts/visible-dispatch.mjs mode --enable --write
+node scripts/visible-dispatch.mjs preflight --from-plan --json
+node scripts/visible-dispatch.mjs enqueue --from-plan --group <group> --return-policy controller-last --write
+node scripts/visible-dispatch.mjs arm-batch --group <group> --json
+node scripts/visible-dispatch.mjs post-run-audit --json
+```
+
+脚本不会直接调用 Codex automation API。它只生成 payload。总控窗口创建 heartbeat，记录返回的 automation id，然后等待子窗口 claim、finish 和回填。
+
+VAD 面向长时间无人值守运行，但始终可被人接管。开发者在场时，手动修正、代码修改和范围裁决优先于下一次自动跳转；Mac 空闲无人看守时，一个 dispatch group 的最后一个子窗口完成后才回跳总控。总控复核原始证据后，决定接受、阻塞、补证、自测、创建下一波任务或继续派发新的 group。只要当前计划、仓库边界、真实 thread id 和证据门禁仍然有效，循环就可以继续向最终目标推进。
+
+在 macOS 上，VAD 开启无人值守模式时可以保持电脑不睡眠。当前实现会启动一个本地 watcher 持有 `caffeinate`；`mode --disable` 会写入本地 stop marker，让 watcher 自己退出并释放防睡眠进程，避免 Codex 沙箱里的跨命令 `kill EPERM`。
 
 ## 日常使用
 
-总控入口仍是：
+从当前总控面开始：
 
 ```sh
-node scripts/verify-control-center.mjs --require-task-packages --with-script-tests
 node scripts/workspace-control.mjs status
+node scripts/visible-dispatch.mjs status --json
+node scripts/verify-control-center.mjs --require-task-packages --with-script-tests
 ```
 
-核心文档入口仍是 `.workspace-active/workspace/index.md`。当前计划、TODO、任务包、验收、测试交流和自动化状态都从这里挂载。
+普通手动派发时，总控默认只给一条通用提示词：读取父级 `AGENTS.md`、读取当前计划、读取自己仓库的 `AGENTS.md`、声明窗口身份、只做分配给自己的任务、回填证据。
 
-`.workspace-active/` 是当前活跃任务面，不跟随 `codex-control-workspace` 的 git。当前总控入口、当前计划、活跃 TODO、测试交流、Design inbox 和 VAD 当前状态都放在这里，方便随项目运行而变化。
+无人值守时，只有当前计划明确允许 VAD，才开启自动化。开启 VAD 不代表所有聊天、需求讨论或单窗口开发都自动进入流水线；它只授权当前计划里的目标窗口派发和 finish-chain。开发者的实时输入永远高于下一次自动派发。
 
-`.workspace-local/` 是本机运行态和本机配置面，不跟随 git。真实 Codex thread id、VAD runtime state，以及某个安装实例专属的 `workspace.config.json` 覆盖文件都放这里。
+## 目录职责
 
-`../workspace-ledger/` 是项目专属长期账本，也不跟随 `codex-control-workspace` 的 git。它保存需求设计、归档历史、内部 Design/Test 入口，以及每个子窗口自己的协作文档目录，例如 `../workspace-ledger/BaseWindow/`、`../workspace-ledger/PluginWindow/`。完成归档时，从 `.workspace-active/` 收束到 `../workspace-ledger/`。
+| 路径 | 作用 |
+| --- | --- |
+| `AGENTS.md` | 总控规则源文件，用于解包到父级工作区。 |
+| `workspace.config.json` | 通用窗口名、同级仓库路径、职责标签和脚本默认配置。 |
+| `.workspace-active/` | 不提交的当前工作面：当前计划、TODO、测试交流、Design inbox。 |
+| `.workspace-local/` | 不提交的本机运行态：thread id、VAD 队列 / 状态、本机配置覆盖。 |
+| `../workspace-ledger/` | 位于本仓库外的项目专属长期账本。 |
+| `scripts/` | 安装、校验、账本、VAD 和总控辅助脚本。 |
+| `skills/` | 总控、子窗口、测试、账本和自动化操作手册。 |
+| `templates/` | 计划、任务包、Design handoff、测试单和阶段确认的最小骨架。 |
 
-## 配置文件
+## 设计取向
 
-`workspace.config.json` 是通用安装范围的默认事实来源；如果存在 `.workspace-local/workspace.config.json`，脚本会优先读取本机覆盖配置，用来承载 Alembic 这类项目专属窗口名单而不提交到通用仓库。关键字段：
+1. **提示词原生，文件承载**：人能读，Codex 也能读。
+2. **先总控判断，再自动化投递**：脚本负责分类和投递，不替代验收。
+3. **同级仓库保持独立**：产品代码、测试和提交仍留在自己的仓库。
+4. **当前工作本地化，长期历史外置**：通用仓库保持干净，项目记忆进入 active 和 ledger。
+5. **脚本要小，边界要硬**：自动化只有在保住窗口身份、仓库范围和证据质量时才有价值。
 
-- `workspaceRoot`: 父目录相对本仓库的位置，通常是 `..`。
-- `controlRepoDir`: 本总控仓库目录名，默认 `codex-control-workspace`。
-- `repositories`: 每个同级仓库的窗口名、路径、职责和是否写入 `AGENTS.md`。
-- `dispatchWindows`: 可以接收任务的窗口。
-- `repoNames`: 需要统计 git 状态的产品仓库窗口。
-- `designHandoffBoard`: Design handoff board 路径。内部模式是 `.workspace-active/workspace/current/design-handoff-board.md`；外部模式通常是 `../DesignWindow/docs/current/workspace-handoff-board.md`。
-- `testExchangePath`: 总控仓库内测试交流文档路径。
-- `windowLedgerRoot`: 各子窗口协作文档根目录，默认 `../workspace-ledger`；脚本会为配置里的窗口生成 `../workspace-ledger/<WindowName>/README.md`。
-
-不要把真实 thread id、密钥或本机私密路径写进 tracked 配置或文档。
+Codex Control Workspace 不是判断力的替代品。它是让判断力在多窗口、多仓库工作里持续在线的脚手架。

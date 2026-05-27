@@ -73,9 +73,11 @@ node scripts/visible-dispatch.mjs mode --disable --write
   target fan-out or finish-chain continuation.
 - Disable mode when the user stops automation, a hard gate triggers, or the
   current plan is no longer automation-owned.
-- On macOS, enabled mode starts a local `caffeinate -dims` keep-awake process.
-  Disabled mode must stop it. If stop fails, report an automation readiness risk
-  and fix or manually stop the process before claiming reliability.
+- On macOS, enabled mode starts a local watcher that owns `caffeinate -dims`.
+  Disabled mode writes a local stop marker; the watcher exits and releases
+  `caffeinate` itself, avoiding cross-command `kill EPERM` in Codex sandboxed
+  shells. If stop still fails, report an automation readiness risk and fix or
+  manually stop the recorded worker / child process before claiming reliability.
 
 ## Target Fan-Out
 

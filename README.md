@@ -1,95 +1,187 @@
+<div align="center">
+
 # Codex Control Workspace
 
-A local-first control workspace for coordinating multiple Codex windows across sibling repositories.
+A local-first command center that keeps multi-repository Codex work moving through visible, human-priority automation.
 
-中文说明见 [README.zh-CN.md](README.zh-CN.md).
+[中文](README.zh-CN.md)
 
-This repository packages a proven total-control workflow: a source `AGENTS.md` that can be unpacked to the parent workspace root, current-plan ledgers, task packages, visible heartbeat dispatch, target/controller skills, templates, installation helpers, and validation scripts. It is intentionally prompt-and-file based so a clone can work without a hosted service.
+</div>
 
-The intended GitHub install shape is not "put your repos inside this repo." Clone this control repo next to the repositories it will manage:
+---
+
+- [Why](#why) · [Install Shape](#install-shape) · [Getting Started](#getting-started) · [How It Works](#how-it-works) · [Visible Automation Dispatch](#visible-automation-dispatch) · [Daily Use](#daily-use) · [Repository Layout](#repository-layout) · [Design Philosophy](#design-philosophy)
+
+## Why
+
+One Codex window is good at one codebase. Real product work is rarely that tidy.
+
+A feature may need a plugin entrypoint, a local daemon, a shared core package, a dashboard, a design window, and a real-project test window. If each window works from its own memory, the plan drifts: one window implements a thin interface, another waits for evidence that never arrives, a test window validates the wrong thing, and the controller keeps rewriting status documents instead of closing the real loop.
+
+Codex Control Workspace gives that work a **total-control surface**:
+
+```text
+User goal
+   ↓
+Total-control plan
+   ↓
+Task packages → sibling Codex windows
+   ↓
+Evidence backfill → total-control acceptance
+   ↓
+Next wave, dispatch again, archive, or stop
+```
+
+It is intentionally simple. No hosted service, no database, no hidden scheduler. The workflow is made of `AGENTS.md`, Markdown ledgers, small Node scripts, Codex skills, and optional Codex heartbeat automations. You can read every decision surface in the repository.
+
+The important trick is continuity with human priority. When someone is at the Mac, they can inspect progress, redirect scope, edit code, or stop automation at any time; automation stays behind the developer's live judgment. When nobody is at the Mac and unattended mode is enabled, the controller can keep moving after a child window finishes: review the evidence, accept or reject it, create the next task package, fan out to the next windows, and repeat until the user goal is done, a hard gate appears, or there is no eligible TODO left. It is automation in service of total control, not a one-shot reminder and not a replacement for a present developer.
+
+## Install Shape
+
+Do not put your product repositories inside this repository. Clone the control workspace next to the repositories it will manage:
 
 ```text
 MyWorkspace/
-  codex-control-workspace/
+  AGENTS.md                  # unpacked total-control entrypoint
+  codex-control-workspace/   # this repository
   ProductRepo/
   CoreRepo/
   PluginRepo/
   DesignRepo/
   TestRepo/
+  workspace-ledger/          # project-specific long-term records
 ```
 
-## What This Is
+The generic repository keeps reusable control logic. Your project-specific active plans live in `.workspace-active/`, local runtime data lives in `.workspace-local/`, and long-term project history lives in the sibling `workspace-ledger/`.
 
-- `AGENTS.md`: the source total-control rule surface. After `sync-root-agents --write`, the parent workspace `AGENTS.md` is the always-loaded Codex entrypoint.
-- `workspace.config.json`: project/window names, sibling directory scope, and role labels.
-- `skills/`: operational manuals for control, target windows, testing, ledgers, and VAD.
-- `templates/`: human-authored plan, task package, handoff, and confirmation skeletons.
-- `scripts/`: mechanical checks and local runtime helpers.
-- `.workspace-active/`: ignored active working surface for the current index, current plans, TODO board, test exchange, Design inbox, and VAD state that should not be committed to the generic repo.
-- `.workspace-local/`: ignored local runtime/config surface for thread ids, VAD state, and optional `workspace.config.json` overrides for one installation.
-- `../workspace-ledger/`: the project-specific long-term ledger for requirement designs, archives, internal Design/Test surfaces, child-window records, and historical evidence. Keep it outside this generic repository.
+## Getting Started
 
-## Quick Start
-
-1. Create or choose a parent folder for the project family.
-2. Clone this repository into that parent as a sibling of the repos it will manage.
-3. Ask Codex to inspect the sibling directories, propose scope, and wait for your confirmation.
-4. Decide whether `DesignWindow` and `TestWindow` are external sibling directories or internal workspace templates.
-5. Write `workspace.config.json` only after the scope is confirmed.
-6. Unpack the control `AGENTS.md` into the parent workspace root so Codex auto-loads the control rules when the parent folder is opened.
-7. Generate child-window prompts and write managed access cards into sibling `AGENTS.md` files.
-8. Keep `.workspace-active/workspace/index.md` as the single active control document entrypoint.
-9. Run:
-
-```sh
-node scripts/control-workspace-install.mjs discover --json
-node scripts/control-workspace-install.mjs status --json
-node scripts/verify-control-center.mjs --require-task-packages --with-script-tests
-```
-
-For visible automation dispatch, register real Codex thread ids locally under `.workspace-local/visible-dispatch/`; never commit them.
-
-## Codex-Assisted Installation
-
-Use Codex as the installer and reviewer:
+Use Codex as the installer. Ask it to inspect the parent folder, propose repository roles, and wait for confirmation before writing anything:
 
 ```text
-You are installing codex-control-workspace. Read README.md, README.zh-CN.md,
-AGENTS.md, workspace.config.json, and scripts/README.md. Run
-node scripts/control-workspace-install.mjs discover --json, list sibling
-repositories and proposed window roles, then wait for my confirmation before
-running configure or write-agents.
+You are installing codex-control-workspace.
+Read README.md, README.zh-CN.md, AGENTS.md, workspace.config.json, and scripts/README.md.
+Run node scripts/control-workspace-install.mjs discover --json.
+List sibling repositories, proposed window names, existing AGENTS.md status, and role suggestions.
+Wait for my confirmation before running configure, sync-root-agents, sync-templates, or write-agents.
 ```
 
-After confirmation:
+Common orientation commands:
 
 ```sh
-node scripts/control-workspace-install.mjs configure --repo BaseWindow=../ProductRepo --repo PluginWindow=../PluginRepo --internal-design --internal-test --write
+cd MyWorkspace/codex-control-workspace
+node scripts/control-workspace-install.mjs discover --json
+node scripts/control-workspace-install.mjs status --json
+```
+
+After the scope is confirmed, configure the sibling windows:
+
+```sh
+node scripts/control-workspace-install.mjs configure \
+  --repo BaseWindow=../ProductRepo \
+  --repo PluginWindow=../PluginRepo \
+  --repo DesignWindow=../DesignRepo \
+  --repo TestWindow=../TestRepo \
+  --write
+
 node scripts/control-workspace-install.mjs sync-root-agents --write
 node scripts/control-workspace-install.mjs sync-templates --all --write
 node scripts/control-workspace-install.mjs prompts
 node scripts/control-workspace-install.mjs write-agents --all --write
-node scripts/control-workspace-install.mjs write-agents --all --include-unmanaged --write
 ```
 
-The managed `AGENTS.md` block is a compact child-window access card, not a full rule copy. It records the control workspace, window name, active index/status, current-plan entrypoint, VAD claim/finish boundary, and the per-window ledger path. Hard rules stay in the parent `AGENTS.md` and in each child repository's own stop card.
-
-If the user already has design or test repositories, configure them explicitly instead of using the internal flags:
+If you do not have separate design or test repositories, use internal surfaces:
 
 ```sh
-node scripts/control-workspace-install.mjs configure --repo DesignWindow=../DesignRepo --repo TestWindow=../TestRepo --write
-node scripts/control-workspace-install.mjs sync-root-agents --write
-node scripts/control-workspace-install.mjs sync-templates --all --write
+node scripts/control-workspace-install.mjs configure \
+  --repo BaseWindow=../ProductRepo \
+  --repo PluginWindow=../PluginRepo \
+  --internal-design \
+  --internal-test \
+  --write
 ```
 
-External design/test directories receive only the minimum alignment files needed by the control scripts: Design operating policy, Design original-plan / requirement-design / signal / handoff templates, the Design handoff board, Test operation policy, Test handoff template, and Test alignment notes. Internal mode keeps the same functional surfaces in `../workspace-ledger/design/` and `../workspace-ledger/testing/`, so project-specific files remain outside this generic repository.
+`write-agents` only updates managed `codex-control-workspace:scope` blocks in configured sibling repositories. It does not replace a child repository's own rules.
 
-Each configured child window also gets a project-specific ledger directory such as `../workspace-ledger/BaseWindow/` or `../workspace-ledger/PluginWindow/`. Use those directories for cross-window task notes, backfills, evidence links, and acceptance records that used to live under project-specific `docs/<WindowName>/` folders.
+## How It Works
 
-## Design Rules
+### Total Control
 
-The repository keeps the original workflow shape on purpose. Most customization should be project parameters and naming, not a rewrite of the control discipline. If you need to change behavior, update `AGENTS.md`, the relevant skill, and script tests together.
+The parent `AGENTS.md` is the always-loaded control contract. It is generated from this repository's `AGENTS.md` and tells Codex how to think before dispatching, testing, accepting, archiving, or automating work.
 
-## Configuration Boundary
+The strongest rules stay there because they are safety rails for the controller itself: do not replace judgment with script output, do not accept weak evidence, do not turn thin wiring into a completed feature, and do not send work to another window before the boundary is clear.
 
-Runtime scripts read project/window names, sibling repository paths, protected repo prefixes, Design handoff paths, test exchange paths, and optional process matchers from `workspace.config.json`. For one machine or one project family, an ignored `.workspace-local/workspace.config.json` overrides the tracked generic config without polluting the GitHub repository. The script test suite keeps legacy Alembic fixture data only as regression coverage for the workflow this repository was extracted from; new workspaces should customize the config file and human-facing text.
+### Current Work
+
+`.workspace-active/workspace/index.md` is the active control entrypoint. It points to the current plan, current status, TODO board, test exchange, design inbox, and automation state.
+
+Current plans are short-lived. They describe the present goal, task packages, window coverage, producer / consumer order, validation commands, and backfill requirements. When finished, important evidence is moved to `../workspace-ledger/`.
+
+### Child Windows
+
+Each child repository keeps its own `AGENTS.md`. The control installer adds a compact managed block that tells the child window:
+
+- where the control workspace is;
+- which window name it owns;
+- where the current plan and ledger are;
+- how to claim / finish a VAD task;
+- when to stop and report back.
+
+The child still owns its repository. It can inspect code, implement changes, run tests, and even use Codex sub-agents inside its own boundary. Total control accepts only the unified evidence it returns.
+
+## Visible Automation Dispatch
+
+Visible Automation Dispatch (VAD) lets the controller wake real Codex windows with heartbeat automations while keeping every step visible.
+
+The script layer manages local state:
+
+```sh
+node scripts/visible-dispatch.mjs mode --enable --write
+node scripts/visible-dispatch.mjs preflight --from-plan --json
+node scripts/visible-dispatch.mjs enqueue --from-plan --group <group> --return-policy controller-last --write
+node scripts/visible-dispatch.mjs arm-batch --group <group> --json
+node scripts/visible-dispatch.mjs post-run-audit --json
+```
+
+The script does not call Codex automation APIs by itself. It prepares payloads. A Codex controller window creates the heartbeat, records the returned automation id, then waits for child windows to claim, finish, and backfill.
+
+VAD is designed for long unattended runs that remain interruptible. If a developer is present, their manual correction, code edit, or scope decision takes priority over the next automated hop. If the Mac is left alone, a dispatch group can return to total control after the last child window finishes; total control then reviews the raw evidence, accepts, blocks, requests more evidence, self-tests, creates the next wave, or dispatches a new group. The loop continues only while the current plan, repository boundaries, real thread ids, and evidence gates remain valid.
+
+On macOS, VAD can keep the machine awake while unattended mode is enabled. The current implementation uses a local watcher that owns `caffeinate`, so `mode --disable` closes automation and releases the keep-awake process through a local stop marker instead of relying on fragile cross-command `kill`.
+
+## Daily Use
+
+Start with the active control surface:
+
+```sh
+node scripts/workspace-control.mjs status
+node scripts/visible-dispatch.mjs status --json
+node scripts/verify-control-center.mjs --require-task-packages --with-script-tests
+```
+
+For ordinary manual dispatch, the controller writes one prompt for all windows: read the parent `AGENTS.md`, read the current plan, read your own repository `AGENTS.md`, declare your window identity, do only the task assigned to your window, and backfill evidence.
+
+For unattended work, turn on VAD only when the current plan explicitly allows it. Turning it on does not make every conversation automatic; it only authorizes the current plan's target fan-out and finish-chain behavior. Manual developer input always outranks the next automated dispatch.
+
+## Repository Layout
+
+| Path | Purpose |
+| --- | --- |
+| `AGENTS.md` | Source total-control instructions, unpacked to the parent workspace root. |
+| `workspace.config.json` | Generic window names, repository paths, role labels, and script defaults. |
+| `.workspace-active/` | Ignored current control surface: current plans, TODOs, test exchange, design inbox. |
+| `.workspace-local/` | Ignored local runtime: thread ids, VAD queue/state, local config override. |
+| `../workspace-ledger/` | Project-specific long-term records outside the generic repository. |
+| `scripts/` | Installation, validation, ledger, VAD, and control helper scripts. |
+| `skills/` | Operational manuals for total control, target windows, testing, ledgers, and automation. |
+| `templates/` | Minimal skeletons for plans, task packages, design handoff, tests, and confirmations. |
+
+## Design Philosophy
+
+1. **Prompt-native, file-backed** — the workflow is readable by humans and by Codex.
+2. **Total control before automation** — scripts classify and deliver; the controller still accepts or rejects evidence.
+3. **Sibling repositories stay independent** — product code, tests, and commits stay in their own repositories.
+4. **Active work is local, history is separate** — generic code stays clean; project memory lives in active and ledger surfaces.
+5. **Small scripts, strong boundaries** — automation is useful only when it preserves window identity, repository scope, and evidence quality.
+
+Codex Control Workspace is not a replacement for judgment. It is the scaffolding that keeps judgment present when the work spreads across many windows.

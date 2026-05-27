@@ -304,7 +304,9 @@ test("mode enable and disable manage the local keep-awake process on macOS", { s
     const enabled = JSON.parse(enable.stdout);
     assert.equal(enabled.keepAwake.active, true);
     assert.equal(enabled.keepAwake.command, keepAwakeCommand);
+    assert.equal(enabled.keepAwake.strategy, "watcher");
     assert.ok(enabled.keepAwake.pid > 0);
+    assert.ok(enabled.keepAwake.childPid > 0);
     keepAwakePid = enabled.keepAwake.pid;
 
     const disable = run(root, ["mode", "--disable", "--write", "--json", "--reason", "test close"]);

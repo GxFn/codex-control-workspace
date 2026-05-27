@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadWorkspaceConfig, workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const rawArgs = process.argv.slice(2);
@@ -25,6 +26,7 @@ const workspaceRoot = path.resolve(getValue("--root", process.cwd()));
 const stateDir = path.resolve(getValue("--state-dir", path.join(workspaceRoot, ".workspace-local/visible-dispatch")));
 const write = hasFlag("--write");
 const json = hasFlag("--json");
+const scriptPath = fileURLToPath(import.meta.url);
 
 const workspaceConfig = loadWorkspaceConfig({
   workspaceRoot,
@@ -54,6 +56,7 @@ const files = {
   queue: path.join(stateDir, "dispatch-queue.json"),
   runs: path.join(stateDir, "automation-runs.json"),
   groups: path.join(stateDir, "dispatch-groups.json"),
+  keepAwakeControl: path.join(stateDir, "keep-awake-control.json"),
 };
 
 const helpText = `
@@ -193,6 +196,9 @@ function defaultKeepAwake() {
     active: false,
     platform: process.platform,
     pid: 0,
+    childPid: 0,
+    strategy: "watcher",
+    token: "",
     command: "caffeinate",
     args: ["-dimsu"],
     startedAt: null,
@@ -721,6 +727,10 @@ function keepAwakeEnabled() {
   return process.env.CODEX_VAD_KEEP_AWAKE !== "0";
 }
 
+function keepAwakeStrategy() {
+  return getValue("--keep-awake-strategy", process.env.CODEX_VAD_KEEP_AWAKE_STRATEGY || "watcher");
+}
+
 function normalizeKeepAwakeState(state) {
   const current = state.keepAwake && typeof state.keepAwake === "object" ? state.keepAwake : {};
   return {
@@ -728,6 +738,9 @@ function normalizeKeepAwakeState(state) {
     ...current,
     enabled: keepAwakeEnabled(),
     platform: process.platform,
+    childPid: Number.isInteger(Number(current.childPid)) ? Number(current.childPid) : 0,
+    strategy: current.strategy || keepAwakeStrategy(),
+    token: typeof current.token === "string" ? current.token : "",
     command: current.command || keepAwakeCommand(),
     args: Array.isArray(current.args) && current.args.every((item) => typeof item === "string")
       ? current.args
@@ -748,13 +761,77 @@ function isPidRunning(pid) {
   }
 }
 
+function sleepSync(ms) {
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(waitBuffer, 0, 0, ms);
+}
+
+function waitForPidExit(pid, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isPidRunning(pid)) {
+      return true;
+    }
+    sleepSync(50);
+  }
+  return !isPidRunning(pid);
+}
+
 function keepAwakeStatus(state, extra = {}) {
   const keepAwake = normalizeKeepAwakeState(state);
+  const workerActive = isPidRunning(keepAwake.pid);
+  const childActive = isPidRunning(keepAwake.childPid);
   return {
     ...keepAwake,
-    active: isPidRunning(keepAwake.pid),
+    active: workerActive || childActive,
+    workerActive,
+    childActive,
     ...extra,
   };
+}
+
+function readKeepAwakeControl() {
+  if (!existsSync(files.keepAwakeControl)) {
+    return {};
+  }
+  try {
+    return JSON.parse(readFileSync(files.keepAwakeControl, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeKeepAwakeControl(value) {
+  atomicWriteJson(files.keepAwakeControl, value);
+}
+
+function keepAwakeWorkerArgs(status, token) {
+  return [
+    scriptPath,
+    "keep-awake-worker",
+    "--root",
+    workspaceRoot,
+    "--state-dir",
+    stateDir,
+    "--token",
+    token,
+    "--keep-awake-command",
+    status.command,
+    ...status.args.flatMap((arg) => ["--keep-awake-arg", arg]),
+  ];
+}
+
+function readWorkerChildPid(token, timeoutMs = 750) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const control = readKeepAwakeControl();
+    if (control.token === token && Number.isInteger(Number(control.childPid)) && Number(control.childPid) > 0) {
+      return Number(control.childPid);
+    }
+    sleepSync(25);
+  }
+  const control = readKeepAwakeControl();
+  return control.token === token && Number.isInteger(Number(control.childPid)) ? Number(control.childPid) : 0;
 }
 
 function startKeepAwake(state, { dryRun = false } = {}) {
@@ -778,11 +855,22 @@ function startKeepAwake(state, { dryRun = false } = {}) {
     return { ...status, active: false, pid: 0, message: "would start" };
   }
   try {
-    const child = spawn(status.command, status.args, {
+    const token = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2)}`;
+    writeKeepAwakeControl({
+      version: 1,
+      token,
+      action: "run",
+      requestedAt: nowIso(),
+      command: status.command,
+      args: status.args,
+      workerPid: 0,
+      childPid: 0,
+    });
+    const child = spawn(process.execPath, keepAwakeWorkerArgs(status, token), {
       stdio: "ignore",
-      // Keep-awake must outlive this short-lived CLI invocation; otherwise the
-      // automation mode can report "started" while the assertion dies before
-      // the next preflight.
+      // The watcher outlives this short-lived CLI invocation and exits by
+      // observing a local stop marker, avoiding cross-command signal EPERM in
+      // Codex sandboxed shells.
       detached: true,
     });
     child.unref?.();
@@ -795,10 +883,14 @@ function startKeepAwake(state, { dryRun = false } = {}) {
         message: "failed",
       };
     }
+    const childPid = readWorkerChildPid(token);
     return {
       ...status,
       active: true,
       pid: child.pid || 0,
+      childPid,
+      strategy: "watcher",
+      token,
       startedAt: nowIso(),
       stoppedAt: null,
       stopReason: "",
@@ -832,12 +924,53 @@ function stopKeepAwake(state, { dryRun = false, reason = "" } = {}) {
   if (dryRun) {
     return { ...status, message: "would stop" };
   }
+  if (status.strategy === "watcher" && status.token) {
+    writeKeepAwakeControl({
+      version: 1,
+      token: status.token,
+      action: "stop",
+      requestedAt: nowIso(),
+      reason,
+      workerPid: status.pid || 0,
+      childPid: status.childPid || 0,
+    });
+    const workerExited = waitForPidExit(status.pid, 5000);
+    const childExited = waitForPidExit(status.childPid, 3000);
+    if (workerExited && childExited) {
+      return {
+        ...status,
+        active: false,
+        workerActive: false,
+        childActive: false,
+        pid: 0,
+        childPid: 0,
+        token: "",
+        stoppedAt: nowIso(),
+        stopReason: reason,
+        lastError: "",
+        message: "stopped",
+      };
+    }
+    return {
+      ...status,
+      active: isPidRunning(status.pid) || isPidRunning(status.childPid),
+      workerActive: isPidRunning(status.pid),
+      childActive: isPidRunning(status.childPid),
+      lastError: [
+        workerExited ? "" : `worker pid ${status.pid} did not exit after stop marker`,
+        childExited ? "" : `keep-awake child pid ${status.childPid} did not exit after worker stop`,
+      ].filter(Boolean).join("; "),
+      message: "stop failed",
+    };
+  }
   try {
     process.kill(status.pid, "SIGTERM");
     return {
       ...status,
       active: false,
       pid: 0,
+      childPid: 0,
+      token: "",
       stoppedAt: nowIso(),
       stopReason: reason,
       lastError: "",
@@ -851,6 +984,96 @@ function stopKeepAwake(state, { dryRun = false, reason = "" } = {}) {
       message: "stop failed",
     };
   }
+}
+
+function keepAwakeWorkerCommandArgs(commandName, args) {
+  if (process.platform === "darwin" && path.basename(commandName) === "caffeinate" && !args.includes("-w")) {
+    return [...args, "-w", String(process.pid)];
+  }
+  return args;
+}
+
+function commandKeepAwakeWorker() {
+  const token = getValue("--token", "");
+  if (!token) {
+    fail("keep-awake-worker requires --token.");
+  }
+  const commandName = keepAwakeCommand();
+  const args = keepAwakeWorkerCommandArgs(commandName, keepAwakeArgs());
+  let child = null;
+  let exiting = false;
+
+  const stopChild = () => {
+    if (!child?.pid || !isPidRunning(child.pid)) {
+      return;
+    }
+    try {
+      process.kill(child.pid, "SIGTERM");
+    } catch {
+      return;
+    }
+    if (!waitForPidExit(child.pid, 1200)) {
+      try {
+        process.kill(child.pid, "SIGKILL");
+      } catch {
+        // The parent watcher is exiting; status checks will surface residue.
+      }
+    }
+  };
+
+  const exitWorker = (code = 0) => {
+    if (exiting) {
+      return;
+    }
+    exiting = true;
+    stopChild();
+    process.exit(code);
+  };
+
+  try {
+    child = spawn(commandName, args, { stdio: "ignore" });
+  } catch (error) {
+    writeKeepAwakeControl({
+      version: 1,
+      token,
+      action: "failed",
+      workerPid: process.pid,
+      childPid: 0,
+      updatedAt: nowIso(),
+      error: error.message,
+    });
+    process.exit(1);
+  }
+
+  writeKeepAwakeControl({
+    version: 1,
+    token,
+    action: "run",
+    workerPid: process.pid,
+    childPid: child.pid || 0,
+    updatedAt: nowIso(),
+    command: commandName,
+    args,
+  });
+
+  child.on("exit", () => exitWorker(0));
+  process.on("SIGTERM", () => exitWorker(0));
+  process.on("SIGINT", () => exitWorker(0));
+
+  setInterval(() => {
+    const control = readKeepAwakeControl();
+    if (control.token === token && control.action === "stop") {
+      exitWorker(0);
+    }
+    try {
+      const state = readJson(files.state, defaultState());
+      if (state.keepAwake?.token === token && state.mode !== "enabled") {
+        exitWorker(0);
+      }
+    } catch {
+      // Keep the watcher alive if state is temporarily being written.
+    }
+  }, 500).unref?.();
 }
 
 function commandStatus() {
@@ -3086,6 +3309,9 @@ switch (command) {
     break;
   case "mode":
     commandMode();
+    break;
+  case "keep-awake-worker":
+    commandKeepAwakeWorker();
     break;
   case "register":
     commandRegister();
