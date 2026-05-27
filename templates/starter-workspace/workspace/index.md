@@ -1,6 +1,6 @@
 # Control Workspace Index
 
-This file is the single workspace entrypoint. Current status, active TODO, test exchange, and active control plans live in `docs/workspace/current/`. Completed plans should move to `docs/workspace/archive/`.
+This file is the starter template for the single active workspace entrypoint. After installation, current status, active TODO, test exchange, and active control plans live in `.workspace-active/workspace/current/`. Completed plans should be archived to the project ledger, normally `../workspace-ledger/workspace/archive/`.
 
 ## 当前总控入口
 
@@ -11,7 +11,7 @@ This file is the single workspace entrypoint. Current status, active TODO, test 
 | Global TODO Board | [current/global-todo-board.md](current/global-todo-board.md) | maintained | Cross-plan TODO ledger. |
 | Design Handoff Board | [current/design-handoff-board.md](current/design-handoff-board.md) | maintained | Internal DesignWindow handoff board when no external design repository is configured. |
 | Test Exchange | [current/test-exchange.md](current/test-exchange.md) | maintained | Real-scenario validation handoff and evidence ledger. |
-| Workspace Record Map | [workspace-record-map.md](workspace-record-map.md) | maintained | Long-term archive and evidence map. |
+| Workspace Record Map | [workspace-record-map.md](../../../workspace-ledger/workspace/workspace-record-map.md) | maintained | Long-term archive and evidence map in the external project ledger. |
 | 当前短期工作区 | [current/](current/) | maintained | Current status, active TODO, test exchange, and current plans. |
 | Script Index | [../../scripts/README.md](../../scripts/README.md) | maintained | Mechanical script entrypoint. |
 | Skill Index | [../../skills/README.md](../../skills/README.md) | maintained | Skill assets. |

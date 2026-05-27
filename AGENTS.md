@@ -1,8 +1,8 @@
 # ControlWorkspace Agent Instructions
 
-**重要**：本仓库是 BaseWindow 系列仓库的统一计划指挥中心，不是父级源码仓库，也不是单一产品源码仓库。推荐安装形态是：在一个用户自己的父目录下，把 `codex-control-workspace/` 与各产品子仓库并列放置；目录范围和窗口职责由 `workspace.config.json` 的 `repositories` 配置确认。真实测试项目也应作为同级受保护仓库管理，不能被当作临时样例或随意改造的沙盒。
+**重要**：本仓库是 BaseWindow 系列仓库的统一计划指挥中心，不是父级源码仓库，也不是单一产品源码仓库。推荐安装形态是：在一个用户自己的父目录下，把 `codex-control-workspace/` 与各产品子仓库并列放置；目录范围和窗口职责由 `workspace.config.json` 的 `repositories` 配置确认。若存在 `.workspace-local/workspace.config.json`，它是本机安装实例的覆盖配置，优先于 tracked 通用配置，但不得提交。真实测试项目也应作为同级受保护仓库管理，不能被当作临时样例或随意改造的沙盒。
 
-进入本 workspace 后，先读取 `AGENTS.md`、`docs/workspace/index.md` 和 `docs/workspace/current/workspace-current-status.md`，再根据当前总控文档继续工作。读取文档只是定位状态，不等于优先改文档。
+进入本 workspace 后，先读取 `AGENTS.md`、`.workspace-active/workspace/index.md` 和 `.workspace-active/workspace/current/workspace-current-status.md`，再根据当前总控文档继续工作。读取文档只是定位状态，不等于优先改文档。
 
 ## 最高停止卡
 
@@ -86,14 +86,14 @@
 
 用户通常会指定单一任务。总控先按以下分区选择最小流程，不要把其它分区动作一并展开：
 
-- **入口同步**：读取 `AGENTS.md`、`docs/workspace/index.md`、`docs/workspace/current/workspace-current-status.md` 和当前总控文档，输出状态、阻塞、待验收和下一步；不自动改文档。
+- **入口同步**：读取 `AGENTS.md`、`.workspace-active/workspace/index.md`、`.workspace-active/workspace/current/workspace-current-status.md` 和当前总控文档，输出状态、阻塞、待验收和下一步；不自动改文档。
 - **代码事实分析**：读取相关子仓库 `AGENTS.md`、真实入口、调用链、配置和测试证据；输出代码事实、边界判断和风险。发现的问题必须落 TODO / Backlog 或明确不入 TODO 理由。除非用户要求，不新建 wave，不输出派发提示词。
 - **Design 交接接收**：需求讨论、bug / TODO / research / decision signal 和完整方案 handoff 优先由 `DesignWindow` 产出；总控只做接收审查、当前主线影响判断、正式入账和后续流程选择。正规流程是 `DesignWindow` 完成需求设计、目标和完成定义后，带 TODO / Backlog 挂载建议交回总控；总控正式写入全局 TODO、当前计划 TODO 或需求目录后，再按优先级、当前主线和目标阶段确认正常领取推进。`workspace-signal` / 小交流只在必要提醒或风险同步时使用，不能替代完整需求 handoff 和正式 TODO 入账。signal / handoff 不是执行计划，不能直接派发。
 - **TODO 维护**：只更新正确 TODO 文档和受影响调度状态；不自动进入需求设计或 wave，除非 TODO 改变主线阶段、窗口依赖或派发名单。
 - **分配计划**：用户要求“派发任务”“做一轮计划分配”“开始执行分配计划”时，必须先回到当前目标和完成定义，判断目标是否已经达到、剩余差距是什么、下一波是否直接推进该差距；再滚动当前 TODO / Backlog，并基于已确认文档和 TODO 依赖做阶段顺序、任务包、窗口覆盖、producer / consumer 依赖判断、分派表和可复制提示词。若当前计划没有最终完成定义、目标状态判断或后续阶段收束路线，必须先补计划或暂停确认，不能直接按 TODO 派发。
 - **规则治理 / skill 治理**：只修改 workspace 文档、脚本、模板或 skill 资产；先判断这次治理解决哪个真实流程缺口，不触碰产品源码，不创建测试单，除非治理变更影响当前计划或用户要求验证。
 - **验收 / 归档**：读取回填证据，独立复核原始证据，做功能完整性检查、TODO 滚动和必要归档。证据不足时先判断总控能否自测复核。
-- **测试交接**：只有真实项目验证、cold-start / rescan、复现、回归、Dashboard 手动观察、运行时监控或跨仓库集成环境证据，才通过 `docs/workspace/current/test-exchange.md` 创建或更新 `TestWindow` 测试单。
+- **测试交接**：只有真实项目验证、cold-start / rescan、复现、回归、Dashboard 手动观察、运行时监控或跨仓库集成环境证据，才通过 `.workspace-active/workspace/current/test-exchange.md` 创建或更新 `TestWindow` 测试单。
 
 如果一个请求同时命中多个分区，先执行能解除当前阻塞的最小分区；其余事项记录为 TODO 或下一步。
 
@@ -107,7 +107,7 @@
 - 总控发现当前计划缺少最终完成定义、阶段顺序、producer / consumer 依赖判断，或用户中途新增目标、改变约束。
 - 原始计划书、需求设计或任务级目标阶段确认尚未满足当前流程要求。
 
-确认前，当前总控文档和 `docs/workspace/current/workspace-current-status.md` 必须保持 `暂停` 或等待确认口径，`发送给` 必须为 `无`；不要输出执行窗口可复制提示词，也不要把候选窗口标为 `待启动`。
+确认前，当前总控文档和 `.workspace-active/workspace/current/workspace-current-status.md` 必须保持 `暂停` 或等待确认口径，`发送给` 必须为 `无`；不要输出执行窗口可复制提示词，也不要把候选窗口标为 `待启动`。
 
 ## 测试与验收硬边界
 
@@ -123,7 +123,7 @@
 - 总控验收必须先做回填信任边界判断：执行窗口回填的“结论”只作为待审输入；总控需要独立读取提交、diff、测试输出、runtime JSON、报告或日志等原始证据后，才能写入验收结论。
 - 验收失败或证据不足后，下一轮派发必须先写清失败归因来自哪一层：代码事实、测试环境、窗口操作、总控文档、自动化投递或需求边界。不能把“证据不足”伪装成产品失败，也不能把测试窗口的推测当作源码仓库返工依据。
 - 验收不能只看本轮窗口是否回填完成，还必须检查当前 TODO / Backlog：已解决项写证据关闭，仍有效项转入下一波，新增发现补入 TODO，确认不做项写清理由。存在未处理主线 TODO 时，不得把主线归档为完成。
-- 执行窗口回填 workspace 文档后，不得自行提交 ControlWorkspace 仓库；workspace 文档提交只能由主控窗口在验收、去重、修正索引和确认无空转后统一完成。
+- 执行窗口回填 workspace 文档后，不得自行提交 control workspace 能力仓库；workspace 文档提交只能由主控窗口在验收、去重、修正索引和确认无空转后统一完成。
 - `TestWindow` 自身未提交的 probe、报告、脚本索引或临时测试资产不作为总控验收阻塞；只要回填证据足够、产品仓库和真实测试项目没有非预期改动，提交 hash 可以记录为 `无`。
 
 测试单、证据解释和验证命令细节见 `skills/dev/control-workspace-governance/references/testing-validation.md`。
@@ -154,33 +154,33 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/con
 ## Workspace 治理与文档账本
 
 - Control workspace 仓库不承载产品源码包，不作为 npm package、CLI、Dashboard、Plugin 或 Agent runtime 发布；它应作为独立仓库与产品子仓库并列安装。
-- Control workspace 仓库可以作为 `GxFn/ControlWorkspace` 总控文档仓库，但只跟踪 workspace 自己的说明、计划、验收、索引、脚本、模板和 skill 资产；不得把 `BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow`、`PluginWindow`、`DesignWindow`、`TestWindow` 或真实测试项目子仓库加入本仓库的 git 跟踪、submodule 或 gitlink。
-- 同级产品仓库的目录范围、窗口名、职责和是否写入 `AGENTS.md` 管理块，由 `workspace.config.json` 的 `repositories` 决定。首次安装或目录变化时，先运行 `node scripts/control-workspace-install.mjs discover --json` 让 Codex 列出同级目录并等待用户确认，再用 `configure --write` 写入配置。
+- Control workspace 仓库只跟踪通用能力：`AGENTS.md`、README、脚本、模板、skill、安装支持文件和 starter 文档；不得承载项目专属当前计划、活跃 TODO、测试交流、归档历史或子窗口回填。项目运行中的活跃文档放 `.workspace-active/`，长期账本放 `../workspace-ledger/`。不得把 `BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow`、`PluginWindow`、`DesignWindow`、`TestWindow` 或真实测试项目子仓库加入本仓库的 git 跟踪、submodule 或 gitlink。
+- 同级产品仓库的目录范围、窗口名、职责和是否写入 `AGENTS.md` 管理块，由 tracked `workspace.config.json` 或 ignored `.workspace-local/workspace.config.json` 的 `repositories` 决定。首次安装或目录变化时，先运行 `node scripts/control-workspace-install.mjs discover --json` 让 Codex 列出同级目录并等待用户确认，再用 `configure --write` 写入配置；项目专属覆盖优先写入 `.workspace-local/`，通用 GitHub 仓库保持 generic。
 - `DesignWindow` 和 `TestWindow` 可以是外部同级目录，也可以由本仓库内部模板承接。安装时必须先问用户是否已有需求设计 / 测试目录；没有则使用 `--internal-design` / `--internal-test` 并运行 `sync-templates --write` 创建内部入口；已有则只向外部目录同步必要对齐模板，不复制整套 workspace。
 - 子仓库源码、测试脚本和测试文档改动必须在各自仓库独立提交；本仓库只能通过安装脚本在用户确认后向同级仓库 `AGENTS.md` 写入或刷新 scope 管理块。
-- 只有主控窗口可以提交 ControlWorkspace 仓库里的文档、脚本、模板或 skill 资产。其它执行窗口不得自行对 ControlWorkspace 仓库执行 git add / commit / push。
+- 只有主控窗口可以提交 control workspace 能力仓库里的文档、脚本、模板或 skill 资产。其它执行窗口不得自行对 control workspace 能力仓库执行 git add / commit / push。
 - workspace 可以保管总控通用能力，例如 `scripts/`、`skills/`、`templates/` 下的验证脚本、分派模板、文档模板、Codex skill 草案或跨窗口协作工具。此类能力必须服务于工作区总控、文档治理、验证或协作，不得复制或替代子仓库产品实现。
 - workspace 通用脚本默认应是 repo-neutral、参数化、无密钥、无用户绝对路径、无网络依赖；如果脚本会写入同级子仓库，必须是用户确认后的安装 scope 写入，或有当前总控文档明确授权，并优先让对应子仓库窗口执行。
 - workspace 内的 `skills/` 是可复用 skill 资产或草案的保管位置，不代表自动安装或自动启用；若某个 skill 需要安装到 Codex runtime、插件包或子仓库，必须在文档中明确安装位置、消费方和同步方式。
-- `docs/workspace/index.md` 是 workspace 级唯一总控入口。当前状态、活跃 TODO、测试交流和正在执行的 workspace 总控计划优先写到 `docs/workspace/current/`；完成后再归档或提炼到长期文档。
-- `docs/requirement-designs/` 保存较大需求的原始计划书、需求设计文档和代码实现依赖调研；不要把具体 wave 派发、执行验收或回填堆到这里。
-- Design 活跃草案和 `workspace-signal` / `workspace-handoff` 可以保存在外部 `DesignWindow/docs/current/`，也可以使用内部 `docs/workspace/current/design-handoff-board.md` 与 `docs/workspace/design/`；总控接收后再决定是否转写到 workspace 正式账本。Design 不直接改总控当前状态。
-- `docs/goal-stage-confirmation/` 保存“需求目标 + 分阶段确认”的长期流程；可复用模板统一保存到 `templates/`；具体某次任务的目标阶段确认文档写到 `docs/workspace/current/` 并从索引挂载。
-- 与某个子仓库强相关的长期协作文档，优先写到 `docs/CoreWindow/`、`docs/AgentWindow/`、`docs/DashboardWindow/`、`docs/PluginWindow/` 或 `docs/BaseWindow/`，并从 workspace 总控文档或索引挂回。
-- `docs/` 根层级不再作为新的总控文档默认落点；除非用户明确要求兼容旧文档位置，否则不要继续把新协作文档散落在 `docs/` 根层级。已存在的历史目录可作为背景材料读取；需要重写、续写或归档时，短期执行入口优先在 `docs/workspace/current/`，长期规则 / 契约 / 地图才写入 `docs/workspace/`。
+- `.workspace-active/workspace/index.md` 是 workspace 级唯一活跃总控入口。当前状态、活跃 TODO、测试交流、Design inbox、VAD 当前计划和正在执行的 workspace 总控计划优先写到 `.workspace-active/workspace/current/`；它是本机当前工作面，默认不提交。完成后再归档或提炼到 `../workspace-ledger/`。
+- `../workspace-ledger/requirement-designs/` 保存较大需求的原始计划书、需求设计文档和代码实现依赖调研；不要把具体 wave 派发、执行验收或回填堆到这里。
+- Design 活跃草案和 `workspace-signal` / `workspace-handoff` 可以保存在外部 `DesignWindow/docs/current/`，也可以使用内部 `.workspace-active/workspace/current/design-handoff-board.md` 与 `../workspace-ledger/design/`；总控接收后再决定是否转写到 workspace 正式账本。Design 不直接改总控当前状态。
+- `../workspace-ledger/goal-stage-confirmation/` 保存“需求目标 + 分阶段确认”的长期流程；可复用模板统一保存到 `templates/`；具体某次任务的目标阶段确认文档写到 `.workspace-active/workspace/current/` 并从索引挂载。
+- 与某个子仓库强相关的长期协作文档，优先写到 `../workspace-ledger/CoreWindow/`、`../workspace-ledger/AgentWindow/`、`../workspace-ledger/DashboardWindow/`、`../workspace-ledger/PluginWindow/` 或 `../workspace-ledger/BaseWindow/`，并从 workspace 总控文档或索引挂回。
+- 通用 `codex-control-workspace` 仓库不再使用 `docs/` 根层级承载总控文档；旧 `docs/workspace/` starter / window-support 内容属于模板，统一放在 `templates/`。需要重写、续写或归档时，短期执行入口优先在 `.workspace-active/workspace/current/`，长期规则 / 契约 / 地图写入外层 `../workspace-ledger/`。
 - 子仓库内 `docs/` 只放随源码长期维护的产品文档、发布文档或用户文档；不要把跨仓库协作临时文档散落到子仓库内部。
-- 即使真实测试项目自身包含 `docs/`，开发协作文件、阶段计划、验收记录、扫描结果和 BaseWindow 验证记录仍统一通过 workspace 总控文档、内部 `docs/workspace/current/test-exchange.md`，或外部 `TestWindow/docs/` 记录；真实测试项目仓库内 `docs/` 只保存必要的长期项目文档。
+- 即使真实测试项目自身包含 `docs/`，开发协作文件、阶段计划、验收记录、扫描结果和 BaseWindow 验证记录仍统一通过 workspace 总控文档、内部 `.workspace-active/workspace/current/test-exchange.md`，或外部 `TestWindow/docs/` 记录；真实测试项目仓库内 `docs/` 只保存必要的长期项目文档。
 - 长期文档不得写入用户本机绝对路径、API key、token 或其它私密信息。文档命名使用小写 kebab-case 和执行日 `YYYY-MM-DD`。
 
 详细文档落点、索引、模板字段和账本维护规则见 `skills/dev/control-workspace-governance/references/workspace-ledgers.md`。
 
 ## 需求到 Wave 流程
 
-- 成熟需求到执行路线见 `docs/workspace/requirement-to-wave-execution-flow.md`；总控只保留流程门禁，不在 `AGENTS.md` 重复所有步骤。
+- 成熟需求到执行路线见 `../workspace-ledger/workspace/requirement-to-wave-execution-flow.md`；总控只保留流程门禁，不在 `AGENTS.md` 重复所有步骤。
 - 正规需求路线是：Design 先完成 original plan、requirement design、目标、完成定义、阶段候选和 TODO / Backlog 挂载建议；总控接收后正式入 TODO / Backlog 或需求目录，再决定补代码调研、创建测试单、进入目标阶段确认或启动 wave。
 - 任务拆分不得只分配“抽象连接”“接口占位”“空 adapter”“无调用方 provider”“只改类型不落功能”的任务；如果某一阶段确实只做 contract，也必须有明确消费窗口、下一阶段消费方式和 targeted verification。
 - 任务级确认文档必须写清：用户原始目标、对应需求设计文档、总控理解、最终完成定义、非目标、影响窗口、producer / consumer 依赖链、阶段计划、当前阶段判断、验证策略、风险和确认问题。
-- 用户确认后，才能新建或激活具体 wave 执行计划。目标阶段确认文档只记录用户确认和阶段路线，不继续承载所有执行细节。激活 wave 后，`docs/workspace/index.md` 当前计划应切到 wave 执行计划，并只把当前无上游阻塞、发送后能实际推进的窗口改为 `待启动`。
+- 用户确认后，才能新建或激活具体 wave 执行计划。目标阶段确认文档只记录用户确认和阶段路线，不继续承载所有执行细节。激活 wave 后，`.workspace-active/workspace/index.md` 当前计划应切到 wave 执行计划，并只把当前无上游阻塞、发送后能实际推进的窗口改为 `待启动`。
 
 ## 总控脚本与自动化
 
@@ -195,7 +195,7 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/con
 当用户需要把下一波任务复制到其它 Codex 窗口时，总控窗口默认只输出一条通用提示词，让各窗口根据当前总控文档自行领取分配给自己的任务。详细发送 / 不发送判断见 `skills/dev/control-workspace-governance/references/window-dispatch.md`。
 
 ```text
-先读取 AGENTS.md、docs/workspace/index.md、docs/workspace/current/<当前总控文档名>.md，以及你所在窗口/目标仓库的 AGENTS.md。
+先读取 AGENTS.md、.workspace-active/workspace/index.md、.workspace-active/workspace/current/<当前总控文档名>.md，以及你所在窗口/目标仓库的 AGENTS.md。
 
 先明确声明当前窗口定位和本轮仓库职责。
 
@@ -206,7 +206,7 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/con
 完成后回填：完成范围、提交 hash、验证命令、验证结果、遗留风险和下一步建议。
 ```
 
-- 具体当前总控文档名、执行窗口列表和观察窗口判断，不写入 `AGENTS.md`。这些 wave 级信息必须写在 `docs/workspace/index.md` 和当前总控文档的“可复制分派提示词 / 分派表”章节中。
+- 具体当前总控文档名、执行窗口列表和观察窗口判断，不写入 `AGENTS.md`。这些 wave 级信息必须写在 `.workspace-active/workspace/index.md` 和当前总控文档的“可复制分派提示词 / 分派表”章节中。
 - 输出提示词前必须确认正文同时包含 `AGENTS.md` 和“定位”要求，并区分“发送窗口”和“观察 / 阻塞 / 无任务窗口”。
 
 ## Skill 分层

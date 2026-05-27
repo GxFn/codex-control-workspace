@@ -2,15 +2,16 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
+import { loadWorkspaceConfig, resolveConfigPath, workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const args = process.argv.slice(2);
 const workspaceRoot = path.resolve(getValue("--root", process.cwd()));
 const json = args.includes("--json");
-const indexPath = path.join(workspaceRoot, "docs/workspace/index.md");
 const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args, config: workspaceConfig });
+const indexPath = ledgerPaths.workspaceIndexPath;
 const testWindowName = workspaceConfig.testWindow;
-const exchangePath = path.join(workspaceRoot, workspaceConfig.testExchangePath);
+const exchangePath = resolveConfigPath(workspaceRoot, workspaceConfig.testExchangePath);
 const sendEligibleStatuses = new Set(["待启动", "执行中"]);
 const activeTestStatuses = ["待启动", "执行中"];
 const issues = [];
@@ -60,7 +61,7 @@ function extractFirstLinkTarget(markdown) {
 
 function currentPlanPathFromIndex() {
   if (!existsSync(indexPath)) {
-    issues.push("docs/workspace/index.md is missing.");
+    issues.push(`${path.relative(workspaceRoot, indexPath)} is missing.`);
     return null;
   }
   const section = sectionContent(read(indexPath), "当前总控入口");
@@ -71,7 +72,7 @@ function currentPlanPathFromIndex() {
   const planRow = rows.find((row) => row[0] === "当前计划");
   const target = extractFirstLinkTarget(planRow?.[1] ?? "");
   if (!target) {
-    issues.push("Could not resolve current plan from docs/workspace/index.md.");
+    issues.push(`Could not resolve current plan from ${path.relative(workspaceRoot, indexPath)}.`);
     return null;
   }
   return path.resolve(path.dirname(indexPath), target.split("#")[0]);

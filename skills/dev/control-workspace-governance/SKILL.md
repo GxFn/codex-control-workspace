@@ -12,8 +12,8 @@ This skill holds detailed ControlWorkspace control-center procedures that are to
 Use this skill after reading:
 
 1. `AGENTS.md`
-2. `docs/workspace/index.md`
-3. `docs/workspace/current/workspace-current-status.md`
+2. `.workspace-active/workspace/index.md`
+3. `.workspace-active/workspace/current/workspace-current-status.md`
 4. the current workspace control document
 
 This skill may guide workspace documentation, TODO intake, dispatch planning, and validation. It must not authorize product implementation in ControlWorkspace, direct real-project testing, or bypass the current mainline.

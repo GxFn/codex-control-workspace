@@ -100,12 +100,12 @@ test("configure writes user-confirmed sibling mappings into workspace.config.jso
     [
       ["BaseWindow", "../BaseWindow"],
       ["PluginWindow", "../PluginWindow"],
-      ["DesignWindow", "docs/workspace/design"],
-      ["TestWindow", "docs/workspace/testing"],
+      ["DesignWindow", "../workspace-ledger/design"],
+      ["TestWindow", "../workspace-ledger/testing"],
     ],
   );
-  assert.equal(config.designHandoffBoard, "docs/workspace/current/design-handoff-board.md");
-  assert.equal(config.testExchangePath, "docs/workspace/current/test-exchange.md");
+  assert.equal(config.designHandoffBoard, ".workspace-active/workspace/current/design-handoff-board.md");
+  assert.equal(config.testExchangePath, ".workspace-active/workspace/current/test-exchange.md");
 });
 
 test("prompts use sibling control script paths for child windows", () => {
@@ -144,6 +144,26 @@ test("write-agents is dry-run by default and writes managed scope blocks with --
   assert.match(pluginAgents, /Window name: `PluginWindow`/);
 });
 
+test("sync-root-agents unpacks parent AGENTS with control-repo paths", () => {
+  const fixture = makeFixture();
+  let payload = runJson(fixture, ["sync-root-agents"]);
+  assert.equal(payload.command, "sync-root-agents");
+  assert.equal(payload.changed, true);
+  assert.equal(payload.wrote, false);
+  assert.equal(existsSync(path.join(fixture.parent, "AGENTS.md")), false);
+
+  payload = runJson(fixture, ["sync-root-agents", "--write"]);
+  assert.equal(payload.wrote, true);
+  const rootAgents = readFileSync(path.join(fixture.parent, "AGENTS.md"), "utf8");
+  assert.match(rootAgents, /codex-control-workspace:root-agents:start/);
+  assert.match(rootAgents, /# FixtureWorkspace Agent Instructions/);
+  assert.match(rootAgents, /codex-control-workspace\/\.workspace-active\/workspace\/index\.md/);
+  assert.match(rootAgents, /cd codex-control-workspace && node scripts\/control-workspace-install\.mjs discover --json/);
+  assert.match(rootAgents, /codex-control-workspace\/scripts\/README\.md/);
+  assert.match(rootAgents, /control workspace 能力仓库/);
+  assert.doesNotMatch(rootAgents, /FixtureWorkspace 仓库/);
+});
+
 test("sync-templates creates internal Design and Test surfaces when no external directories exist", () => {
   const fixture = makeFixture();
   runJson(fixture, [
@@ -161,20 +181,21 @@ test("sync-templates creates internal Design and Test surfaces when no external 
   const payload = runJson(fixture, ["sync-templates", "--all", "--write"]);
   assert.equal(payload.ok, true);
   assert.equal(payload.wrote, true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/current/design-handoff-board.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/AGENTS.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/README.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/docs/design-window-operating-policy.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/docs/workspace-alignment-checklist.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/templates/original-plan-template.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/templates/requirement-design-template.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/templates/workspace-signal-template.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/templates/workspace-handoff-template.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/current/test-exchange.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/testing/AGENTS.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/testing/README.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/testing/docs/testing-operation-policy.md")), true);
-  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/testing/templates/test-handoff-template.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, ".workspace-active/workspace/current/design-handoff-board.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/design/AGENTS.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/design/README.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/design/docs/design-window-operating-policy.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/design/docs/workspace-alignment-checklist.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/design/templates/original-plan-template.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/design/templates/requirement-design-template.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/design/templates/workspace-signal-template.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/design/templates/workspace-handoff-template.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, ".workspace-active/workspace/current/test-exchange.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/testing/AGENTS.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/testing/README.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/testing/docs/testing-operation-policy.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/testing/templates/test-handoff-template.md")), true);
+  assert.equal(existsSync(path.join(fixture.parent, "workspace-ledger/BaseWindow/README.md")), true);
 });
 
 test("external Design and Test directories get only alignment templates", () => {
@@ -210,4 +231,18 @@ test("external Design and Test directories get only alignment templates", () => 
   assert.equal(existsSync(path.join(testWindow, "docs/testing-operation-policy.md")), true);
   assert.equal(existsSync(path.join(testWindow, "templates/test-handoff-template.md")), true);
   assert.equal(existsSync(path.join(testWindow, "docs/current/test-exchange.md")), false);
+});
+
+test("ledger-paths reports per-window project ledger directories", () => {
+  const fixture = makeFixture();
+  const payload = runJson(fixture, ["ledger-paths"]);
+  assert.equal(payload.command, "ledger-paths");
+  assert.equal(payload.projectLedgerRoot, "../workspace-ledger");
+  assert.equal(payload.windowLedgerRoot, "../workspace-ledger");
+  assert.deepEqual(
+    payload.repositories.map((repo) => [repo.windowName, repo.ledgerPath, repo.exampleDocument]),
+    [
+      ["BaseWindow", "../workspace-ledger/BaseWindow", "../workspace-ledger/BaseWindow/example-task-YYYY-MM-DD.md"],
+    ],
+  );
 });

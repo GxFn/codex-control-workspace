@@ -30,24 +30,25 @@ Use this reference when creating, moving, syncing, or archiving ControlWorkspace
 
 ## Primary Ledgers
 
-- `docs/workspace/index.md` is the only workspace-level control entrypoint. Every cross-repo plan, current status, task dispatch, document mount, acceptance index, and historical migration entry must be traceable from it.
-- `docs/workspace/current/` holds current status, active TODO, test exchanges, and active workspace control plans.
-- `docs/workspace/current/workspace-current-status.md` is a short current snapshot, not the place for large historical backfill.
-- `docs/workspace/current/global-todo-board.md` is the cross-plan TODO / Backlog ledger.
-- `docs/workspace/current/test-exchange.md` is the total-control exchange point for real `TestWindow` handoffs and evidence.
-- `docs/workspace/design/` is the internal `DesignWindow` surface when no external design repository is configured. It must include local rules, operating policy, alignment checklist, and original-plan / requirement-design / signal / handoff templates.
-- `docs/workspace/testing/` is the internal `TestWindow` surface when no external test repository is configured. It must include local rules, testing operation policy, and the test handoff template.
+- `.workspace-active/workspace/index.md` is the only workspace-level control entrypoint. Every cross-repo plan, current status, task dispatch, document mount, acceptance index, and historical migration entry must be traceable from it.
+- `.workspace-active/workspace/current/` holds current status, active TODO, test exchanges, and active workspace control plans.
+- `.workspace-active/workspace/current/workspace-current-status.md` is a short current snapshot, not the place for large historical backfill.
+- `.workspace-active/workspace/current/global-todo-board.md` is the cross-plan TODO / Backlog ledger.
+- `.workspace-active/workspace/current/test-exchange.md` is the total-control exchange point for real `TestWindow` handoffs and evidence.
+- `../workspace-ledger/design/` is the internal `DesignWindow` surface when no external design repository is configured. It must include local rules, operating policy, alignment checklist, and original-plan / requirement-design / signal / handoff templates.
+- `../workspace-ledger/testing/` is the internal `TestWindow` surface when no external test repository is configured. It must include local rules, testing operation policy, and the test handoff template.
+- `.workspace-active/` is the ignored active working surface. It may hold current task documents and local runtime state, but completed / historical project records must be archived into `../workspace-ledger/`.
 - External `DesignWindow/docs/current/` holds Design-side drafts, signals, and handoff boards. Total control receives them, then decides whether to write workspace formal ledgers.
 - External `TestWindow/docs/` holds real-scenario test policies, reports, probe scripts, and evidence when a separate test repository is configured.
 
 ## Requirement And Goal Documents
 
-- `docs/requirement-designs/` stores larger requirements:
+- `../workspace-ledger/requirement-designs/` stores larger requirements:
   - `original-plan-YYYY-MM-DD.md`;
   - `requirement-design-YYYY-MM-DD.md`;
   - `code-implementation-dependency-research-YYYY-MM-DD.md`.
-- Do not put wave dispatch, execution acceptance, or noisy backfill into `docs/requirement-designs/`.
-- `docs/goal-stage-confirmation/` stores the long-lived process. Specific task-level goal / stage confirmation documents live in `docs/workspace/current/` and are mounted from the workspace index.
+- Do not put wave dispatch, execution acceptance, or noisy backfill into `../workspace-ledger/requirement-designs/`.
+- `../workspace-ledger/goal-stage-confirmation/` stores the long-lived process. Specific task-level goal / stage confirmation documents live in `.workspace-active/workspace/current/` and are mounted from the workspace index.
 - Mature requirement flow:
   1. original plan;
   2. requirement design;
@@ -59,12 +60,13 @@ Use this reference when creating, moving, syncing, or archiving ControlWorkspace
 
 ## Repo-Specific Collaboration Documents
 
-- Long-lived repo-specific collaboration documents should go under:
-  - `docs/CoreWindow/`;
-  - `docs/AgentWindow/`;
-  - `docs/DashboardWindow/`;
-  - `docs/PluginWindow/`;
-  - `docs/BaseWindow/`.
+- Long-lived repo-specific collaboration documents should go under each configured window ledger directory:
+  - `../workspace-ledger/CoreWindow/`;
+  - `../workspace-ledger/AgentWindow/`;
+  - `../workspace-ledger/DashboardWindow/`;
+  - `../workspace-ledger/PluginWindow/`;
+  - `../workspace-ledger/BaseWindow/`.
+- These directories are generated from `workspace.config.json` through `windowLedgerRoot` and optional `windowLedgerDirs`. They replace the old project-specific `docs/<WindowName>/` pattern for generic installations.
 - Single-repo execution backfill should still be linked back from the active workspace control plan or workspace index.
 - Child repository internal `docs/` should hold product docs, release docs, or user docs only. Do not scatter cross-repo coordination files inside child repos.
 - Real test project docs remain project docs; BaseWindow validation plans, scans, acceptance, and reproduction records should be kept in workspace control docs or `TestWindow/docs/`.

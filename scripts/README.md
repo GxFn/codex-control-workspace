@@ -74,6 +74,7 @@ Current scripts:
 - `control-workspace-install.mjs`: sibling-directory installation helper for
   GitHub-distributed control workspaces. It discovers repositories next to the
   control repo, writes user-confirmed `workspace.config.json` repository scope,
+  unpacks the source control `AGENTS.md` into the parent workspace root,
   prints child-window prompts for scope confirmation, and dry-runs or writes a
   managed scope block into each configured child `AGENTS.md`. `DesignWindow`
   and `TestWindow` may be configured as external sibling directories, or kept
@@ -84,7 +85,12 @@ Current scripts:
   operation policy, test handoff template, and external alignment notes where
   applicable. It defaults to dry-run and refuses to write outside the
   configured parent workspace. Use `discover`, `status`, `configure`,
-  `prompts`, `write-agents`, and `sync-templates`.
+  `sync-root-agents`, `prompts`, `write-agents`, and `sync-templates`.
+  Runtime scripts read `.workspace-local/workspace.config.json` first when it
+  exists, then tracked `workspace.config.json`, unless `--config` or
+  `CODEX_CONTROL_WORKSPACE_CONFIG` is provided. Use the ignored local config for
+  one installation's concrete window names without committing project-specific
+  scope to the generic repository.
 - `visible-dispatch.mjs`: local state manager for Visible Automation Dispatch.
   It stores mode, window registry, queue, groups, and automation-run metadata
   under ignored `.workspace-local/visible-dispatch/`; prints heartbeat payloads
@@ -122,7 +128,7 @@ Current scripts:
 - `verify-workspace-docs.mjs`: checks the workspace index, current control
   plan, required sections, Markdown links, and completed document references.
 - `check-workspace-current-layout.mjs`: verifies that short-term workspace docs
-  live under `docs/workspace/current/`, that the current index target points
+  live under `.workspace-active/workspace/current/`, that the current index target points
   there, and that active docs/scripts/templates do not reference the old
   root-level short-term paths.
 - `check-dispatch-coverage.mjs`: verifies that the current control plan covers
@@ -172,10 +178,10 @@ Current scripts:
 - `sync-current-plan.mjs`: dry-run by default; reads the current plan, plus an
   optional `<!-- workspace-sync { ... } -->` JSON block, and synchronizes the
   mechanical current-control surfaces: the first current-plan/current-status
-  rows and window coverage table in `docs/workspace/index.md`, the active plan
-  row in `docs/workspace/current/index.md`, and the status summary /
+  rows and window coverage table in `.workspace-active/workspace/index.md`, the active plan
+  row in `.workspace-active/workspace/current/index.md`, and the status summary /
   window-dispatch / copyable-prompt sections in
-  `docs/workspace/current/workspace-current-status.md`.
+  `.workspace-active/workspace/current/workspace-current-status.md`.
   It also supports controlled `indexRows` and `currentIndexRows` in the
   sync block for extra rows that the total-control plan has already decided.
   Use `--write` to apply, `--check` to fail when generated surfaces are stale,
@@ -185,32 +191,32 @@ Current scripts:
   TODOs, alter Design handoff status, decide window readiness, accept window
   backfills, or edit product repositories.
 - `archive-workspace-docs.mjs`: dry-run by default; moves completed workspace
-  control documents into `docs/workspace/archive/YYYY-MM/<topic>/`, rewrites
+  control documents into `../workspace-ledger/workspace/archive/YYYY-MM/<topic>/`, rewrites
   relative links inside moved documents, rewrites index links, removes archived
   rows from the current index table, and adds / updates a topic entry in
-  `docs/workspace/workspace-record-map.md` only when `--apply` is provided. Use
+  `../workspace-ledger/workspace/workspace-record-map.md` only when `--apply` is provided. Use
   `--keep-index-rows` only when a
   historical row must remain visible. The script protects active first-row
   plans, but completed first-row plans can be archived once a new current or
   idle status entry is ready.
 - `compact-workspace-index.mjs`: dry-run by default; compacts historical rows
-  from `docs/workspace/index.md` into a topic manifest under
-  `docs/workspace/archive/YYYY-MM/<topic>/index.md`, and updates
-  `docs/workspace/workspace-record-map.md`. Use this after moving old documents, or
+  from `.workspace-active/workspace/index.md` into a topic manifest under
+  `../workspace-ledger/workspace/archive/YYYY-MM/<topic>/index.md`, and updates
+  `../workspace-ledger/workspace/workspace-record-map.md`. Use this after moving old documents, or
   when old execution rows still clutter the current index.
 - `archive-global-todo-board.mjs`: dry-run by default; moves completed global
-  TODO rows and old sync records from `docs/workspace/current/global-todo-board.md` to
-  `docs/workspace/archive/YYYY-MM/global-todo/`, keeping the active board small.
+  TODO rows and old sync records from `.workspace-active/workspace/current/global-todo-board.md` to
+  `../workspace-ledger/workspace/archive/YYYY-MM/global-todo/`, keeping the active board small.
 - `generate-archive-topic-summaries.mjs`: dry-run by default; creates or
   refreshes `index.md` summary files for the archive root, month folders, and
-  every `docs/workspace/archive/YYYY-MM/<topic>/` folder, preserving historical
+  every `../workspace-ledger/workspace/archive/YYYY-MM/<topic>/` folder, preserving historical
   body files as evidence snapshots while giving each archive folder a readable
   map.
 - `import-design-handoffs.mjs`: reads the configured Design handoff board
-  (`docs/workspace/current/design-handoff-board.md` internally, or an
+  (`.workspace-active/workspace/current/design-handoff-board.md` internally, or an
   external `DesignWindow/docs/current/workspace-handoff-board.md`), validates ready
   handoff rows, and with `--write` refreshes
-  `docs/workspace/current/design-handoff-inbox.md`. It does not update global
+  `.workspace-active/workspace/current/design-handoff-inbox.md`. It does not update global
   TODOs, current plans, or dispatch windows; the control window still decides
   whether and when to accept each Design handoff. Use `--id <Design Key>` to
   focus validation on one Design entry and verify its linked docs expose the
@@ -316,13 +322,13 @@ node scripts/run-workspace-pipeline-e2e.mjs --keep --json
 Archive dry-run example:
 
 ```bash
-node scripts/archive-workspace-docs.mjs --topic interface-boundary --file docs/workspace/current/example-completed-plan.md
+node scripts/archive-workspace-docs.mjs --topic interface-boundary --file .workspace-active/workspace/current/example-completed-plan.md
 ```
 
 Workspace archive cleanup sequence:
 
 ```bash
-node scripts/archive-workspace-docs.mjs --topic example-topic --file docs/workspace/current/example-completed-plan.md --apply
+node scripts/archive-workspace-docs.mjs --topic example-topic --file .workspace-active/workspace/current/example-completed-plan.md --apply
 node scripts/compact-workspace-index.mjs --topic example-topic --match 'example-topic|EXAMPLE' --apply
 node scripts/archive-global-todo-board.mjs --apply
 node scripts/generate-archive-topic-summaries.mjs --apply
@@ -337,4 +343,4 @@ node scripts/archive-workspace-docs.mjs --prune-index-only --apply
 Real-project test scripts, when an external `TestWindow` exists, live under
 that repository's `scripts/` directory so the control workspace root
 `scripts/` directory stays focused on governance. If `TestWindow` is internal,
-keep only handoff templates and evidence links in `docs/workspace/current/test-exchange.md`.
+keep only handoff templates and evidence links in `.workspace-active/workspace/current/test-exchange.md`.

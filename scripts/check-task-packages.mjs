@@ -2,10 +2,12 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
-const indexPath = path.join(workspaceRoot, "docs/workspace/index.md");
 const args = process.argv.slice(2);
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args });
+const indexPath = ledgerPaths.workspaceIndexPath;
 const requirePackages = args.includes("--require");
 const json = args.includes("--json");
 

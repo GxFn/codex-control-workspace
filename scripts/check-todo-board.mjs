@@ -2,15 +2,16 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
+import { loadWorkspaceConfig, workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
-const indexPath = path.join(workspaceRoot, "docs/workspace/index.md");
 const args = process.argv.slice(2);
+const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args, config: workspaceConfig });
+const indexPath = ledgerPaths.workspaceIndexPath;
 const requireTodo = args.includes("--require");
 const json = args.includes("--json");
 
-const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
 const requiredWindows = workspaceConfig.requiredDispatchWindows;
 
 function getArgValue(name) {

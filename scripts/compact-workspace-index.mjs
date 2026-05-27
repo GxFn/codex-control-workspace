@@ -2,16 +2,17 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
+import { loadWorkspaceConfig, workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
-const workspaceDocsDir = path.join(workspaceRoot, "docs/workspace");
-const indexPath = path.join(workspaceDocsDir, "index.md");
-const recordMapPath = path.join(workspaceDocsDir, "workspace-record-map.md");
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const json = args.includes("--json");
 const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args, config: workspaceConfig });
+const workspaceDocsDir = ledgerPaths.workspaceDocsDir;
+const indexPath = ledgerPaths.workspaceIndexPath;
+const recordMapPath = ledgerPaths.workspaceRecordMapPath;
 
 function getArgValues(name) {
   const values = [];
@@ -183,7 +184,8 @@ function ensureIndexArchiveCatalogEntry(content) {
   }
 
   const lines = content.slice(range.start, range.end).split("\n");
-  const row = "| 长期记录地图 | [workspace-record-map.md](workspace-record-map.md) | 长期地图 | 查询历史计划、归档 topic、已完成 TODO、测试历史和证据入口。 |";
+  const recordMapLink = relativePosix(workspaceDocsDir, recordMapPath);
+  const row = `| 长期记录地图 | [workspace-record-map.md](${recordMapLink}) | 长期地图 | 查询历史计划、归档 topic、已完成 TODO、测试历史和证据入口。 |`;
   const separatorIndex = lines.findIndex((line) => {
     const cells = splitMarkdownRow(line);
     return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
@@ -230,7 +232,7 @@ if (matchers.length === 0) {
   issues.push("Missing --match <regex>; repeat --match for multiple patterns");
 }
 if (!existsSync(indexPath)) {
-  issues.push("docs/workspace/index.md is missing");
+  issues.push(`${path.relative(workspaceRoot, indexPath)} is missing`);
 }
 
 let removedRows = [];
@@ -257,7 +259,7 @@ if (issues.length === 0) {
       }
     }
 
-    const archiveDir = path.join(workspaceDocsDir, "archive", month, topic);
+    const archiveDir = path.join(ledgerPaths.workspaceArchiveDir, month, topic);
     manifestPath = path.join(archiveDir, "index.md");
     const manifestRows = [
       "# Archived Workspace Index Rows",
@@ -266,7 +268,7 @@ if (issues.length === 0) {
       `标题：${title}`,
       `生成日期：${new Date().toISOString().slice(0, 10)}`,
       "",
-      "本文件保存从 `docs/workspace/index.md` 压缩下来的历史索引行。原始证据文档仍留在各自目录或 topic 归档目录中。",
+      `本文件保存从 \`${path.relative(workspaceRoot, indexPath).split(path.sep).join("/")}\` 压缩下来的历史索引行。原始证据文档仍留在各自目录或 topic 归档目录中。`,
       "",
       "## 索引行",
       "",

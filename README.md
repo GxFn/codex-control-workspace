@@ -4,7 +4,7 @@ A local-first control workspace for coordinating multiple Codex windows across s
 
 中文说明见 [README.zh-CN.md](README.zh-CN.md).
 
-This repository packages a proven total-control workflow: a project-level `AGENTS.md`, current-plan ledgers, task packages, visible heartbeat dispatch, target/controller skills, templates, installation helpers, and validation scripts. It is intentionally prompt-and-file based so a clone can work without a hosted service.
+This repository packages a proven total-control workflow: a source `AGENTS.md` that can be unpacked to the parent workspace root, current-plan ledgers, task packages, visible heartbeat dispatch, target/controller skills, templates, installation helpers, and validation scripts. It is intentionally prompt-and-file based so a clone can work without a hosted service.
 
 The intended GitHub install shape is not "put your repos inside this repo." Clone this control repo next to the repositories it will manage:
 
@@ -20,12 +20,14 @@ MyWorkspace/
 
 ## What This Is
 
-- `AGENTS.md`: the always-loaded total-control rule surface. Keep hard stop rules here.
+- `AGENTS.md`: the source total-control rule surface. After `sync-root-agents --write`, the parent workspace `AGENTS.md` is the always-loaded Codex entrypoint.
 - `workspace.config.json`: project/window names, sibling directory scope, and role labels.
 - `skills/`: operational manuals for control, target windows, testing, ledgers, and VAD.
 - `templates/`: human-authored plan, task package, handoff, and confirmation skeletons.
 - `scripts/`: mechanical checks and local runtime helpers.
-- `docs/workspace/`: the current control ledger, TODO board, test exchange, and long-term map.
+- `.workspace-active/`: ignored active working surface for the current index, current plans, TODO board, test exchange, Design inbox, and VAD state that should not be committed to the generic repo.
+- `.workspace-local/`: ignored local runtime/config surface for thread ids, VAD state, and optional `workspace.config.json` overrides for one installation.
+- `../workspace-ledger/`: the project-specific long-term ledger for requirement designs, archives, internal Design/Test surfaces, child-window records, and historical evidence. Keep it outside this generic repository.
 
 ## Quick Start
 
@@ -34,9 +36,10 @@ MyWorkspace/
 3. Ask Codex to inspect the sibling directories, propose scope, and wait for your confirmation.
 4. Decide whether `DesignWindow` and `TestWindow` are external sibling directories or internal workspace templates.
 5. Write `workspace.config.json` only after the scope is confirmed.
-6. Generate child-window prompts and write managed scope blocks into sibling `AGENTS.md` files.
-7. Keep `docs/workspace/index.md` as the single control entrypoint.
-8. Run:
+6. Unpack the control `AGENTS.md` into the parent workspace root so Codex auto-loads the control rules when the parent folder is opened.
+7. Generate child-window prompts and write managed scope blocks into sibling `AGENTS.md` files.
+8. Keep `.workspace-active/workspace/index.md` as the single active control document entrypoint.
+9. Run:
 
 ```sh
 node scripts/control-workspace-install.mjs discover --json
@@ -62,6 +65,7 @@ After confirmation:
 
 ```sh
 node scripts/control-workspace-install.mjs configure --repo BaseWindow=../ProductRepo --repo PluginWindow=../PluginRepo --internal-design --internal-test --write
+node scripts/control-workspace-install.mjs sync-root-agents --write
 node scripts/control-workspace-install.mjs sync-templates --all --write
 node scripts/control-workspace-install.mjs prompts
 node scripts/control-workspace-install.mjs write-agents --all --write
@@ -73,10 +77,13 @@ If the user already has design or test repositories, configure them explicitly i
 
 ```sh
 node scripts/control-workspace-install.mjs configure --repo DesignWindow=../DesignRepo --repo TestWindow=../TestRepo --write
+node scripts/control-workspace-install.mjs sync-root-agents --write
 node scripts/control-workspace-install.mjs sync-templates --all --write
 ```
 
-External design/test directories receive only the minimum alignment files needed by the control scripts: Design operating policy, Design original-plan / requirement-design / signal / handoff templates, the Design handoff board, Test operation policy, Test handoff template, and Test alignment notes. Internal mode keeps the same functional surfaces inside this repository, with `docs/workspace/design/` and `docs/workspace/testing/` acting as built-in DesignWindow/TestWindow entries.
+External design/test directories receive only the minimum alignment files needed by the control scripts: Design operating policy, Design original-plan / requirement-design / signal / handoff templates, the Design handoff board, Test operation policy, Test handoff template, and Test alignment notes. Internal mode keeps the same functional surfaces in `../workspace-ledger/design/` and `../workspace-ledger/testing/`, so project-specific files remain outside this generic repository.
+
+Each configured child window also gets a project-specific ledger directory such as `../workspace-ledger/BaseWindow/` or `../workspace-ledger/PluginWindow/`. Use those directories for cross-window task notes, backfills, evidence links, and acceptance records that used to live under project-specific `docs/<WindowName>/` folders.
 
 ## Design Rules
 
@@ -84,4 +91,4 @@ The repository keeps the original workflow shape on purpose. Most customization 
 
 ## Configuration Boundary
 
-Runtime scripts read project/window names, sibling repository paths, protected repo prefixes, Design handoff paths, test exchange paths, and optional process matchers from `workspace.config.json`. The script test suite keeps legacy Alembic fixture data only as regression coverage for the workflow this repository was extracted from; new workspaces should customize the config file and human-facing text.
+Runtime scripts read project/window names, sibling repository paths, protected repo prefixes, Design handoff paths, test exchange paths, and optional process matchers from `workspace.config.json`. For one machine or one project family, an ignored `.workspace-local/workspace.config.json` overrides the tracked generic config without polluting the GitHub repository. The script test suite keeps legacy Alembic fixture data only as regression coverage for the workflow this repository was extracted from; new workspaces should customize the config file and human-facing text.

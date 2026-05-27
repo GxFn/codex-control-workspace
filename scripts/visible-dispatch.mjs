@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
+import { loadWorkspaceConfig, workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const rawArgs = process.argv.slice(2);
 const command = rawArgs[0] && !rawArgs[0].startsWith("--") ? rawArgs[0] : "status";
@@ -33,6 +33,7 @@ const workspaceConfig = loadWorkspaceConfig({
     fail(`Invalid workspace config ${path.relative(workspaceRoot, configPath)}: ${error.message}`);
   },
 });
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args: options, config: workspaceConfig });
 const controlWindowName = workspaceConfig.controlWindow;
 const testWindowName = workspaceConfig.testWindow;
 const dispatchWindowNames = workspaceConfig.dispatchWindows;
@@ -538,9 +539,9 @@ function extractFirstLinkTarget(markdown) {
 }
 
 function currentPlanPathFromIndex() {
-  const indexPath = path.join(workspaceRoot, "docs/workspace/index.md");
+  const indexPath = ledgerPaths.workspaceIndexPath;
   if (!existsSync(indexPath)) {
-    fail("docs/workspace/index.md is missing; pass --plan explicitly.");
+    fail(`${relativeToWorkspace(indexPath)} is missing; pass --plan explicitly.`);
   }
   const content = readFileSync(indexPath, "utf8");
   const section = sectionContent(content, "当前总控入口");
@@ -551,7 +552,7 @@ function currentPlanPathFromIndex() {
   const planRow = rows.find((row) => row[0] === "当前计划");
   const target = extractFirstLinkTarget(planRow?.[1] ?? "");
   if (!target) {
-    fail("Could not resolve current plan from docs/workspace/index.md.");
+    fail(`Could not resolve current plan from ${relativeToWorkspace(indexPath)}.`);
   }
   return path.resolve(path.dirname(indexPath), target.split("#")[0]);
 }
@@ -660,7 +661,7 @@ function isTodoCandidate(row) {
 }
 
 function todoCandidatesFromBoard(limit = 5) {
-  const todoPath = path.join(workspaceRoot, "docs/workspace/current/global-todo-board.md");
+  const todoPath = ledgerPaths.globalTodoPath;
   if (!existsSync(todoPath)) {
     return [];
   }
@@ -1128,7 +1129,7 @@ function commandControllerTick() {
 }
 
 function statusDocumentStaleLines(state, currentPlan) {
-  const statusPath = path.join(workspaceRoot, "docs/workspace/current/workspace-current-status.md");
+  const statusPath = ledgerPaths.workspaceCurrentStatusPath;
   if (!existsSync(statusPath)) {
     return [];
   }
@@ -1599,7 +1600,7 @@ function buildTaskPrompt(task) {
   return [
     "Visible Automation Dispatch 自动化领取提示词。",
     "",
-    `先读取 AGENTS.md、docs/workspace/index.md、docs/workspace/current/${path.basename(task.controlDoc)}，以及你所在窗口/目标仓库的 AGENTS.md。`,
+    `先读取 AGENTS.md、${relativeToWorkspace(ledgerPaths.workspaceIndexPath)}、${relativeToWorkspace(path.resolve(workspaceRoot, task.controlDoc))}，以及你所在窗口/目标仓库的 AGENTS.md。`,
     "",
     "先明确声明当前窗口定位和本轮仓库职责。",
     "",
@@ -1653,11 +1654,10 @@ function buildArmPayload(task, registry) {
 }
 
 function buildControllerReturnPrompt(group, completedTask) {
-  const controlDocName = path.basename(group.controlDoc);
   return [
     "Visible Automation Dispatch 总控回跳提示词。",
     "",
-    `先读取 AGENTS.md、docs/workspace/index.md、docs/workspace/current/workspace-current-status.md、docs/workspace/current/${controlDocName}，以及 skills/dev/visible-automation-dispatch-controller/SKILL.md。`,
+    `先读取 AGENTS.md、${relativeToWorkspace(ledgerPaths.workspaceIndexPath)}、${relativeToWorkspace(ledgerPaths.workspaceCurrentStatusPath)}、${relativeToWorkspace(path.resolve(workspaceRoot, group.controlDoc))}，以及 skills/dev/visible-automation-dispatch-controller/SKILL.md。`,
     "",
     `先明确声明当前窗口定位：${controlWindowName} 总控；本轮职责：验收回跳 group，区分窗口自述、原始证据和总控裁决。`,
     "",

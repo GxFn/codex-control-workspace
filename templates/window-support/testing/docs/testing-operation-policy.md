@@ -35,7 +35,7 @@
 
 ## 文档归属
 
-长期测试计划、复现记录、监控记录和验证报告写入 `TestWindow/docs/`。跨仓库总控计划仍写在 control workspace 的 `docs/workspace/`，但只链接或引用 `TestWindow` 回填的测试证据，不承载测试执行细节。
+长期测试计划、复现记录、监控记录和验证报告写入 `TestWindow/docs/`。跨仓库总控计划仍写在 `../workspace-ledger/workspace/`，但只链接或引用 `TestWindow` 回填的测试证据，不承载测试执行细节。
 
 ## 回填要求
 

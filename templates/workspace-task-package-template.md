@@ -3,7 +3,7 @@
 状态：长期模板
 维护窗口：ControlWorkspace
 
-本模板用于 `docs/workspace/current/` 中的 wave 执行计划或验收后的下一波计划。任务包不是把 TODO 简单堆在一起，而是把当前真实阻塞点之前，同阶段、同窗口、同边界、同验证链路下可以安全推进的主线动作和可关闭 TODO 合并成一组可验收任务。
+本模板用于 `.workspace-active/workspace/current/` 中的 wave 执行计划或验收后的下一波计划。任务包不是把 TODO 简单堆在一起，而是把当前真实阻塞点之前，同阶段、同窗口、同边界、同验证链路下可以安全推进的主线动作和可关闭 TODO 合并成一组可验收任务。
 
 脚本锚点和当前计划外层格式以 `scripts/README.md` 的脚本可读格式说明为准；新建当前计划优先从 `templates/workspace-control-plan-template.md` 开始，再把本模板的任务包详情填入 `## 任务包`。
 

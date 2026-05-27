@@ -150,7 +150,7 @@
 发送给：无
 
 ```text
-先读取 AGENTS.md、docs/workspace/index.md、docs/workspace/current/<当前总控文档名>.md，以及你所在窗口/目标仓库的 AGENTS.md。
+先读取 AGENTS.md、.workspace-active/workspace/index.md、.workspace-active/workspace/current/<当前总控文档名>.md，以及你所在窗口/目标仓库的 AGENTS.md。
 
 先明确声明当前窗口定位和本轮仓库职责。
 
@@ -182,11 +182,11 @@
 <!-- workspace-sync
 {
   "status": "<当前计划状态>",
-  "indexPlanDescription": "<写入 docs/workspace/index.md 当前计划行的说明>",
-  "indexStatusDescription": "<写入 docs/workspace/index.md 当前状态行的说明>",
+  "indexPlanDescription": "<写入 .workspace-active/workspace/index.md 当前计划行的说明>",
+  "indexStatusDescription": "<写入 .workspace-active/workspace/index.md 当前状态行的说明>",
   "currentIndexType": "当前计划",
-  "currentIndexDescription": "<写入 docs/workspace/current/index.md 的说明>",
-  "currentStatusSummary": "<写入 docs/workspace/current/workspace-current-status.md 状态摘要的主线说明>",
+  "currentIndexDescription": "<写入 .workspace-active/workspace/current/index.md 的说明>",
+  "currentStatusSummary": "<写入 .workspace-active/workspace/current/workspace-current-status.md 状态摘要的主线说明>",
   "indexRows": [],
   "currentIndexRows": []
 }

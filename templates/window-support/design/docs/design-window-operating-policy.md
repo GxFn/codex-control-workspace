@@ -36,7 +36,7 @@
 
 - **Signal**：用于 bug 线索、TODO 候选、调研请求、用户决策、当前主线风险或轻量建议。使用 `templates/workspace-signal-template.md`。
 - **Handoff**：用于较完整的需求设计或方案交接。使用 `templates/workspace-handoff-template.md`。
-- **Handoff board**：正式需求设计完成后的清单入口。内部模式默认是 `docs/workspace/current/design-handoff-board.md`；外部 DesignWindow 默认是 `docs/current/workspace-handoff-board.md`。状态为 `ready-for-workspace` 的条目可被总控脚本导入。
+- **Handoff board**：正式需求设计完成后的清单入口。内部模式默认是 `.workspace-active/workspace/current/design-handoff-board.md`；外部 DesignWindow 默认是 `docs/current/workspace-handoff-board.md`。状态为 `ready-for-workspace` 的条目可被总控脚本导入。
 
 每次交回 `ControlWorkspace` 的 handoff 草案应包含：
 

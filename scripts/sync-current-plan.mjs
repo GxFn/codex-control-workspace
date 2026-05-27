@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const args = process.argv.slice(2);
 const write = args.includes("--write");
@@ -18,9 +19,10 @@ function getArgValue(name, fallback = null) {
 }
 
 const workspaceRoot = path.resolve(getArgValue("--root", process.cwd()));
-const indexPath = path.join(workspaceRoot, "docs/workspace/index.md");
-const currentIndexPath = path.join(workspaceRoot, "docs/workspace/current/index.md");
-const currentStatusPath = path.join(workspaceRoot, "docs/workspace/current/workspace-current-status.md");
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args });
+const indexPath = ledgerPaths.workspaceIndexPath;
+const currentIndexPath = ledgerPaths.workspaceCurrentIndexPath;
+const currentStatusPath = ledgerPaths.workspaceCurrentStatusPath;
 const explicitPlan = getArgValue("--plan");
 
 const syncStringFields = new Set([
@@ -53,6 +55,17 @@ function ensureInsideWorkspace(file, label) {
     return;
   }
   throw new Error(`${label} must stay inside workspace: ${file}`);
+}
+
+function ensureInsideControlOrLedger(file, label) {
+  const allowedRoots = [workspaceRoot, ledgerPaths.projectLedgerRoot].map((root) => path.resolve(root));
+  if (allowedRoots.some((root) => {
+    const relative = path.relative(root, file);
+    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  })) {
+    return;
+  }
+  throw new Error(`${label} must stay inside the control workspace or project ledger: ${file}`);
 }
 
 function atomicWriteFile(file, content) {
@@ -259,15 +272,20 @@ function validateSyncRow(row, label, hasStatus) {
 }
 
 function resolveWorkspaceDocTarget(rawDoc, label) {
-  // 同步脚本只接受 workspace-relative 文件路径，避免把总控写入扩散到子仓库外或用户本机路径。
+  // 同步脚本只接受 control-workspace 相对路径，或 project ledger 目录名开头的路径。
+  // 这样窗口回填可以落在 workspace-ledger/<WindowName>/，但不会扩散到任意本机路径。
   if (/^[a-z][a-z0-9+.-]*:/i.test(rawDoc) || rawDoc.startsWith("#")) {
     throw new Error(`${label} must be a workspace-relative file path, not ${rawDoc}`);
   }
   if (path.isAbsolute(rawDoc)) {
     throw new Error(`${label} must not be an absolute path`);
   }
-  const target = path.resolve(workspaceRoot, rawDoc);
-  ensureInsideWorkspace(target, label);
+  const projectLedgerRoot = path.resolve(ledgerPaths.projectLedgerRoot);
+  const projectLedgerName = path.basename(projectLedgerRoot);
+  const target = rawDoc === projectLedgerName || rawDoc.startsWith(`${projectLedgerName}/`)
+    ? path.resolve(path.dirname(projectLedgerRoot), rawDoc)
+    : path.resolve(workspaceRoot, rawDoc);
+  ensureInsideControlOrLedger(target, label);
   if (!existsSync(target)) {
     throw new Error(`${label} does not exist: ${rawDoc}`);
   }
@@ -372,7 +390,7 @@ if (write && check) {
 }
 
 for (const file of [indexPath, currentIndexPath, currentStatusPath]) {
-  ensureInsideWorkspace(file, "script output");
+  ensureInsideControlOrLedger(file, "script output");
 }
 
 readRequiredFile(path.join(workspaceRoot, "AGENTS.md"), issues);
@@ -384,7 +402,7 @@ if (!planPath || !existsSync(planPath)) {
   issues.push(planPath ? `plan is missing: ${relativeToWorkspace(planPath)}` : "plan path could not be resolved");
 } else {
   try {
-    ensureInsideWorkspace(planPath, "plan");
+    ensureInsideControlOrLedger(planPath, "plan");
   } catch (err) {
     issues.push(err.message);
   }

@@ -20,9 +20,9 @@ Use this reference when creating, adjusting, accepting, rolling, canceling, prio
 
 ## Correct Ledger
 
-- 需求设计期 TODO 应写入对应 `docs/requirement-designs/<需求名>/requirement-design-YYYY-MM-DD.md`，用于记录待澄清问题、设计候选、风险、验证点、用户偏好和后续拆分输入；它不等于执行任务，不能绕过原始计划书确认、代码调研和目标阶段确认。
-- 目标阶段确认或 wave 执行期 TODO 应写入当前 `docs/workspace/current/` 总控文档的 `TODO / Backlog`；当 TODO 会影响窗口派发、并行安排或下一波顺序时，必须同时更新 `空闲窗口调度`、分派表和可复制提示词。
-- 长期规则见 `docs/workspace/todo-window-scheduling-policy.md`。
+- 需求设计期 TODO 应写入对应 `../workspace-ledger/requirement-designs/<需求名>/requirement-design-YYYY-MM-DD.md`，用于记录待澄清问题、设计候选、风险、验证点、用户偏好和后续拆分输入；它不等于执行任务，不能绕过原始计划书确认、代码调研和目标阶段确认。
+- 目标阶段确认或 wave 执行期 TODO 应写入当前 `.workspace-active/workspace/current/` 总控文档的 `TODO / Backlog`；当 TODO 会影响窗口派发、并行安排或下一波顺序时，必须同时更新 `空闲窗口调度`、分派表和可复制提示词。
+- 长期规则见 `../workspace-ledger/workspace/todo-window-scheduling-policy.md`。
 - TODO 列表必须记录事项类型、现象 / 目标、归属仓库、严重度 / 优先级、是否影响真实复测或下一步派发、依赖 / 触发、推荐窗口和当前状态。
 
 ## Rolling And Scheduling

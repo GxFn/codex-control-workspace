@@ -2,18 +2,19 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
+import { loadWorkspaceConfig, workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
-const workspaceDocsDir = path.join(workspaceRoot, "docs/workspace");
-const indexPath = path.join(workspaceDocsDir, "index.md");
-const recordMapPath = path.join(workspaceDocsDir, "workspace-record-map.md");
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const json = args.includes("--json");
 const trimIndex = !args.includes("--keep-index-rows");
 const pruneIndexOnly = args.includes("--prune-index-only");
 const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args, config: workspaceConfig });
+const workspaceDocsDir = ledgerPaths.workspaceDocsDir;
+const indexPath = ledgerPaths.workspaceIndexPath;
+const recordMapPath = ledgerPaths.workspaceRecordMapPath;
 
 function getArgValues(name) {
   const values = [];
@@ -142,11 +143,16 @@ function firstCurrentPlanPath(indexContent) {
 }
 
 function requireWorkspaceDoc(input) {
-  const normalized = input.replace(/^docs\/workspace\//, "");
-  const absolutePath = path.resolve(workspaceDocsDir, normalized);
+  const normalized = input
+    .replace(/^docs\/workspace\//, "")
+    .replace(/^\.workspace-active\/workspace\//, "");
+  const directPath = path.resolve(workspaceRoot, input);
+  const absolutePath = directPath.startsWith(`${workspaceDocsDir}${path.sep}`)
+    ? directPath
+    : path.resolve(workspaceDocsDir, normalized);
 
   if (!absolutePath.startsWith(`${workspaceDocsDir}${path.sep}`)) {
-    throw new Error(`Refusing to archive path outside docs/workspace: ${input}`);
+    throw new Error(`Refusing to archive path outside active workspace docs: ${input}`);
   }
 
   if (!existsSync(absolutePath)) {
@@ -158,7 +164,7 @@ function requireWorkspaceDoc(input) {
   }
 
   if (path.basename(absolutePath) === "index.md") {
-    throw new Error("Refusing to archive docs/workspace/index.md");
+    throw new Error("Refusing to archive active workspace index.md");
   }
 
   if (statSync(absolutePath).isDirectory()) {
@@ -182,15 +188,20 @@ function archiveKey(monthValue, topicValue) {
 
 function archiveGroupFromLinkTarget(target) {
   const clean = stripMarkdownLinkTarget(target).replace(/^docs\/workspace\//, "");
-  const parts = clean.split("/");
-  if (parts[0] !== "archive" || parts.length < 3) {
+  const absoluteTarget = path.resolve(workspaceDocsDir, clean);
+  const relativeArchiveTarget = path.relative(ledgerPaths.workspaceArchiveDir, absoluteTarget);
+  if (relativeArchiveTarget.startsWith("..") || path.isAbsolute(relativeArchiveTarget)) {
+    return null;
+  }
+  const parts = relativeArchiveTarget.split(path.sep);
+  if (parts.length < 3) {
     return null;
   }
   return {
-    key: archiveKey(parts[1], parts[2]),
-    monthValue: parts[1],
-    topicValue: parts[2],
-    archiveDir: path.join(workspaceDocsDir, "archive", parts[1], parts[2]),
+    key: archiveKey(parts[0], parts[1]),
+    monthValue: parts[0],
+    topicValue: parts[1],
+    archiveDir: path.join(ledgerPaths.workspaceArchiveDir, parts[0], parts[1]),
   };
 }
 
@@ -348,7 +359,8 @@ function ensureIndexArchiveCatalogEntry(content) {
   }
 
   const lines = content.slice(range.start, range.end).split("\n");
-  const row = "| 长期记录地图 | [workspace-record-map.md](workspace-record-map.md) | 长期地图 | 查询历史计划、归档 topic、已完成 TODO、测试历史和证据入口。 |";
+  const recordMapLink = relativePosix(workspaceDocsDir, recordMapPath);
+  const row = `| 长期记录地图 | [workspace-record-map.md](${recordMapLink}) | 长期地图 | 查询历史计划、归档 topic、已完成 TODO、测试历史和证据入口。 |`;
   const separatorIndex = lines.findIndex((line) => {
     const cells = splitMarkdownRow(line);
     return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
@@ -371,19 +383,19 @@ if (!topic && files.length > 0) {
 }
 
 if (files.length === 0 && !pruneIndexOnly) {
-  issues.push("Missing --file <docs/workspace/current/file.md>; repeat --file for multiple docs");
+  issues.push("Missing --file <.workspace-active/workspace/current/file.md>; repeat --file for multiple docs");
 }
 
 const indexContent = existsSync(indexPath) ? readFileSync(indexPath, "utf8") : "";
 const currentPlan = indexContent ? firstCurrentPlanPath(indexContent) : null;
 
 if (!indexContent) {
-  issues.push("docs/workspace/index.md is missing");
+  issues.push(`${relativePosix(workspaceRoot, indexPath)} is missing`);
 }
 
 let targetDir = "";
 if (topic) {
-  targetDir = path.join(workspaceDocsDir, "archive", month, topic);
+  targetDir = path.join(ledgerPaths.workspaceArchiveDir, month, topic);
 }
 
 const plannedMoves = [];

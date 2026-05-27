@@ -48,7 +48,7 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
 | Know child repo branches, dirty state, and commits | `collect-repo-status.mjs` | Read-only; useful before acceptance or cross-repo planning. |
 | Ensure workspace git tracks only workspace files | `check-workspace-boundary.mjs` | Read-only guard against accidentally tracking child repos or local noise. |
 | Validate workspace docs and links | `verify-workspace-docs.mjs` | Use `--all-workspace` through `verify-control-center`. |
-| Validate current docs stay under `docs/workspace/current/` | `check-workspace-current-layout.mjs` | Read-only layout guard. |
+| Validate current docs stay under `.workspace-active/workspace/current/` | `check-workspace-current-layout.mjs` | Read-only layout guard. |
 | Validate send list and prompt hard rules | `check-dispatch-coverage.mjs` | Mechanical guard only; total control still decides producer / consumer order. |
 | Validate decision preflight before doc/state changes | `check-decision-preflight.mjs` | Fails when the current plan lacks trigger, demand / test-result interpretation, checked evidence, verify / replan / confirm decision, allowed updates, and forbidden conclusions. |
 | Validate test-start boundary judgment | `check-test-boundary.mjs` | Fails when `TestWindow` is send-eligible for verification without self-test exclusion, real-scenario dependency, test question, boundary, inference limit, and stop-condition fields. Explicit non-test thread-registry or Visible Automation Dispatch smoke rows are allowed only when the current plan says no test handoff / no real-project validation and local-only runtime evidence. |

@@ -13,6 +13,9 @@ import { fileURLToPath } from "node:url";
 import {
   loadWorkspaceConfig,
   readWorkspaceConfig,
+  resolveConfigPath,
+  windowLedgerDirFor,
+  workspaceLedgerPaths,
   workspaceConfigPath,
 } from "./lib/workspace-config.mjs";
 
@@ -116,7 +119,8 @@ function commandContext() {
   const userConfig = readWorkspaceConfig({ workspaceRoot: controlRoot, args });
   const configPath = workspaceConfigPath({ workspaceRoot: controlRoot, args });
   const parentRoot = resolveMaybeRelative(controlRoot, getValue("--parent", config.workspaceRoot ?? ".."));
-  return { controlRoot, config, userConfig, configPath, parentRoot };
+  const ledgerPaths = workspaceLedgerPaths({ workspaceRoot: controlRoot, args, config });
+  return { controlRoot, config, userConfig, configPath, parentRoot, ledgerPaths };
 }
 
 function normalizedRepositories(config) {
@@ -145,8 +149,10 @@ function discoverSiblingRepositories({ controlRoot, parentRoot, config }) {
   );
   const ignore = new Set([
     controlBasename,
+    path.basename(resolveMaybeRelative(controlRoot, config.projectLedgerRoot ?? "../workspace-ledger")),
     ".git",
     ".workspace-local",
+    ".workspace-active",
     "node_modules",
     ".DS_Store",
   ]);
@@ -179,9 +185,15 @@ function statusPayload() {
   const context = commandContext();
   const configuredRepositories = normalizedRepositories(context.config).map((repo) => {
     const absolutePath = repositoryAbsPath(context.controlRoot, repo);
+    const ledgerPath = windowLedgerDirFor({
+      workspaceRoot: context.controlRoot,
+      config: context.config,
+      windowName: repo.windowName,
+    });
     return {
       ...repo,
       absolutePath,
+      ledgerPath: relativeFromControl(context.controlRoot, ledgerPath),
       exists: existsSync(absolutePath) && statSync(absolutePath).isDirectory(),
       hasAgents: existsSync(path.join(absolutePath, "AGENTS.md")),
       withinParent: isInside(absolutePath, context.parentRoot),
@@ -299,7 +311,7 @@ function configurePayload() {
     repositories.push(hasFlag("--internal-design") || !previous
       ? {
           windowName: designWindow,
-          path: "docs/workspace/design",
+          path: context.config.internalDesignPath ?? "../workspace-ledger/design",
           mode: "internal",
           role: "Internal requirement design workspace",
           managedAgents: false,
@@ -312,7 +324,7 @@ function configurePayload() {
     repositories.push(hasFlag("--internal-test") || !previous
       ? {
           windowName: testWindow,
-          path: "docs/workspace/testing",
+          path: context.config.internalTestPath ?? "../workspace-ledger/testing",
           mode: "internal",
           role: "Internal test coordination workspace",
           managedAgents: false,
@@ -347,10 +359,25 @@ function configurePayload() {
     baseWindow,
     workspaceRoot: slash(path.relative(context.controlRoot, context.parentRoot)) || ".",
     controlRepoDir: path.basename(context.controlRoot),
+    activeLedgerRoot: context.config.activeLedgerRoot,
+    projectLedgerRoot: context.config.projectLedgerRoot,
+    windowLedgerRoot: context.config.windowLedgerRoot,
+    windowLedgerDirs: context.config.windowLedgerDirs,
+    workspaceDocsDir: context.config.workspaceDocsDir,
+    workspaceCurrentDir: context.config.workspaceCurrentDir,
+    workspaceArchiveDir: context.config.workspaceArchiveDir,
+    workspaceIndexPath: context.config.workspaceIndexPath,
+    workspaceCurrentIndexPath: context.config.workspaceCurrentIndexPath,
+    workspaceCurrentStatusPath: context.config.workspaceCurrentStatusPath,
+    workspaceRecordMapPath: context.config.workspaceRecordMapPath,
+    globalTodoPath: context.config.globalTodoPath,
+    requirementDesignsDir: context.config.requirementDesignsDir,
+    internalDesignPath: context.config.internalDesignPath,
+    internalTestPath: context.config.internalTestPath,
     designHandoffBoard: designRepo?.mode === "external"
       ? `${designRepo.path.replace(/\/+$/, "")}/docs/current/workspace-handoff-board.md`
-      : "docs/workspace/current/design-handoff-board.md",
-    testExchangePath: "docs/workspace/current/test-exchange.md",
+      : context.config.designHandoffBoard,
+    testExchangePath: context.config.testExchangePath,
     dispatchWindows,
     requiredDispatchWindows: names,
     repoNames,
@@ -412,6 +439,8 @@ function promptsPayload() {
 
 const AGENTS_START = "<!-- codex-control-workspace:scope:start -->";
 const AGENTS_END = "<!-- codex-control-workspace:scope:end -->";
+const ROOT_AGENTS_START = "<!-- codex-control-workspace:root-agents:start -->";
+const ROOT_AGENTS_END = "<!-- codex-control-workspace:root-agents:end -->";
 
 function scopeBlock(context, repo) {
   const absolutePath = repositoryAbsPath(context.controlRoot, repo);
@@ -442,6 +471,99 @@ function upsertScopeBlock(existing, block) {
     return `${existing.slice(0, start).trimEnd()}\n\n${block}\n\n${existing.slice(end + AGENTS_END.length).trimStart()}`.trimEnd() + "\n";
   }
   return `${existing.trimEnd()}\n\n${block}\n`;
+}
+
+function replaceAllLiteral(content, from, to) {
+  return content.split(from).join(to);
+}
+
+function projectWindowByPosition(config, position, fallback) {
+  const projectNames = Array.isArray(config.repoNames) && config.repoNames.length > 0
+    ? config.repoNames
+    : (config.dispatchWindows ?? []).filter((name) => name !== config.testWindow);
+  return projectNames[position] ?? fallback;
+}
+
+function rootAgentsContent(context) {
+  const controlRel = slash(path.relative(context.parentRoot, context.controlRoot)) || ".";
+  const ledgerRel = slash(path.relative(context.parentRoot, context.ledgerPaths.projectLedgerRoot)) || "workspace-ledger";
+  let content = readControlFile(context.controlRoot, "AGENTS.md");
+
+  const windowReplacements = [
+    ["ControlWorkspace", context.config.workspaceName],
+    ["BaseWindow", context.config.baseWindow ?? projectWindowByPosition(context.config, 0, "BaseWindow")],
+    ["CoreWindow", projectWindowByPosition(context.config, 1, "CoreWindow")],
+    ["AgentWindow", projectWindowByPosition(context.config, 2, "AgentWindow")],
+    ["DashboardWindow", projectWindowByPosition(context.config, 3, "DashboardWindow")],
+    ["PluginWindow", projectWindowByPosition(context.config, 4, "PluginWindow")],
+    ["DesignWindow", context.config.designWindow],
+    ["TestWindow", context.config.testWindow],
+    ["RealTestProject", context.config.realProjectWindow],
+  ];
+  for (const [from, to] of windowReplacements) {
+    if (from && to && from !== to) {
+      content = replaceAllLiteral(content, from, to);
+    }
+  }
+
+  const localConfigPlaceholder = "__CODEX_CONTROL_WORKSPACE_LOCAL_CONFIG__";
+  content = replaceAllLiteral(content, ".workspace-local/workspace.config.json", localConfigPlaceholder);
+  content = replaceAllLiteral(content, ".workspace-active/", `${controlRel}/.workspace-active/`);
+  content = replaceAllLiteral(content, ".workspace-local/", `${controlRel}/.workspace-local/`);
+  content = replaceAllLiteral(content, "../workspace-ledger/", `${ledgerRel}/`);
+  content = replaceAllLiteral(content, "../workspace-ledger", ledgerRel);
+  content = replaceAllLiteral(content, "scripts/", `${controlRel}/scripts/`);
+  content = replaceAllLiteral(content, "skills/", `${controlRel}/skills/`);
+  content = replaceAllLiteral(content, "templates/", `${controlRel}/templates/`);
+  content = content.replace(/(?<![\w./-])workspace\.config\.json/g, `${controlRel}/workspace.config.json`);
+  content = replaceAllLiteral(content, `node ${controlRel}/scripts/`, `cd ${controlRel} && node scripts/`);
+  content = replaceAllLiteral(content, localConfigPlaceholder, `${controlRel}/.workspace-local/workspace.config.json`);
+
+  content = content.replace(/^# .+$/m, `# ${context.config.workspaceName} Agent Instructions`);
+  content = content.replace(
+    /^# .+$/m,
+    (heading) => `${heading}\n\n> 本文件由 \`${controlRel}/AGENTS.md\` 解包生成，是父级工作区的 Codex 自动读取入口。不要手工长期维护；修改源文件后运行 \`cd ${controlRel} && node scripts/control-workspace-install.mjs sync-root-agents --write\` 刷新。脚本命令默认进入 \`${controlRel}/\` 后执行。`,
+  );
+
+  return `${ROOT_AGENTS_START}\n${content.trimEnd()}\n${ROOT_AGENTS_END}`;
+}
+
+function upsertRootAgents(existing, block) {
+  const start = existing.indexOf(ROOT_AGENTS_START);
+  const end = existing.indexOf(ROOT_AGENTS_END);
+  if (start >= 0 && end > start) {
+    return `${existing.slice(0, start).trimEnd()}\n\n${block}\n\n${existing.slice(end + ROOT_AGENTS_END.length).trimStart()}`.trim() + "\n";
+  }
+  if (!existing.trim()) {
+    return `${block}\n`;
+  }
+  return `${block}\n\n<!-- codex-control-workspace:root-agents:preserved-existing -->\n\n${existing.trimEnd()}\n`;
+}
+
+function syncRootAgentsPayload() {
+  const context = commandContext();
+  const target = resolveMaybeRelative(context.parentRoot, getValue("--target", "AGENTS.md"));
+  if (!isInside(target, context.parentRoot)) {
+    fail(`Refusing to write root AGENTS outside parent workspace: ${target}`);
+  }
+  const existing = existsSync(target) ? readFileSync(target, "utf8") : "";
+  const block = rootAgentsContent(context);
+  const next = upsertRootAgents(existing, block);
+  const changed = next !== existing;
+  if (write && changed) {
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, next);
+  }
+  return {
+    ok: true,
+    command: "sync-root-agents",
+    wrote: write && changed,
+    changed,
+    target,
+    source: path.join(context.controlRoot, "AGENTS.md"),
+    parentRoot: context.parentRoot,
+    controlRoot: context.controlRoot,
+  };
 }
 
 function writeAgentsPayload() {
@@ -591,18 +713,18 @@ function syncDesignSupportFiles(context, repoRoot, mode) {
   const files = [
     ...(mode === "internal"
       ? [
-          ensureTextFile(path.join(repoRoot, "AGENTS.md"), readControlFile(context.controlRoot, "docs/workspace/design/AGENTS.md"), `${prefix} agents`),
+          ensureTextFile(path.join(repoRoot, "AGENTS.md"), readControlFile(context.controlRoot, "templates/window-support/design/AGENTS.md"), `${prefix} agents`),
           ensureTextFile(path.join(repoRoot, "README.md"), internalDesignReadme(context.config), `${prefix} readme`),
         ]
       : []),
     ensureTextFile(
       path.join(repoRoot, "docs/design-window-operating-policy.md"),
-      readControlFile(context.controlRoot, "docs/workspace/design/docs/design-window-operating-policy.md"),
+      readControlFile(context.controlRoot, "templates/window-support/design/docs/design-window-operating-policy.md"),
       `${prefix} operating policy`,
     ),
     ensureTextFile(
       path.join(repoRoot, "docs/workspace-alignment-checklist.md"),
-      readControlFile(context.controlRoot, "docs/workspace/design/docs/workspace-alignment-checklist.md"),
+      readControlFile(context.controlRoot, "templates/window-support/design/docs/workspace-alignment-checklist.md"),
       `${prefix} alignment checklist`,
     ),
     syncRelativeFile(context.controlRoot, repoRoot, "templates/original-plan-template.md", `${prefix} original plan template`),
@@ -618,13 +740,13 @@ function syncTestSupportFiles(context, repoRoot, mode) {
   const files = [
     ...(mode === "internal"
       ? [
-          ensureTextFile(path.join(repoRoot, "AGENTS.md"), readControlFile(context.controlRoot, "docs/workspace/testing/AGENTS.md"), `${prefix} agents`),
+          ensureTextFile(path.join(repoRoot, "AGENTS.md"), readControlFile(context.controlRoot, "templates/window-support/testing/AGENTS.md"), `${prefix} agents`),
           ensureTextFile(path.join(repoRoot, "README.md"), internalTestingReadme(context.config), `${prefix} readme`),
         ]
       : []),
     ensureTextFile(
       path.join(repoRoot, "docs/testing-operation-policy.md"),
-      readControlFile(context.controlRoot, "docs/workspace/testing/docs/testing-operation-policy.md"),
+      readControlFile(context.controlRoot, "templates/window-support/testing/docs/testing-operation-policy.md"),
       `${prefix} testing operation policy`,
     ),
     syncRelativeFile(context.controlRoot, repoRoot, "templates/test-handoff-template.md", `${prefix} test handoff template`),
@@ -633,6 +755,50 @@ function syncTestSupportFiles(context, repoRoot, mode) {
     files.push(ensureTextFile(path.join(repoRoot, "docs/current/test-window-alignment.md"), externalTestAlignment({ windowName: context.config.testWindow }, context.config), "external test alignment"));
   }
   return files;
+}
+
+function syncStarterLedgerFiles(context) {
+  const sourceRoot = "templates/starter-workspace/workspace";
+  return [
+    ensureTextFile(context.ledgerPaths.workspaceIndexPath, readControlFile(context.controlRoot, `${sourceRoot}/index.md`), "active workspace index"),
+    ensureTextFile(context.ledgerPaths.workspaceCurrentIndexPath, readControlFile(context.controlRoot, `${sourceRoot}/current/index.md`), "active current index"),
+    ensureTextFile(context.ledgerPaths.workspaceCurrentStatusPath, readControlFile(context.controlRoot, `${sourceRoot}/current/workspace-current-status.md`), "active current status"),
+    ensureTextFile(path.join(context.ledgerPaths.workspaceCurrentDir, "example-control-plan.md"), readControlFile(context.controlRoot, `${sourceRoot}/current/example-control-plan.md`), "active example control plan"),
+    ensureTextFile(context.ledgerPaths.globalTodoPath, readControlFile(context.controlRoot, `${sourceRoot}/current/global-todo-board.md`), "active global TODO board"),
+    ensureTextFile(resolveConfigPath(context.controlRoot, context.config.designHandoffBoard), readControlFile(context.controlRoot, `${sourceRoot}/current/design-handoff-board.md`), "active design handoff board"),
+    ensureTextFile(resolveConfigPath(context.controlRoot, context.config.testExchangePath), readControlFile(context.controlRoot, `${sourceRoot}/current/test-exchange.md`), "active test exchange"),
+    ensureTextFile(context.ledgerPaths.workspaceRecordMapPath, readControlFile(context.controlRoot, `${sourceRoot}/workspace-record-map.md`), "project workspace record map"),
+  ];
+}
+
+function windowLedgerReadme(context, repo) {
+  return `# ${repo.windowName}
+
+This directory stores project-specific coordination records for ${repo.windowName}.
+
+- Window responsibility: ${repo.role}
+- Source repository scope: \`${repo.path}\`
+- Keep source code changes in the source repository.
+- Keep cross-window task records, backfills, acceptance notes, and handoff evidence here.
+`;
+}
+
+function syncWindowLedgerDirs(context) {
+  return normalizedRepositories(context.config)
+    .filter((repo) => repo.windowName !== context.config.realProjectWindow)
+    .filter((repo) => repo.mode !== "internal")
+    .map((repo) => {
+      const ledgerDir = windowLedgerDirFor({
+        workspaceRoot: context.controlRoot,
+        config: context.config,
+        windowName: repo.windowName,
+      });
+      return ensureTextFile(
+        path.join(ledgerDir, "README.md"),
+        windowLedgerReadme(context, repo),
+        `${repo.windowName} window ledger`,
+      );
+    });
 }
 
 function syncTemplatesPayload() {
@@ -648,17 +814,23 @@ function syncTemplatesPayload() {
   }
 
   const results = [];
+  for (const result of syncStarterLedgerFiles(context)) {
+    results.push({ windowName: context.config.controlWindow, mode: "active-ledger", ok: true, ...result });
+  }
+  for (const result of syncWindowLedgerDirs(context)) {
+    results.push({ windowName: context.config.controlWindow, mode: "window-ledger", ok: true, ...result });
+  }
   for (const windowName of windows) {
     if (windowName === context.config.designWindow) {
       const repo = repoForWindow(context.config, windowName) ?? {
         windowName,
-        path: "docs/workspace/design",
+        path: context.config.internalDesignPath ?? "../workspace-ledger/design",
         mode: "internal",
         role: "Internal requirement design workspace",
         managedAgents: false,
       };
       const repoRoot = repositoryAbsPath(context.controlRoot, repo);
-      const boardPath = path.resolve(context.controlRoot, context.config.designHandoffBoard);
+      const boardPath = resolveConfigPath(context.controlRoot, context.config.designHandoffBoard);
       if (repo.mode === "external" && (!existsSync(repoRoot) || !statSync(repoRoot).isDirectory())) {
         results.push({ windowName, mode: repo.mode, ok: false, issue: "external design directory missing", path: repo.path });
         continue;
@@ -672,7 +844,7 @@ function syncTemplatesPayload() {
     if (windowName === context.config.testWindow) {
       const repo = repoForWindow(context.config, windowName) ?? {
         windowName,
-        path: "docs/workspace/testing",
+        path: context.config.internalTestPath ?? "../workspace-ledger/testing",
         mode: "internal",
         role: "Internal test coordination workspace",
         managedAgents: false,
@@ -682,7 +854,7 @@ function syncTemplatesPayload() {
         results.push({ windowName, mode: repo.mode, ok: false, issue: "external test directory missing", path: repo.path });
         continue;
       }
-      results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(path.resolve(context.controlRoot, context.config.testExchangePath), testExchangeTemplate(), "test exchange") });
+      results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(resolveConfigPath(context.controlRoot, context.config.testExchangePath), testExchangeTemplate(), "test exchange") });
       for (const result of syncTestSupportFiles(context, repoRoot, repo.mode)) {
         results.push({ windowName, mode: repo.mode, ok: true, ...result });
       }
@@ -705,14 +877,18 @@ function help() {
       status: "Show configured repositories, discovered siblings, and scope issues.",
       configure: "Write workspace.config.json after user-confirmed --repo mappings.",
       prompts: "Print child-window prompts for confirming scope and refreshing AGENTS.md.",
+      "sync-root-agents": "Unpack the control AGENTS.md into the parent workspace AGENTS.md so Codex auto-loads total-control rules at the outer workspace root.",
       "write-agents": "Append or refresh managed scope blocks in configured child AGENTS.md files.",
       "sync-templates": "Create missing internal Design/Test templates or minimal external alignment templates.",
+      "ledger-paths": "Show project ledger directories for configured windows.",
     },
     examples: [
       "node scripts/control-workspace-install.mjs discover --json",
       "node scripts/control-workspace-install.mjs configure --repo BaseWindow=../MyApp --repo PluginWindow=../MyPlugin --write",
       "node scripts/control-workspace-install.mjs prompts --window BaseWindow",
+      "node scripts/control-workspace-install.mjs sync-root-agents --write",
       "node scripts/control-workspace-install.mjs write-agents --all --write",
+      "node scripts/control-workspace-install.mjs ledger-paths --json",
       "node scripts/control-workspace-install.mjs sync-templates --all --write",
     ],
   };
@@ -748,6 +924,35 @@ switch (command) {
   case "write-agents":
     printResult(writeAgentsPayload());
     break;
+  case "sync-root-agents":
+    printResult(syncRootAgentsPayload());
+    break;
+  case "ledger-paths": {
+    const context = commandContext();
+    const repositories = normalizedRepositories(context.config)
+      .filter((repo) => repo.windowName !== context.config.realProjectWindow)
+      .map((repo) => {
+        const ledgerDir = windowLedgerDirFor({
+          workspaceRoot: context.controlRoot,
+          config: context.config,
+          windowName: repo.windowName,
+        });
+        return {
+          windowName: repo.windowName,
+          repositoryPath: repo.path,
+          ledgerPath: relativeFromControl(context.controlRoot, ledgerDir),
+          exampleDocument: `${relativeFromControl(context.controlRoot, ledgerDir)}/example-task-YYYY-MM-DD.md`,
+        };
+      });
+    printResult({
+      ok: true,
+      command: "ledger-paths",
+      projectLedgerRoot: relativeFromControl(context.controlRoot, context.ledgerPaths.projectLedgerRoot),
+      windowLedgerRoot: relativeFromControl(context.controlRoot, context.ledgerPaths.windowLedgerRoot),
+      repositories,
+    });
+    break;
+  }
   case "sync-templates":
     printResult(syncTemplatesPayload());
     break;

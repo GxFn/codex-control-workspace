@@ -111,7 +111,7 @@ No dispatch prompt until a real plan is created.
   "indexRows": [
     {
       "type": "Design Handoff Board",
-      "doc": "docs/workspace/current/design-handoff-board.md",
+      "doc": ".workspace-active/workspace/current/design-handoff-board.md",
       "status": "maintained",
       "description": "Internal DesignWindow handoff board when no external design repository is configured.",
       "insertAfter": "Global TODO Board"
@@ -120,7 +120,7 @@ No dispatch prompt until a real plan is created.
   "currentIndexRows": [
     {
       "type": "Design Handoff Board",
-      "doc": "docs/workspace/current/design-handoff-board.md",
+      "doc": ".workspace-active/workspace/current/design-handoff-board.md",
       "description": "Internal DesignWindow handoff board.",
       "insertAfter": "Global TODO"
     }

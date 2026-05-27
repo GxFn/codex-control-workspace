@@ -2,12 +2,14 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
-const workspaceDocsDir = path.join(workspaceRoot, "docs/workspace");
-const archiveRoot = path.join(workspaceDocsDir, "archive");
-const recordMapPath = path.join(workspaceDocsDir, "workspace-record-map.md");
 const args = process.argv.slice(2);
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args });
+const workspaceDocsDir = ledgerPaths.workspaceDocsDir;
+const archiveRoot = ledgerPaths.workspaceArchiveDir;
+const recordMapPath = ledgerPaths.workspaceRecordMapPath;
 const apply = args.includes("--apply");
 const json = args.includes("--json");
 
@@ -238,7 +240,7 @@ for (const { month, topic, dir } of dirs) {
     contentParts.push(
       "## 历史索引行",
       "",
-      "以下内容是从旧 `docs/workspace/index.md` 压缩下来的索引行，用于保留当时的开发者可读入口。",
+      "以下内容是从旧活跃 workspace index 压缩下来的索引行，用于保留当时的开发者可读入口。",
       "",
       ...legacyRows.filter((line) => line !== "## 索引行"),
       "",

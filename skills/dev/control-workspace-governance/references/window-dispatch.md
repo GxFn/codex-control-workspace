@@ -31,15 +31,15 @@ Use this reference when preparing a wave, task package, window coverage table, p
 - 组包时必须先回答“当前真实阻塞点之前还能做什么”。如果还有同阶段可推进事项、同窗口相关清理或同验证链路 TODO，就应合入本包；只有遇到真实上游依赖、跨窗口 contract 未定、风险需要用户确认、或验证无法统一时，才停止在阻塞点前。
 - 同一窗口在一次派发中可以承担多个相关任务，但必须共享清晰的完成定义和验证路径；不要把跨阶段、跨边界、跨仓库依赖未解开的事项打包给同一个窗口空转。
 - 总控可以为了效率派发较大的同窗口任务包。执行窗口可以在本窗口 / 本仓库职责和当前计划边界内，自行判断是否开启 Codex 子 agent 分担代码调研、实现、测试或文档梳理；子 agent 不能跨窗口代领、不能修改 ControlWorkspace 账本、不能替代执行窗口最终复核和回填。总控验收仍只接受该窗口统一提交的原始证据和结论。
-- 给任意窗口分配任务时，如果判断无需新建文档，必须说明原因；如果需要单仓库专项执行文档，仍必须从 `docs/workspace/` 的当前总控入口留下链接或引用关系。
+- 给任意窗口分配任务时，如果判断无需新建文档，必须说明原因；如果需要单仓库专项执行文档，写入 `../workspace-ledger/<WindowName>/`，并必须从 `../workspace-ledger/workspace/` 的当前总控入口留下链接或引用关系。
 
 ## Send / No-Send Rules
 
 - 状态为 `已完成`、`观察中` 或 `无任务` 的窗口不要发送提示词。
 - 状态为 `阻塞` 的窗口，只有当它负责解除阻塞，或上游阻塞已经解除且当前文档明确要求它继续执行时，才发送提示词。
 - 只有能独立完成、能独立验证、不会与主线冲突且对后续需求设计、真实复测、稳定性或验收有价值的任务，才标为可并行或 `待启动`。
-- 任务状态只使用 `待启动`、`执行中`、`待验收`、`阻塞`、`已完成`、`暂停`、`观察中`、`无任务`；状态含义以 `docs/workspace/index.md` 为准。
-- 窗口覆盖检查默认字段、分派模板和命名模板以 `docs/workspace/index.md` 为准。
+- 任务状态只使用 `待启动`、`执行中`、`待验收`、`阻塞`、`已完成`、`暂停`、`观察中`、`无任务`；状态含义以 `.workspace-active/workspace/index.md` 为准。
+- 窗口覆盖检查默认字段、分派模板和命名模板以 `.workspace-active/workspace/index.md` 为准。
 - 若用户口头更新状态，应先记录为“用户口径更新”或“总控状态快照”；没有验证证据前，不要把下一阶段标记为完成。
 - 如果某个产品实现窗口仍有未提交工作区改动，只能记录为执行中或待封口，不能作为可删除或可进入下一阶段的证据。`TestWindow` 自身的 probe、报告、脚本索引或临时测试资产例外：只要测试回填证据足够、产品仓库和真实测试项目没有非预期改动，不把这些未提交测试资产当作总控验收阻塞。
 - 计划文档中要明确“进入某仓库”“留在某仓库”“删除候选”“不得删除”“反馈给其他窗口”五类结果。
@@ -49,7 +49,7 @@ Use this reference when preparing a wave, task package, window coverage table, p
 Default prompt:
 
 ```text
-先读取 AGENTS.md、docs/workspace/index.md、docs/workspace/current/<当前总控文档名>.md，以及你所在窗口/目标仓库的 AGENTS.md。
+先读取 AGENTS.md、.workspace-active/workspace/index.md、.workspace-active/workspace/current/<当前总控文档名>.md，以及你所在窗口/目标仓库的 AGENTS.md。
 
 先明确声明当前窗口定位和本轮仓库职责。
 
@@ -62,7 +62,7 @@ Default prompt:
 
 Rules:
 
-- 具体当前总控文档名、执行窗口列表和观察窗口判断，不写入 `AGENTS.md`。这些 wave 级信息必须写在 `docs/workspace/index.md` 和当前总控文档的“可复制分派提示词 / 分派表”章节中。
+- 具体当前总控文档名、执行窗口列表和观察窗口判断，不写入 `AGENTS.md`。这些 wave 级信息必须写在 `.workspace-active/workspace/index.md` 和当前总控文档的“可复制分派提示词 / 分派表”章节中。
 - 存在 `待启动` 窗口时，最终回复必须给出对应可复制提示词；没有可发送窗口时，必须明确说明无提示词需要发送。
 - 每次输出可复制提示词前，必须同时人工核对 `发送给` 名单与 producer / consumer 依赖链是否一致；`check-dispatch-coverage` 可以检查覆盖、状态和提示词是否包含 `AGENTS.md` / 定位硬规则，但不能替代总控对先后顺序的判断。
 - 每次输出可复制提示词前，必须检查提示词正文是否同时包含 `AGENTS.md` 和“定位”要求；缺任一项时不得发送，必须先修当前计划或提示词。

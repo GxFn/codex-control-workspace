@@ -146,7 +146,7 @@ test("default workspace control template covers required windows and TODO schedu
   const root = mkdtempSync(path.join(tmpdir(), "control-template-coverage-"));
   const template = readFileSync(path.join(repoRoot, "templates/workspace-control-plan-template.md"), "utf8");
   writeFile(
-    path.join(root, "docs/workspace/index.md"),
+    path.join(root, ".workspace-active/workspace/index.md"),
     `
 # Workspace Index
 
@@ -158,7 +158,7 @@ test("default workspace control template covers required windows and TODO schedu
 | 当前状态 | [current/workspace-current-status.md](current/workspace-current-status.md) | 暂停 | fixture |
 `,
   );
-  writeFile(path.join(root, "docs/workspace/current/template-plan.md"), template);
+  writeFile(path.join(root, ".workspace-active/workspace/current/template-plan.md"), template);
 
   const dispatch = runDefaultCheck(root, checkScript);
   const todo = runDefaultCheck(root, checkTodoScript, ["--require"]);

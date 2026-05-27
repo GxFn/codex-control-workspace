@@ -2,7 +2,7 @@
 
 Use this directory when the user does not have an external `TestWindow` repository.
 
-- Test exchange: `docs/workspace/current/test-exchange.md`
+- Test exchange: `.workspace-active/workspace/current/test-exchange.md`
 - Local rules: `AGENTS.md`
 - Testing operation policy: `docs/testing-operation-policy.md`
 - Test handoff template: root `templates/test-handoff-template.md` and the local copy created by `sync-templates`

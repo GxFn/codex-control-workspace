@@ -2,11 +2,13 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const args = process.argv.slice(2);
 const workspaceRoot = path.resolve(getValue("--root", process.cwd()));
 const json = args.includes("--json");
-const indexPath = path.join(workspaceRoot, "docs/workspace/index.md");
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args });
+const indexPath = ledgerPaths.workspaceIndexPath;
 const requiredFields = [
   "本次决策触发",
   "需求 / 测试结果理解",
@@ -66,7 +68,7 @@ function extractFirstLinkTarget(markdown) {
 
 function currentPlanPathFromIndex() {
   if (!existsSync(indexPath)) {
-    issues.push("docs/workspace/index.md is missing.");
+    issues.push(`${path.relative(workspaceRoot, indexPath)} is missing.`);
     return null;
   }
   const section = sectionContent(read(indexPath), "当前总控入口");
@@ -77,7 +79,7 @@ function currentPlanPathFromIndex() {
   const planRow = rows.find((row) => row[0] === "当前计划");
   const target = extractFirstLinkTarget(planRow?.[1] ?? "");
   if (!target) {
-    issues.push("Could not resolve current plan from docs/workspace/index.md.");
+    issues.push(`Could not resolve current plan from ${path.relative(workspaceRoot, indexPath)}.`);
     return null;
   }
   return path.resolve(path.dirname(indexPath), target.split("#")[0]);

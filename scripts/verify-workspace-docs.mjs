@@ -2,10 +2,12 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
-const indexPath = path.join(workspaceRoot, "docs/workspace/index.md");
 const args = process.argv.slice(2);
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args });
+const indexPath = ledgerPaths.workspaceIndexPath;
 const json = args.includes("--json");
 const allWorkspace = args.includes("--all-workspace");
 const validStatuses = ["待启动", "执行中", "待验收", "阻塞", "已完成", "暂停", "观察中", "无任务"];
@@ -126,9 +128,9 @@ function listMarkdownFiles(directory) {
 }
 
 function isArchivedWorkspaceDoc(file) {
-  const relativePath = path.relative(workspaceRoot, file);
+  const relativePath = path.relative(ledgerPaths.workspaceArchiveDir, file);
   // 归档文档是历史快照，允许保留当时的相对链接和旧验证命令；当前入口、长期规则和模板才参与严格链接校验。
-  return relativePath.startsWith("docs/workspace/archive/");
+  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
 }
 
 function checkLinks(files) {
@@ -230,20 +232,20 @@ const currentPlanPath = explicitPlan
 
 const issues = [];
 if (!existsSync(indexPath)) {
-  issues.push("docs/workspace/index.md is missing");
+  issues.push(`${path.relative(workspaceRoot, indexPath)} is missing`);
 }
 
 if (!currentPlanPath || !existsSync(currentPlanPath)) {
   issues.push(
     currentPlanPath
       ? `current workspace plan is missing: ${path.relative(workspaceRoot, currentPlanPath)}`
-      : "current workspace plan could not be resolved from docs/workspace/index.md",
+      : `current workspace plan could not be resolved from ${path.relative(workspaceRoot, indexPath)}`,
   );
 }
 
 if (indexContent) {
   issues.push(
-    ...checkRequiredSections("docs/workspace/index.md", indexContent, [
+    ...checkRequiredSections(path.relative(workspaceRoot, indexPath), indexContent, [
       { name: "当前总控入口", regex: /^## 当前总控入口/m },
       { name: "窗口覆盖状态", regex: /^## 窗口覆盖状态/m },
       { name: "状态枚举", regex: /^## 状态枚举/m },
@@ -265,7 +267,7 @@ if (currentPlanPath && existsSync(currentPlanPath)) {
 }
 
 const linkFiles = allWorkspace
-  ? listMarkdownFiles(path.join(workspaceRoot, "docs/workspace")).filter((file) => !isArchivedWorkspaceDoc(file))
+  ? listMarkdownFiles(ledgerPaths.workspaceDocsDir).filter((file) => !isArchivedWorkspaceDoc(file))
   : [indexPath, currentPlanPath].filter(Boolean);
 const linkResult = checkLinks([...new Set(linkFiles)]);
 issues.push(...linkResult.issues);

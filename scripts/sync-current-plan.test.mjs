@@ -19,16 +19,26 @@ function readFile(file) {
   return readFileSync(file, "utf8");
 }
 
+function ledgerFile(root, ...parts) {
+  return path.resolve(root, "../workspace-ledger", ...parts);
+}
+
+function activeFile(root, ...parts) {
+  return path.resolve(root, ".workspace-active", ...parts);
+}
+
 function createWorkspaceFixture({
   planSync = "",
   planSyncPlacement = "bottom",
   planStatus = "新状态",
   planHeading = "Example Plan",
 } = {}) {
-  const root = mkdtempSync(path.join(tmpdir(), "alembic-sync-current-plan-"));
+  const parent = mkdtempSync(path.join(tmpdir(), "alembic-sync-current-plan-"));
+  const root = path.join(parent, "codex-control-workspace");
+  mkdirSync(root, { recursive: true });
   writeFile(path.join(root, "AGENTS.md"), "# Fixture Agents\n");
   writeFile(
-    path.join(root, "docs/workspace/index.md"),
+    activeFile(root, "workspace/index.md"),
     `
 # Workspace Index
 
@@ -48,7 +58,7 @@ function createWorkspaceFixture({
 `,
   );
   writeFile(
-    path.join(root, "docs/workspace/current/index.md"),
+    activeFile(root, "workspace/current/index.md"),
     `
 # Current
 
@@ -60,7 +70,7 @@ function createWorkspaceFixture({
 `,
   );
   writeFile(
-    path.join(root, "docs/workspace/current/workspace-current-status.md"),
+    activeFile(root, "workspace/current/workspace-current-status.md"),
     `
 # Status
 
@@ -89,7 +99,7 @@ function createWorkspaceFixture({
 `,
   );
   writeFile(
-    path.join(root, "docs/workspace/current/example-plan.md"),
+    activeFile(root, "workspace/current/example-plan.md"),
     `
 # ${planHeading}
 
@@ -158,11 +168,11 @@ test("dry-run reports changes without writing repeated current-control docs", ()
 `,
   });
 
-  const before = readFile(path.join(root, "docs/workspace/index.md"));
+  const before = readFile(activeFile(root, "workspace/index.md"));
   const output = runSync(root);
 
-  assert.match(output, /would update docs\/workspace\/index\.md/);
-  assert.equal(readFile(path.join(root, "docs/workspace/index.md")), before);
+  assert.match(output, /would update \.workspace-active\/workspace\/index\.md/);
+  assert.equal(readFile(activeFile(root, "workspace/index.md")), before);
 });
 
 test("--write syncs index rows, current map row, dispatch section, and prompt section", () => {
@@ -183,9 +193,9 @@ test("--write syncs index rows, current map row, dispatch section, and prompt se
 
   runSync(root, ["--write"]);
 
-  const index = readFile(path.join(root, "docs/workspace/index.md"));
-  const currentIndex = readFile(path.join(root, "docs/workspace/current/index.md"));
-  const status = readFile(path.join(root, "docs/workspace/current/workspace-current-status.md"));
+  const index = readFile(activeFile(root, "workspace/index.md"));
+  const currentIndex = readFile(activeFile(root, "workspace/current/index.md"));
+  const status = readFile(activeFile(root, "workspace/current/workspace-current-status.md"));
 
   assert.match(index, /\| 当前计划 \| \[current\/example-plan\.md]\(current\/example-plan\.md\) \| 同步状态 \| 同步计划说明 \|/);
   assert.match(index, /\| 当前状态 \| \[current\/workspace-current-status\.md]\(current\/workspace-current-status\.md\) \| 同步状态 \| 同步状态说明 \|/);
@@ -219,7 +229,7 @@ test("workspace-sync extra rows synchronize controlled index and current-index e
   "indexRows": [
     {
       "type": "Dashboard 回填",
-      "doc": "docs/AlembicDashboard/dashboard-backfill.md",
+      "doc": "workspace-ledger/AlembicDashboard/dashboard-backfill.md",
       "status": "总控验收通过",
       "description": "Dashboard 回填说明",
       "insertAfter": "当前状态"
@@ -228,7 +238,7 @@ test("workspace-sync extra rows synchronize controlled index and current-index e
   "currentIndexRows": [
     {
       "type": "Dashboard 回填",
-      "doc": "docs/AlembicDashboard/dashboard-backfill.md",
+      "doc": "workspace-ledger/AlembicDashboard/dashboard-backfill.md",
       "description": "短期地图回填说明"
     }
   ]
@@ -236,15 +246,15 @@ test("workspace-sync extra rows synchronize controlled index and current-index e
 -->
 `,
   });
-  writeFile(path.join(root, "docs/AlembicDashboard/dashboard-backfill.md"), "# Backfill\n");
+  writeFile(ledgerFile(root, "AlembicDashboard/dashboard-backfill.md"), "# Backfill\n");
 
   runSync(root, ["--write"]);
 
-  const index = readFile(path.join(root, "docs/workspace/index.md"));
-  const currentIndex = readFile(path.join(root, "docs/workspace/current/index.md"));
+  const index = readFile(activeFile(root, "workspace/index.md"));
+  const currentIndex = readFile(activeFile(root, "workspace/current/index.md"));
 
-  assert.match(index, /\| Dashboard 回填 \| \[\.\.\/AlembicDashboard\/dashboard-backfill\.md]\(\.\.\/AlembicDashboard\/dashboard-backfill\.md\) \| 总控验收通过 \| Dashboard 回填说明 \|/);
-  assert.match(currentIndex, /\| Dashboard 回填 \| \[\.\.\/\.\.\/AlembicDashboard\/dashboard-backfill\.md]\(\.\.\/\.\.\/AlembicDashboard\/dashboard-backfill\.md\) \| 短期地图回填说明 \|/);
+  assert.match(index, /\| Dashboard 回填 \| \[\.\.\/\.\.\/\.\.\/workspace-ledger\/AlembicDashboard\/dashboard-backfill\.md]\(\.\.\/\.\.\/\.\.\/workspace-ledger\/AlembicDashboard\/dashboard-backfill\.md\) \| 总控验收通过 \| Dashboard 回填说明 \|/);
+  assert.match(currentIndex, /\| Dashboard 回填 \| \[\.\.\/\.\.\/\.\.\/\.\.\/workspace-ledger\/AlembicDashboard\/dashboard-backfill\.md]\(\.\.\/\.\.\/\.\.\/\.\.\/workspace-ledger\/AlembicDashboard\/dashboard-backfill\.md\) \| 短期地图回填说明 \|/);
 });
 
 test("invalid workspace-sync JSON fails closed without writing", () => {
@@ -255,13 +265,13 @@ test("invalid workspace-sync JSON fails closed without writing", () => {
 -->
 `,
   });
-  const before = readFile(path.join(root, "docs/workspace/index.md"));
+  const before = readFile(activeFile(root, "workspace/index.md"));
 
   const result = runSyncResult(root, ["--write"]);
 
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /Invalid workspace-sync JSON/);
-  assert.equal(readFile(path.join(root, "docs/workspace/index.md")), before);
+  assert.equal(readFile(activeFile(root, "workspace/index.md")), before);
 });
 
 test("workspace-sync row targets cannot escape the workspace", () => {
@@ -282,13 +292,13 @@ test("workspace-sync row targets cannot escape the workspace", () => {
 -->
 `,
   });
-  const before = readFile(path.join(root, "docs/workspace/index.md"));
+  const before = readFile(activeFile(root, "workspace/index.md"));
 
   const result = runSyncResult(root, ["--write"]);
 
   assert.notEqual(result.status, 0);
-  assert.match(`${result.stdout}\n${result.stderr}`, /must stay inside workspace/);
-  assert.equal(readFile(path.join(root, "docs/workspace/index.md")), before);
+  assert.match(`${result.stdout}\n${result.stderr}`, /must stay inside the control workspace or project ledger/);
+  assert.equal(readFile(activeFile(root, "workspace/index.md")), before);
 });
 
 test("workspace-sync metadata cannot sit above human-facing plan content", () => {
@@ -302,11 +312,11 @@ test("workspace-sync metadata cannot sit above human-facing plan content", () =>
 -->
 `,
   });
-  const before = readFile(path.join(root, "docs/workspace/index.md"));
+  const before = readFile(activeFile(root, "workspace/index.md"));
 
   const result = runSyncResult(root, ["--write"]);
 
   assert.notEqual(result.status, 0);
   assert.match(`${result.stdout}\n${result.stderr}`, /must appear after `## 回填区`/);
-  assert.equal(readFile(path.join(root, "docs/workspace/index.md")), before);
+  assert.equal(readFile(activeFile(root, "workspace/index.md")), before);
 });

@@ -10,6 +10,21 @@ export const defaultWorkspaceConfig = {
   baseWindow: "BaseWindow",
   workspaceRoot: "..",
   controlRepoDir: "codex-control-workspace",
+  activeLedgerRoot: ".workspace-active",
+  projectLedgerRoot: "../workspace-ledger",
+  windowLedgerRoot: "../workspace-ledger",
+  windowLedgerDirs: {},
+  workspaceDocsDir: ".workspace-active/workspace",
+  workspaceCurrentDir: ".workspace-active/workspace/current",
+  workspaceArchiveDir: "../workspace-ledger/workspace/archive",
+  workspaceIndexPath: ".workspace-active/workspace/index.md",
+  workspaceCurrentIndexPath: ".workspace-active/workspace/current/index.md",
+  workspaceCurrentStatusPath: ".workspace-active/workspace/current/workspace-current-status.md",
+  workspaceRecordMapPath: "../workspace-ledger/workspace/workspace-record-map.md",
+  globalTodoPath: ".workspace-active/workspace/current/global-todo-board.md",
+  requirementDesignsDir: "../workspace-ledger/requirement-designs",
+  internalDesignPath: "../workspace-ledger/design",
+  internalTestPath: "../workspace-ledger/testing",
   allowMissingRepos: true,
   dispatchWindows: [
     "BaseWindow",
@@ -30,9 +45,9 @@ export const defaultWorkspaceConfig = {
     "RealTestProject",
   ],
   repoNames: ["BaseWindow", "CoreWindow", "AgentWindow", "DashboardWindow", "PluginWindow"],
-  testExchangePath: "docs/workspace/current/test-exchange.md",
-  designHandoffBoard: "docs/workspace/current/design-handoff-board.md",
-  designHandoffInbox: "docs/workspace/current/design-handoff-inbox.md",
+  testExchangePath: ".workspace-active/workspace/current/test-exchange.md",
+  designHandoffBoard: ".workspace-active/workspace/current/design-handoff-board.md",
+  designHandoffInbox: ".workspace-active/workspace/current/design-handoff-inbox.md",
   runtimeProcessMatchers: [],
   runtimeProcessLabel: "configured",
   repositoryRoles: {
@@ -51,8 +66,8 @@ export const defaultWorkspaceConfig = {
     { windowName: "AgentWindow", path: "../AgentWindow", role: "Agent runtime and orchestration", managedAgents: true },
     { windowName: "DashboardWindow", path: "../DashboardWindow", role: "Frontend UI", managedAgents: true },
     { windowName: "PluginWindow", path: "../PluginWindow", role: "Host integration or plugin entry", managedAgents: true },
-    { windowName: "DesignWindow", path: "docs/workspace/design", role: "Internal requirement design workspace", managedAgents: false, mode: "internal" },
-    { windowName: "TestWindow", path: "docs/workspace/testing", role: "Internal test coordination workspace", managedAgents: false, mode: "internal" },
+    { windowName: "DesignWindow", path: "../workspace-ledger/design", role: "Internal requirement design workspace", managedAgents: false, mode: "internal" },
+    { windowName: "TestWindow", path: "../workspace-ledger/testing", role: "Internal test coordination workspace", managedAgents: false, mode: "internal" },
     { windowName: "RealTestProject", path: "../RealTestProject", role: "Protected real test project", managedAgents: false },
   ],
   protectedWorkspacePrefixes: [],
@@ -74,8 +89,17 @@ export function getArgValue(args, name, fallback = null) {
 }
 
 export function workspaceConfigPath({ workspaceRoot = process.cwd(), args = process.argv.slice(2) } = {}) {
-  const configArg = getArgValue(args, "--config", process.env.CODEX_CONTROL_WORKSPACE_CONFIG ?? "workspace.config.json");
-  return path.isAbsolute(configArg) ? configArg : path.join(workspaceRoot, configArg);
+  const configArg = getArgValue(args, "--config", process.env.CODEX_CONTROL_WORKSPACE_CONFIG ?? null);
+  if (configArg) {
+    return path.isAbsolute(configArg) ? configArg : path.join(workspaceRoot, configArg);
+  }
+
+  const localConfig = path.join(workspaceRoot, ".workspace-local/workspace.config.json");
+  if (existsSync(localConfig)) {
+    return localConfig;
+  }
+
+  return path.join(workspaceRoot, "workspace.config.json");
 }
 
 export function readWorkspaceConfig({ workspaceRoot = process.cwd(), args = process.argv.slice(2), onError = null } = {}) {
@@ -143,5 +167,69 @@ export function loadWorkspaceConfig(options = {}) {
     realProjectWindow,
     repositoryRoles,
     repositories,
+  };
+}
+
+export function resolveConfigPath(workspaceRoot, value) {
+  return path.isAbsolute(value) ? path.resolve(value) : path.resolve(workspaceRoot, value);
+}
+
+export function ledgerSegment(value) {
+  return String(value ?? "window")
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "window";
+}
+
+export function windowLedgerDirFor({ workspaceRoot = process.cwd(), config = null, windowName }) {
+  const loaded = config ?? loadWorkspaceConfig({ workspaceRoot });
+  const configured = loaded.windowLedgerDirs?.[windowName];
+  if (configured) {
+    return resolveConfigPath(workspaceRoot, configured);
+  }
+  const root = loaded.windowLedgerRoot ?? loaded.projectLedgerRoot ?? "../workspace-ledger";
+  return resolveConfigPath(workspaceRoot, path.join(root, ledgerSegment(windowName)));
+}
+
+export function windowLedgerDirsFor({ workspaceRoot = process.cwd(), args = process.argv.slice(2), config = null } = {}) {
+  const loaded = config ?? loadWorkspaceConfig({ workspaceRoot, args });
+  const entries = {};
+  for (const repo of loaded.repositories ?? []) {
+    if (!repo?.windowName) {
+      continue;
+    }
+    entries[repo.windowName] = windowLedgerDirFor({ workspaceRoot, config: loaded, windowName: repo.windowName });
+  }
+  return entries;
+}
+
+export function workspaceLedgerPaths({ workspaceRoot = process.cwd(), args = process.argv.slice(2), config = null } = {}) {
+  const loaded = config ?? loadWorkspaceConfig({ workspaceRoot, args });
+  const activeLedgerRoot = loaded.activeLedgerRoot ?? ".workspace-active";
+  const workspaceDocsDir = loaded.workspaceDocsDir ?? path.join(activeLedgerRoot, "workspace");
+  const workspaceCurrentDir = loaded.workspaceCurrentDir ?? path.join(workspaceDocsDir, "current");
+  const workspaceArchiveDir = loaded.workspaceArchiveDir ?? "../workspace-ledger/workspace/archive";
+  const workspaceIndexPath = loaded.workspaceIndexPath ?? path.join(workspaceDocsDir, "index.md");
+  const workspaceCurrentIndexPath = loaded.workspaceCurrentIndexPath ?? path.join(workspaceCurrentDir, "index.md");
+  const workspaceCurrentStatusPath = loaded.workspaceCurrentStatusPath
+    ?? path.join(workspaceCurrentDir, "workspace-current-status.md");
+  const workspaceRecordMapPath = loaded.workspaceRecordMapPath
+    ?? path.join(workspaceDocsDir, "workspace-record-map.md");
+  const globalTodoPath = loaded.globalTodoPath ?? path.join(workspaceCurrentDir, "global-todo-board.md");
+
+  return {
+    activeLedgerRoot: resolveConfigPath(workspaceRoot, activeLedgerRoot),
+    projectLedgerRoot: resolveConfigPath(workspaceRoot, loaded.projectLedgerRoot ?? "../workspace-ledger"),
+    windowLedgerRoot: resolveConfigPath(workspaceRoot, loaded.windowLedgerRoot ?? loaded.projectLedgerRoot ?? "../workspace-ledger"),
+    windowLedgerDirs: windowLedgerDirsFor({ workspaceRoot, args, config: loaded }),
+    workspaceDocsDir: resolveConfigPath(workspaceRoot, workspaceDocsDir),
+    workspaceCurrentDir: resolveConfigPath(workspaceRoot, workspaceCurrentDir),
+    workspaceArchiveDir: resolveConfigPath(workspaceRoot, workspaceArchiveDir),
+    workspaceIndexPath: resolveConfigPath(workspaceRoot, workspaceIndexPath),
+    workspaceCurrentIndexPath: resolveConfigPath(workspaceRoot, workspaceCurrentIndexPath),
+    workspaceCurrentStatusPath: resolveConfigPath(workspaceRoot, workspaceCurrentStatusPath),
+    workspaceRecordMapPath: resolveConfigPath(workspaceRoot, workspaceRecordMapPath),
+    globalTodoPath: resolveConfigPath(workspaceRoot, globalTodoPath),
+    requirementDesignsDir: resolveConfigPath(workspaceRoot, loaded.requirementDesignsDir ?? "../workspace-ledger/requirement-designs"),
   };
 }

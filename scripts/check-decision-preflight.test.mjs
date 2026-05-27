@@ -18,7 +18,7 @@ function writeFile(file, content) {
 function makeFixture({ includeSection = true, emptyField = false } = {}) {
   const root = mkdtempSync(path.join(os.tmpdir(), "check-decision-preflight-"));
   writeFile(
-    path.join(root, "docs/workspace/index.md"),
+    path.join(root, ".workspace-active/workspace/index.md"),
     `
 # Workspace Index
 
@@ -30,7 +30,7 @@ function makeFixture({ includeSection = true, emptyField = false } = {}) {
 `,
   );
   writeFile(
-    path.join(root, "docs/workspace/current/plan.md"),
+    path.join(root, ".workspace-active/workspace/current/plan.md"),
     `
 # Fixture Plan
 

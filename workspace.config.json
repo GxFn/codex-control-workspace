@@ -7,6 +7,20 @@
   "baseWindow": "BaseWindow",
   "workspaceRoot": "..",
   "controlRepoDir": "codex-control-workspace",
+  "activeLedgerRoot": ".workspace-active",
+  "projectLedgerRoot": "../workspace-ledger",
+  "windowLedgerRoot": "../workspace-ledger",
+  "workspaceDocsDir": ".workspace-active/workspace",
+  "workspaceCurrentDir": ".workspace-active/workspace/current",
+  "workspaceArchiveDir": "../workspace-ledger/workspace/archive",
+  "workspaceIndexPath": ".workspace-active/workspace/index.md",
+  "workspaceCurrentIndexPath": ".workspace-active/workspace/current/index.md",
+  "workspaceCurrentStatusPath": ".workspace-active/workspace/current/workspace-current-status.md",
+  "workspaceRecordMapPath": "../workspace-ledger/workspace/workspace-record-map.md",
+  "globalTodoPath": ".workspace-active/workspace/current/global-todo-board.md",
+  "requirementDesignsDir": "../workspace-ledger/requirement-designs",
+  "internalDesignPath": "../workspace-ledger/design",
+  "internalTestPath": "../workspace-ledger/testing",
   "allowMissingRepos": true,
   "dispatchWindows": [
     "BaseWindow",
@@ -33,9 +47,9 @@
     "DashboardWindow",
     "PluginWindow"
   ],
-  "testExchangePath": "docs/workspace/current/test-exchange.md",
-  "designHandoffBoard": "docs/workspace/current/design-handoff-board.md",
-  "designHandoffInbox": "docs/workspace/current/design-handoff-inbox.md",
+  "testExchangePath": ".workspace-active/workspace/current/test-exchange.md",
+  "designHandoffBoard": ".workspace-active/workspace/current/design-handoff-board.md",
+  "designHandoffInbox": ".workspace-active/workspace/current/design-handoff-inbox.md",
   "runtimeProcessMatchers": [],
   "runtimeProcessLabel": "configured",
   "repositories": [
@@ -71,14 +85,14 @@
     },
     {
       "windowName": "DesignWindow",
-      "path": "docs/workspace/design",
+      "path": "../workspace-ledger/design",
       "role": "Internal requirement design workspace",
       "managedAgents": false,
       "mode": "internal"
     },
     {
       "windowName": "TestWindow",
-      "path": "docs/workspace/testing",
+      "path": "../workspace-ledger/testing",
       "role": "Internal test coordination workspace",
       "managedAgents": false,
       "mode": "internal"

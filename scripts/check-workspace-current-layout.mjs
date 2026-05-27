@@ -2,15 +2,16 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
-import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
+import { loadWorkspaceConfig, workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
-const workspaceDocsDir = path.join(workspaceRoot, "docs/workspace");
-const currentDir = path.join(workspaceDocsDir, "current");
-const indexPath = path.join(workspaceDocsDir, "index.md");
 const args = process.argv.slice(2);
 const json = args.includes("--json");
 const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args, config: workspaceConfig });
+const workspaceDocsDir = ledgerPaths.workspaceDocsDir;
+const currentDir = ledgerPaths.workspaceCurrentDir;
+const indexPath = ledgerPaths.workspaceIndexPath;
 const configuredTestExchangeFile = path.basename(workspaceConfig.testExchangePath);
 
 const requiredCurrentFiles = [
@@ -108,31 +109,29 @@ for (const file of requiredCurrentFiles) {
 for (const file of forbiddenRootFiles) {
   const absolute = path.join(workspaceDocsDir, file);
   if (existsSync(absolute)) {
-    issues.push(`short-term workspace file must live under docs/workspace/current/: ${relative(absolute)}`);
+    issues.push(`short-term workspace file must live under ${relative(currentDir)}/: ${relative(absolute)}`);
   }
 }
 
 if (!existsSync(indexPath)) {
-  issues.push("docs/workspace/index.md is missing");
+  issues.push(`${relative(indexPath)} is missing`);
 } else {
   const indexContent = read(indexPath);
   const target = currentPlanTarget(indexContent);
   if (!target) {
-    issues.push("docs/workspace/index.md current entry could not be resolved");
+    issues.push(`${relative(indexPath)} current entry could not be resolved`);
   } else if (!target.startsWith("current/")) {
-    issues.push(`current workspace plan must live under docs/workspace/current/: ${target}`);
+    issues.push(`current workspace plan must live under ${relative(currentDir)}/: ${target}`);
   }
 
   if (!indexContent.includes("[current/](current/)")) {
-    warnings.push("docs/workspace/index.md should expose docs/workspace/current/ as the short-term work area");
+    warnings.push(`${relative(indexPath)} should expose ${relative(currentDir)}/ as the short-term work area`);
   }
 }
 
 const activeFiles = [
   path.join(workspaceRoot, "AGENTS.md"),
-  ...listFiles(workspaceDocsDir, (file) => file.endsWith(".md") && !relative(file).startsWith("docs/workspace/archive/")),
-  ...listFiles(path.join(workspaceRoot, "templates"), (file) => file.endsWith(".md")),
-  ...listFiles(path.join(workspaceRoot, "scripts"), (file) => file.endsWith(".mjs") || path.basename(file) === "README.md"),
+  ...listFiles(workspaceDocsDir, (file) => file.endsWith(".md") && !file.startsWith(`${ledgerPaths.workspaceArchiveDir}${path.sep}`)),
 ];
 
 for (const file of activeFiles) {

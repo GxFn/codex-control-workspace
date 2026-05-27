@@ -2,11 +2,13 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { workspaceLedgerPaths } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
-const workspaceDocsDir = path.join(workspaceRoot, "docs/workspace");
-const todoPath = path.join(workspaceDocsDir, "current/global-todo-board.md");
 const args = process.argv.slice(2);
+const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args });
+const workspaceDocsDir = ledgerPaths.workspaceDocsDir;
+const todoPath = ledgerPaths.globalTodoPath;
 const apply = args.includes("--apply");
 const json = args.includes("--json");
 
@@ -126,7 +128,7 @@ const keepSync = Number.parseInt(getArgValue("--keep-sync") ?? "8", 10);
 
 const issues = [];
 if (!existsSync(todoPath)) {
-  issues.push("docs/workspace/current/global-todo-board.md is missing");
+  issues.push(`${relativePosix(workspaceRoot, todoPath)} is missing`);
 }
 
 let completedRows = [];
@@ -168,7 +170,7 @@ if (issues.length === 0) {
           ]
         : null;
 
-    const archiveDir = path.join(workspaceDocsDir, "archive", month, "global-todo");
+    const archiveDir = path.join(ledgerPaths.workspaceArchiveDir, month, "global-todo");
     archivePath = path.join(archiveDir, `global-todo-completed-${archiveDate}.md`);
     const archiveCompletedRows = completedRows.map((line) => rewriteTodoLinksForArchive(line, archivePath));
     const archiveSyncRows = archivedSync.map((line) => rewriteTodoLinksForArchive(line, archivePath));
@@ -178,7 +180,7 @@ if (issues.length === 0) {
       `归档日期：${archiveDate}`,
       `来源：${relativePosix(path.dirname(archivePath), todoPath)}`,
       "",
-      "本文件保存从 `docs/workspace/current/global-todo-board.md` 压缩下来的已完成 TODO 和旧同步记录。活动项和观察项仍留在全局 TODO 列表。",
+      `本文件保存从 \`${relativePosix(workspaceRoot, todoPath)}\` 压缩下来的已完成 TODO 和旧同步记录。活动项和观察项仍留在全局 TODO 列表。`,
       "",
       "## 已完成 TODO",
       "",
