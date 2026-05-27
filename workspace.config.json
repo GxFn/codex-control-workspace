@@ -1,0 +1,36 @@
+{
+  "workspaceName": "ControlWorkspace",
+  "controlWindow": "ControlWorkspace",
+  "designWindow": "DesignWindow",
+  "testWindow": "TestWindow",
+  "realProjectWindow": "RealTestProject",
+  "baseWindow": "BaseWindow",
+  "allowMissingRepos": true,
+  "dispatchWindows": [
+    "BaseWindow",
+    "CoreWindow",
+    "AgentWindow",
+    "DashboardWindow",
+    "PluginWindow",
+    "TestWindow"
+  ],
+  "requiredDispatchWindows": [
+    "BaseWindow",
+    "CoreWindow",
+    "AgentWindow",
+    "DashboardWindow",
+    "PluginWindow",
+    "TestWindow",
+    "RealTestProject"
+  ],
+  "repositoryRoles": {
+    "BaseWindow": "Local platform or base runtime",
+    "CoreWindow": "Shared deterministic core",
+    "AgentWindow": "Agent runtime and orchestration",
+    "DashboardWindow": "Frontend UI",
+    "PluginWindow": "Host integration or plugin entry",
+    "DesignWindow": "Requirement design and handoff",
+    "TestWindow": "Real environment validation",
+    "RealTestProject": "Protected real test project"
+  }
+}

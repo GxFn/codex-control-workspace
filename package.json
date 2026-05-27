@@ -1,0 +1,10 @@
+{
+  "name": "codex-control-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "node scripts/verify-control-center.mjs --require-task-packages --with-script-tests",
+    "test": "node --test scripts/check-decision-preflight.test.mjs scripts/check-dispatch-coverage.test.mjs scripts/check-script-docs.test.mjs scripts/check-test-boundary.test.mjs scripts/sync-current-plan.test.mjs scripts/visible-dispatch.test.mjs scripts/workspace-control.test.mjs"
+  }
+}

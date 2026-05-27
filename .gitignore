@@ -1,0 +1,5 @@
+.DS_Store
+.workspace-local/
+node_modules/
+coverage/
+*.log
