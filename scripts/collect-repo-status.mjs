@@ -19,6 +19,9 @@ function getArgValue(name) {
 const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
 const repoNames = workspaceConfig.repoNames;
 const allowMissingRepos = workspaceConfig.allowMissingRepos === true;
+const configuredRepositories = new Map(
+  (workspaceConfig.repositories ?? []).map((repo) => [repo.windowName, repo]),
+);
 
 function runGit(repoPath, args) {
   try {
@@ -61,17 +64,23 @@ function parseStatus(statusText) {
   };
 }
 
+function repoPathForName(name) {
+  const configured = configuredRepositories.get(name);
+  return configured?.path ? path.resolve(workspaceRoot, configured.path) : path.join(workspaceRoot, name);
+}
+
 function inspectRepo(name) {
-  const repoPath = path.join(workspaceRoot, name);
+  const repoPath = repoPathForName(name);
+  const relativePath = path.relative(workspaceRoot, repoPath) || ".";
   const exists = existsSync(repoPath);
 
   if (!exists) {
-    return { name, exists: false, git: false };
+    return { name, path: relativePath, exists: false, git: false };
   }
 
   const insideWorkTree = runGit(repoPath, ["rev-parse", "--is-inside-work-tree"]);
   if (insideWorkTree !== "true") {
-    return { name, exists: true, git: false };
+    return { name, path: relativePath, exists: true, git: false };
   }
 
   const branch = runGit(repoPath, ["branch", "--show-current"]) || "(detached)";
@@ -87,6 +96,7 @@ function inspectRepo(name) {
 
   return {
     name,
+    path: relativePath,
     exists: true,
     git: true,
     branch,

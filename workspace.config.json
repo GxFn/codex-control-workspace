@@ -5,6 +5,8 @@
   "testWindow": "TestWindow",
   "realProjectWindow": "RealTestProject",
   "baseWindow": "BaseWindow",
+  "workspaceRoot": "..",
+  "controlRepoDir": "codex-control-workspace",
   "allowMissingRepos": true,
   "dispatchWindows": [
     "BaseWindow",
@@ -31,19 +33,61 @@
     "PluginWindow"
   ],
   "testExchangePath": "docs/workspace/current/test-exchange.md",
-  "designHandoffBoard": "DesignWindow/docs/current/workspace-handoff-board.md",
+  "designHandoffBoard": "../DesignWindow/docs/current/workspace-handoff-board.md",
   "designHandoffInbox": "docs/workspace/current/design-handoff-inbox.md",
   "runtimeProcessMatchers": [],
   "runtimeProcessLabel": "configured",
-  "protectedWorkspacePrefixes": [
-    "BaseWindow/",
-    "CoreWindow/",
-    "AgentWindow/",
-    "DashboardWindow/",
-    "PluginWindow/",
-    "TestWindow/",
-    "RealTestProject/"
+  "repositories": [
+    {
+      "windowName": "BaseWindow",
+      "path": "../BaseWindow",
+      "role": "Local platform or base runtime",
+      "managedAgents": true
+    },
+    {
+      "windowName": "CoreWindow",
+      "path": "../CoreWindow",
+      "role": "Shared deterministic core",
+      "managedAgents": true
+    },
+    {
+      "windowName": "AgentWindow",
+      "path": "../AgentWindow",
+      "role": "Agent runtime and orchestration",
+      "managedAgents": true
+    },
+    {
+      "windowName": "DashboardWindow",
+      "path": "../DashboardWindow",
+      "role": "Frontend UI",
+      "managedAgents": true
+    },
+    {
+      "windowName": "PluginWindow",
+      "path": "../PluginWindow",
+      "role": "Host integration or plugin entry",
+      "managedAgents": true
+    },
+    {
+      "windowName": "DesignWindow",
+      "path": "../DesignWindow",
+      "role": "Requirement design and handoff",
+      "managedAgents": true
+    },
+    {
+      "windowName": "TestWindow",
+      "path": "../TestWindow",
+      "role": "Real environment validation",
+      "managedAgents": true
+    },
+    {
+      "windowName": "RealTestProject",
+      "path": "../RealTestProject",
+      "role": "Protected real test project",
+      "managedAgents": false
+    }
   ],
+  "protectedWorkspacePrefixes": [],
   "repositoryRoles": {
     "BaseWindow": "Local platform or base runtime",
     "CoreWindow": "Shared deterministic core",

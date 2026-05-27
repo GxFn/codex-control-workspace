@@ -7,8 +7,9 @@ Scripts in this directory should:
 
 - operate from the workspace root unless documented otherwise;
 - avoid secrets, tokens, local absolute paths, and network access by default;
-- avoid writing into child source repositories unless a current control plan
-  explicitly assigns that work;
+- avoid writing into child source repositories unless the user has confirmed
+  an install-scope `AGENTS.md` write, or a current control plan explicitly
+  assigns that work;
 - report clear pass/fail evidence that can be pasted into workspace docs.
 
 Human-facing document policy:
@@ -67,9 +68,16 @@ Current scripts:
 
 - `workspace-control.mjs`: command-style aggregator for common control-center
   workflows. It maps friendly subcommands such as `status`, `verify`,
-  `sync`, `dispatch`, `design`, `runtime`, `scripts`, `vad`, and `pipeline`
+  `sync`, `dispatch`, `design`, `runtime`, `install`, `scripts`, `vad`, and `pipeline`
   onto the existing workspace scripts without replacing their dry-run / write
   gates. Use `--print` to inspect the exact commands before running them.
+- `control-workspace-install.mjs`: sibling-directory installation helper for
+  GitHub-distributed control workspaces. It discovers repositories next to the
+  control repo, writes user-confirmed `workspace.config.json` repository scope,
+  prints child-window prompts for scope confirmation, and dry-runs or writes a
+  managed scope block into each configured child `AGENTS.md`. It defaults to
+  dry-run and refuses to write outside the configured parent workspace. Use
+  `discover`, `status`, `configure`, `prompts`, and `write-agents`.
 - `visible-dispatch.mjs`: local state manager for Visible Automation Dispatch.
   It stores mode, window registry, queue, groups, and automation-run metadata
   under ignored `.workspace-local/visible-dispatch/`; prints heartbeat payloads
@@ -233,9 +241,20 @@ Workspace script tests:
 
 ```bash
 node scripts/check-script-docs.mjs
-node --test scripts/check-decision-preflight.test.mjs scripts/check-dispatch-coverage.test.mjs scripts/check-script-docs.test.mjs scripts/check-test-boundary.test.mjs scripts/sync-current-plan.test.mjs scripts/visible-dispatch.test.mjs scripts/workspace-control.test.mjs
+node --test scripts/check-decision-preflight.test.mjs scripts/check-dispatch-coverage.test.mjs scripts/check-script-docs.test.mjs scripts/check-test-boundary.test.mjs scripts/control-workspace-install.test.mjs scripts/sync-current-plan.test.mjs scripts/visible-dispatch.test.mjs scripts/workspace-control.test.mjs
 node scripts/workspace-control.mjs scripts --tests
 node scripts/verify-control-center.mjs --with-script-tests
+```
+
+Sibling install / adoption flow:
+
+```bash
+node scripts/control-workspace-install.mjs discover --json
+node scripts/control-workspace-install.mjs status --json
+node scripts/control-workspace-install.mjs configure --repo BaseWindow=../BaseWindow --repo PluginWindow=../PluginWindow --write
+node scripts/control-workspace-install.mjs prompts
+node scripts/control-workspace-install.mjs write-agents --all --write
+node scripts/workspace-control.mjs install status --json
 ```
 
 TODO scheduling plan check:

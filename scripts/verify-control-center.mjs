@@ -90,6 +90,7 @@ if (withScriptTests) {
       "scripts/check-dispatch-coverage.test.mjs",
       "scripts/check-script-docs.test.mjs",
       "scripts/check-test-boundary.test.mjs",
+      "scripts/control-workspace-install.test.mjs",
       "scripts/sync-current-plan.test.mjs",
       "scripts/visible-dispatch.test.mjs",
       "scripts/workspace-control.test.mjs",

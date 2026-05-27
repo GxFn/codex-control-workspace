@@ -44,6 +44,12 @@ test("--print vad status maps to visible-dispatch status", () => {
   assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs status --json/);
 });
 
+test("--print install maps to control workspace install script", () => {
+  const result = run(["--print", "install", "prompts", "--window", "BaseWindow"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /node scripts\/control-workspace-install\.mjs prompts --window BaseWindow/);
+});
+
 test("--print vad preflight defaults to current-plan preflight", () => {
   const result = run(["--print", "vad", "preflight", "--json"]);
   assert.equal(result.status, 0, result.stderr);

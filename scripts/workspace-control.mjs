@@ -19,6 +19,7 @@ const testScripts = [
   "scripts/check-dispatch-coverage.test.mjs",
   "scripts/check-script-docs.test.mjs",
   "scripts/check-test-boundary.test.mjs",
+  "scripts/control-workspace-install.test.mjs",
   "scripts/sync-current-plan.test.mjs",
   "scripts/visible-dispatch.test.mjs",
   "scripts/workspace-control.test.mjs",
@@ -38,6 +39,7 @@ Commands:
   dispatch    Check dispatch, TODO, and task-package readiness.
   design      Refresh or validate Design handoff intake.
   runtime     Inspect runtime residue without mutating processes.
+  install     Discover sibling repos, configure scope, and write child AGENTS blocks.
   scripts     Check script docs, optionally including script tests.
   vad         Inspect or operate Visible Automation Dispatch local state.
   pipeline    Run the fixture governance pipeline.
@@ -48,6 +50,8 @@ Common examples:
   node scripts/workspace-control.mjs verify --dispatch --script-tests
   node scripts/workspace-control.mjs sync --write --verify --dispatch
   node scripts/workspace-control.mjs design --id PCVM-2026-05-25 --json
+  node scripts/workspace-control.mjs install status --json
+  node scripts/workspace-control.mjs install prompts --window BaseWindow
   node scripts/workspace-control.mjs vad status --json
   node scripts/workspace-control.mjs vad controller --compact --json
   node scripts/workspace-control.mjs vad audit --automation-id <id> --json
@@ -215,6 +219,30 @@ function buildDesign(options) {
 function buildRuntime(options) {
   assertKnownOptions(options, ["--strict"]);
   return [{ label: "runtime residue", ...nodeScript("check-runtime-residue.mjs", hasFlag(options, "--strict") ? ["--strict"] : []) }];
+}
+
+function buildInstall(options) {
+  const subcommand = options[0] ?? "status";
+  const rest = options.slice(1);
+  assertKnownOptions(
+    rest,
+    ["--json", "--write", "--all", "--use-discovered"],
+    [
+      "--root",
+      "--parent",
+      "--config",
+      "--repo",
+      "--role",
+      "--window",
+      "--workspace-name",
+      "--control-window",
+      "--design-window",
+      "--test-window",
+      "--real-project-window",
+      "--base-window",
+    ],
+  );
+  return [{ label: "control workspace install", ...nodeScript("control-workspace-install.mjs", [subcommand, ...rest]) }];
 }
 
 function buildScripts(options) {
@@ -391,6 +419,8 @@ function buildSteps() {
       return buildDesign(commandArgs);
     case "runtime":
       return buildRuntime(commandArgs);
+    case "install":
+      return buildInstall(commandArgs);
     case "scripts":
       return buildScripts(commandArgs);
     case "vad":

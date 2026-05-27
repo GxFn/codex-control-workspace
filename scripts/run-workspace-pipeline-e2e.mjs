@@ -20,7 +20,8 @@ const keepFixture = args.includes("--keep");
 const json = args.includes("--json");
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.dirname(scriptsDir);
-const fixtureRoot = mkdtempSync(path.join(os.tmpdir(), "alembic-workspace-pipeline-e2e-"));
+const fixtureParentRoot = mkdtempSync(path.join(os.tmpdir(), "control-workspace-pipeline-e2e-"));
+const fixtureRoot = path.join(fixtureParentRoot, "codex-control-workspace");
 const steps = [];
 
 function writeFile(file, content) {
@@ -78,7 +79,7 @@ function initGitRepo(dir) {
 function setupRepoShells() {
   initGitRepo(fixtureRoot);
   for (const repo of ["BaseWindow", "CoreWindow", "AgentWindow", "DashboardWindow", "PluginWindow"]) {
-    initGitRepo(path.join(fixtureRoot, repo));
+    initGitRepo(path.join(fixtureParentRoot, repo));
   }
 }
 
@@ -98,12 +99,12 @@ Design Key: E2E-FLOW-2026-05-25
 }
 
 function writeDesignHandoffFixture() {
-  const designDir = path.join(fixtureRoot, "DesignWindow/docs/current/e2e-flow");
+  const designDir = path.join(fixtureParentRoot, "DesignWindow/docs/current/e2e-flow");
   writeFile(path.join(designDir, "original-plan-2026-05-25.md"), designDoc("E2E Original Plan"));
   writeFile(path.join(designDir, "requirement-design-2026-05-25.md"), designDoc("E2E Requirement Design"));
   writeFile(path.join(designDir, "workspace-handoff-2026-05-25.md"), designDoc("E2E Workspace Handoff"));
   writeFile(
-    path.join(fixtureRoot, "DesignWindow/docs/current/workspace-handoff-board.md"),
+    path.join(fixtureParentRoot, "DesignWindow/docs/current/workspace-handoff-board.md"),
     `# Workspace Handoff Board
 
 ## Handoff 清单
@@ -440,8 +441,8 @@ function switchToIdleControl() {
 }
 
 function cleanup() {
-  if (!keepFixture && existsSync(fixtureRoot)) {
-    rmSync(fixtureRoot, { recursive: true, force: true });
+  if (!keepFixture && existsSync(fixtureParentRoot)) {
+    rmSync(fixtureParentRoot, { recursive: true, force: true });
   }
 }
 
@@ -526,6 +527,7 @@ try {
 
   const result = {
     ok: true,
+    fixtureParentRoot: keepFixture ? fixtureParentRoot : null,
     fixtureRoot: keepFixture ? fixtureRoot : null,
     keptFixture: keepFixture,
     stepCount: steps.length,
@@ -536,7 +538,7 @@ try {
     console.log(JSON.stringify(result, null, 2));
   } else {
     console.log("Workspace pipeline E2E passed.");
-    console.log(`Fixture: ${keepFixture ? fixtureRoot : "(removed)"}`);
+    console.log(`Fixture: ${keepFixture ? fixtureParentRoot : "(removed)"}`);
     console.log(`Steps: ${steps.length}`);
     for (const step of steps) {
       console.log(`- PASS ${step.label}`);
@@ -545,6 +547,7 @@ try {
 } catch (error) {
   const result = {
     ok: false,
+    fixtureParentRoot,
     fixtureRoot,
     keptFixture: true,
     stepCount: steps.length,
@@ -555,7 +558,7 @@ try {
     console.log(JSON.stringify(result, null, 2));
   } else {
     console.error("Workspace pipeline E2E failed.");
-    console.error(`Fixture kept for inspection: ${fixtureRoot}`);
+    console.error(`Fixture kept for inspection: ${fixtureParentRoot}`);
     console.error(result.error);
   }
   process.exitCode = 1;

@@ -1,6 +1,6 @@
 # ControlWorkspace Agent Instructions
 
-**重要**：本 workspace 是 BaseWindow 系列仓库的统一计划指挥中心，不是单一源码仓库。workspace 内可以放入用于验证 BaseWindow 的真实测试项目；测试项目必须按真实项目保护，不能被当作临时样例或随意改造的沙盒。
+**重要**：本仓库是 BaseWindow 系列仓库的统一计划指挥中心，不是父级源码仓库，也不是单一产品源码仓库。推荐安装形态是：在一个用户自己的父目录下，把 `codex-control-workspace/` 与各产品子仓库并列放置；目录范围和窗口职责由 `workspace.config.json` 的 `repositories` 配置确认。真实测试项目也应作为同级受保护仓库管理，不能被当作临时样例或随意改造的沙盒。
 
 进入本 workspace 后，先读取 `AGENTS.md`、`docs/workspace/index.md` 和 `docs/workspace/current/workspace-current-status.md`，再根据当前总控文档继续工作。读取文档只是定位状态，不等于优先改文档。
 
@@ -46,11 +46,11 @@
 - 总控窗口是工作空间的大脑，不是机械派发表。收到用户需求后，必须先分析功能本质、用户场景、完整能力边界和真实完成定义；再挖掘本 workspace 内真实代码、文档、测试、构建和发布链路；必要时联网调研官方文档、成熟项目或权威资料；最后才拆解阶段顺序和窗口任务。
 - 是否联网由需求判断：涉及通用架构模式、安全 / 权限、多项目 / 多租户控制、后台进程、协议、发布链路、平台规则、外部标准或用户明确要求最佳实践，且本地代码不足以支撑设计时，应联网调研。纯本地代码验收、既有实现收口或文档治理可以不联网，但应在计划或回复里说明理由。
 - 外部调研不能替代本地代码事实。方案必须同时满足用户目标、真实代码结构、现有模块边界和验证可行性；不要因为业界实践看起来更“标准”就忽略 BaseWindow 当前系统的真实连通性。
-- 当前 BaseWindow 子仓库包括 `BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow` 和 `PluginWindow`；独立需求设计 / signal 判断窗口是 `DesignWindow`，独立真实场景测试验证窗口是 `TestWindow`。
+- 默认示例窗口包括 `BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow` 和 `PluginWindow`；独立需求设计 / signal 判断窗口是 `DesignWindow`，独立真实场景测试验证窗口是 `TestWindow`。真实安装时，以 `workspace.config.json` 的 `repositories` 为准，不要求这些仓库位于本仓库内部。
 - 产品和模块路线默认遵循 `Plugin first, BaseWindow install enhances`：`PluginWindow` 是 Codex host agent 入口，`BaseWindow` 是本地增强底座。具体边界以当前计划或项目自己的长期契约文档为准。
 - `host agent` 表示外部宿主 Agent 能力来源；当前默认语境是 Codex host agent。不要把 `host agent` 与 `AgentWindow` 或 BaseWindow internal AI 混用。
 - 真实测试项目不作为总控直接分派窗口；涉及真实项目扫描、接入、复现、回归验证或项目自身维护时，才通过 `TestWindow` 承接。不要为了测试 BaseWindow 而改坏真实测试项目。
-- 不要在旧工作区或旧克隆路径下工作；当前统一以本 workspace 内的 BaseWindow 系列仓库为准。
+- 不要在旧工作区或旧克隆路径下工作；当前统一以 `workspace.config.json` 指向的同级目录范围为准。
 
 ## 仓库职责
 
@@ -153,12 +153,13 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/con
 
 ## Workspace 治理与文档账本
 
-- Workspace 根目录不承载产品源码包，不作为 npm package、CLI、Dashboard、Plugin 或 Agent runtime 发布。
-- Workspace 根目录可以作为 `GxFn/ControlWorkspace` 总控文档仓库，但只跟踪 workspace 自己的说明、计划、验收、索引、脚本、模板和 skill 资产；不得把 `BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow`、`PluginWindow`、`DesignWindow`、`TestWindow` 或真实测试项目子仓库加入本仓库的 git 跟踪、submodule 或 gitlink。
-- 子仓库源码、测试脚本和测试文档改动必须在各自仓库独立提交。
+- Control workspace 仓库不承载产品源码包，不作为 npm package、CLI、Dashboard、Plugin 或 Agent runtime 发布；它应作为独立仓库与产品子仓库并列安装。
+- Control workspace 仓库可以作为 `GxFn/ControlWorkspace` 总控文档仓库，但只跟踪 workspace 自己的说明、计划、验收、索引、脚本、模板和 skill 资产；不得把 `BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow`、`PluginWindow`、`DesignWindow`、`TestWindow` 或真实测试项目子仓库加入本仓库的 git 跟踪、submodule 或 gitlink。
+- 同级产品仓库的目录范围、窗口名、职责和是否写入 `AGENTS.md` 管理块，由 `workspace.config.json` 的 `repositories` 决定。首次安装或目录变化时，先运行 `node scripts/control-workspace-install.mjs discover --json` 让 Codex 列出同级目录并等待用户确认，再用 `configure --write` 写入配置。
+- 子仓库源码、测试脚本和测试文档改动必须在各自仓库独立提交；本仓库只能通过安装脚本在用户确认后向同级仓库 `AGENTS.md` 写入或刷新 scope 管理块。
 - 只有主控窗口可以提交 ControlWorkspace 仓库里的文档、脚本、模板或 skill 资产。其它执行窗口不得自行对 ControlWorkspace 仓库执行 git add / commit / push。
 - workspace 可以保管总控通用能力，例如 `scripts/`、`skills/`、`templates/` 下的验证脚本、分派模板、文档模板、Codex skill 草案或跨窗口协作工具。此类能力必须服务于工作区总控、文档治理、验证或协作，不得复制或替代子仓库产品实现。
-- workspace 通用脚本默认应是 repo-neutral、参数化、无密钥、无用户绝对路径、无网络依赖；如果脚本会写入子仓库，必须有当前总控文档明确授权，并优先让对应子仓库窗口执行。
+- workspace 通用脚本默认应是 repo-neutral、参数化、无密钥、无用户绝对路径、无网络依赖；如果脚本会写入同级子仓库，必须是用户确认后的安装 scope 写入，或有当前总控文档明确授权，并优先让对应子仓库窗口执行。
 - workspace 内的 `skills/` 是可复用 skill 资产或草案的保管位置，不代表自动安装或自动启用；若某个 skill 需要安装到 Codex runtime、插件包或子仓库，必须在文档中明确安装位置、消费方和同步方式。
 - `docs/workspace/index.md` 是 workspace 级唯一总控入口。当前状态、活跃 TODO、测试交流和正在执行的 workspace 总控计划优先写到 `docs/workspace/current/`；完成后再归档或提炼到长期文档。
 - `docs/requirement-designs/` 保存较大需求的原始计划书、需求设计文档和代码实现依赖调研；不要把具体 wave 派发、执行验收或回填堆到这里。

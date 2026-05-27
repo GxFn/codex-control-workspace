@@ -7,6 +7,9 @@ export const defaultWorkspaceConfig = {
   designWindow: "DesignWindow",
   testWindow: "TestWindow",
   realProjectWindow: "RealTestProject",
+  baseWindow: "BaseWindow",
+  workspaceRoot: "..",
+  controlRepoDir: "codex-control-workspace",
   allowMissingRepos: true,
   dispatchWindows: [
     "BaseWindow",
@@ -27,19 +30,31 @@ export const defaultWorkspaceConfig = {
   ],
   repoNames: ["BaseWindow", "CoreWindow", "AgentWindow", "DashboardWindow", "PluginWindow"],
   testExchangePath: "docs/workspace/current/test-exchange.md",
-  designHandoffBoard: "DesignWindow/docs/current/workspace-handoff-board.md",
+  designHandoffBoard: "../DesignWindow/docs/current/workspace-handoff-board.md",
   designHandoffInbox: "docs/workspace/current/design-handoff-inbox.md",
   runtimeProcessMatchers: [],
   runtimeProcessLabel: "configured",
-  protectedWorkspacePrefixes: [
-    "BaseWindow/",
-    "CoreWindow/",
-    "AgentWindow/",
-    "DashboardWindow/",
-    "PluginWindow/",
-    "TestWindow/",
-    "RealTestProject/",
+  repositoryRoles: {
+    BaseWindow: "Local platform or base runtime",
+    CoreWindow: "Shared deterministic core",
+    AgentWindow: "Agent runtime and orchestration",
+    DashboardWindow: "Frontend UI",
+    PluginWindow: "Host integration or plugin entry",
+    DesignWindow: "Requirement design and handoff",
+    TestWindow: "Real environment validation",
+    RealTestProject: "Protected real test project",
+  },
+  repositories: [
+    { windowName: "BaseWindow", path: "../BaseWindow", role: "Local platform or base runtime", managedAgents: true },
+    { windowName: "CoreWindow", path: "../CoreWindow", role: "Shared deterministic core", managedAgents: true },
+    { windowName: "AgentWindow", path: "../AgentWindow", role: "Agent runtime and orchestration", managedAgents: true },
+    { windowName: "DashboardWindow", path: "../DashboardWindow", role: "Frontend UI", managedAgents: true },
+    { windowName: "PluginWindow", path: "../PluginWindow", role: "Host integration or plugin entry", managedAgents: true },
+    { windowName: "DesignWindow", path: "../DesignWindow", role: "Requirement design and handoff", managedAgents: true },
+    { windowName: "TestWindow", path: "../TestWindow", role: "Real environment validation", managedAgents: true },
+    { windowName: "RealTestProject", path: "../RealTestProject", role: "Protected real test project", managedAgents: false },
   ],
+  protectedWorkspacePrefixes: [],
   disallowedTrackedPaths: [".DS_Store"],
 };
 
@@ -82,19 +97,40 @@ export function readWorkspaceConfig({ workspaceRoot = process.cwd(), args = proc
 export function loadWorkspaceConfig(options = {}) {
   const userConfig = readWorkspaceConfig(options);
   const merged = { ...defaultWorkspaceConfig, ...userConfig };
+  const repositoryRoles = {
+    ...defaultWorkspaceConfig.repositoryRoles,
+    ...(userConfig.repositoryRoles ?? {}),
+  };
+  const repositories = Array.isArray(userConfig.repositories)
+    ? userConfig.repositories
+        .filter((repo) => repo && repo.windowName && repo.path)
+        .map((repo) => ({
+          ...repo,
+          role: repo.role ?? repositoryRoles[repo.windowName] ?? "Configured repository",
+          managedAgents: repo.managedAgents !== false,
+        }))
+    : defaultWorkspaceConfig.repositories;
+  const repositoryWindowNames = repositories.map((repo) => repo.windowName);
+  const hasConfiguredRepositories = Array.isArray(userConfig.repositories) && repositoryWindowNames.length > 0;
   const dispatchWindows = Array.isArray(userConfig.dispatchWindows)
     ? userConfig.dispatchWindows
     : Array.isArray(userConfig.windows)
       ? userConfig.windows
-      : defaultWorkspaceConfig.dispatchWindows;
+      : hasConfiguredRepositories
+        ? repositoryWindowNames.filter((name) => name !== merged.designWindow && name !== merged.realProjectWindow)
+        : defaultWorkspaceConfig.dispatchWindows;
   const testWindow = userConfig.testWindow ?? merged.testWindow;
   const realProjectWindow = userConfig.realProjectWindow ?? merged.realProjectWindow;
   const requiredDispatchWindows = Array.isArray(userConfig.requiredDispatchWindows)
     ? userConfig.requiredDispatchWindows
-    : [...dispatchWindows, realProjectWindow].filter(Boolean);
+    : hasConfiguredRepositories
+      ? repositoryWindowNames
+      : [...dispatchWindows, realProjectWindow].filter(Boolean);
   const repoNames = Array.isArray(userConfig.repoNames)
     ? userConfig.repoNames
-    : dispatchWindows.filter((name) => name !== testWindow);
+    : hasConfiguredRepositories
+      ? repositoryWindowNames.filter((name) => ![merged.designWindow, testWindow, realProjectWindow].includes(name))
+      : dispatchWindows.filter((name) => name !== testWindow);
 
   return {
     ...merged,
@@ -103,5 +139,7 @@ export function loadWorkspaceConfig(options = {}) {
     repoNames,
     testWindow,
     realProjectWindow,
+    repositoryRoles,
+    repositories,
   };
 }

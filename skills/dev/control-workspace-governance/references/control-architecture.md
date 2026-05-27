@@ -12,7 +12,7 @@ scripts, current plans, or Visible Automation Dispatch automation surfaces.
 | Workspace skill `control-workspace-governance` | Procedures that are needed only for a matching workflow: TODO, dispatch, testing, script pipeline, ledger moves, and this architecture map. | Hard anti-failure rules that were added because total control repeatedly made mistakes. |
 | VAD controller / target skills | Unattended heartbeat operating steps and role guards for controller-return or target-window heartbeats. | User goals, acceptance verdicts, raw thread ids, product implementation permission. |
 | Templates | Reusable skeletons with required sections and script-readable anchors. | Current statuses, one-off decisions, long playbooks, runtime state. |
-| Scripts | Mechanical sync, validation, import, archive, status, runtime, and VAD local-state operations with explicit write/apply gates. | Total-control judgment, evidence acceptance, TODO priority decisions, product code changes. |
+| Scripts | Mechanical sync, validation, import, archive, status, install-scope management, runtime, and VAD local-state operations with explicit write/apply gates. | Total-control judgment, evidence acceptance, TODO priority decisions, product code changes. |
 | `.workspace-local/visible-dispatch/` | Local-only VAD mode, queues, automation run metadata, and raw thread ids. | Tracked docs, GitHub commits, human-facing status. |
 
 ## Resident Rule Test
@@ -60,8 +60,9 @@ the decision. They should:
 
 - default to check / dry-run, or require explicit `--write` / `--apply`;
 - print machine-readable JSON when used by automation;
-- keep writes inside workspace-owned docs or local runtime unless a current
-  plan explicitly authorizes more;
+- keep writes inside workspace-owned docs or local runtime unless the user has
+  confirmed an install-scope write such as child `AGENTS.md`, or a current plan
+  explicitly authorizes more;
 - fail closed when required thread ids, anchors, task packages, TODO sections,
   or test-boundary fields are missing.
 
