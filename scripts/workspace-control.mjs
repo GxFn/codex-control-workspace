@@ -226,7 +226,7 @@ function buildInstall(options) {
   const rest = options.slice(1);
   assertKnownOptions(
     rest,
-    ["--json", "--write", "--all", "--use-discovered"],
+    ["--json", "--write", "--all", "--use-discovered", "--internal-design", "--internal-test"],
     [
       "--root",
       "--parent",

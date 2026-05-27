@@ -75,9 +75,12 @@ Current scripts:
   GitHub-distributed control workspaces. It discovers repositories next to the
   control repo, writes user-confirmed `workspace.config.json` repository scope,
   prints child-window prompts for scope confirmation, and dry-runs or writes a
-  managed scope block into each configured child `AGENTS.md`. It defaults to
-  dry-run and refuses to write outside the configured parent workspace. Use
-  `discover`, `status`, `configure`, `prompts`, and `write-agents`.
+  managed scope block into each configured child `AGENTS.md`. `DesignWindow`
+  and `TestWindow` may be configured as external sibling directories, or kept
+  internal with workspace-owned templates when the user has no separate design
+  / test directory. It defaults to dry-run and refuses to write outside the
+  configured parent workspace. Use `discover`, `status`, `configure`,
+  `prompts`, `write-agents`, and `sync-templates`.
 - `visible-dispatch.mjs`: local state manager for Visible Automation Dispatch.
   It stores mode, window registry, queue, groups, and automation-run metadata
   under ignored `.workspace-local/visible-dispatch/`; prints heartbeat payloads
@@ -199,8 +202,9 @@ Current scripts:
   every `docs/workspace/archive/YYYY-MM/<topic>/` folder, preserving historical
   body files as evidence snapshots while giving each archive folder a readable
   map.
-- `import-design-handoffs.mjs`: reads
-  `DesignWindow/docs/current/workspace-handoff-board.md`, validates ready
+- `import-design-handoffs.mjs`: reads the configured Design handoff board
+  (`docs/workspace/current/design-handoff-board.md` internally, or an
+  external `DesignWindow/docs/current/workspace-handoff-board.md`), validates ready
   handoff rows, and with `--write` refreshes
   `docs/workspace/current/design-handoff-inbox.md`. It does not update global
   TODOs, current plans, or dispatch windows; the control window still decides
@@ -251,7 +255,8 @@ Sibling install / adoption flow:
 ```bash
 node scripts/control-workspace-install.mjs discover --json
 node scripts/control-workspace-install.mjs status --json
-node scripts/control-workspace-install.mjs configure --repo BaseWindow=../BaseWindow --repo PluginWindow=../PluginWindow --write
+node scripts/control-workspace-install.mjs configure --repo BaseWindow=../BaseWindow --repo PluginWindow=../PluginWindow --internal-design --internal-test --write
+node scripts/control-workspace-install.mjs sync-templates --all --write
 node scripts/control-workspace-install.mjs prompts
 node scripts/control-workspace-install.mjs write-agents --all --write
 node scripts/workspace-control.mjs install status --json
@@ -325,5 +330,7 @@ Index-only pruning example:
 node scripts/archive-workspace-docs.mjs --prune-index-only --apply
 ```
 
-Real-project test scripts live under `TestWindow/scripts/` so the workspace
-root `scripts/` directory stays focused on control-center governance.
+Real-project test scripts, when an external `TestWindow` exists, live under
+that repository's `scripts/` directory so the control workspace root
+`scripts/` directory stays focused on governance. If `TestWindow` is internal,
+keep only handoff templates and evidence links in `docs/workspace/current/test-exchange.md`.

@@ -22,6 +22,7 @@
     "AgentWindow",
     "DashboardWindow",
     "PluginWindow",
+    "DesignWindow",
     "TestWindow",
     "RealTestProject"
   ],
@@ -33,7 +34,7 @@
     "PluginWindow"
   ],
   "testExchangePath": "docs/workspace/current/test-exchange.md",
-  "designHandoffBoard": "../DesignWindow/docs/current/workspace-handoff-board.md",
+  "designHandoffBoard": "docs/workspace/current/design-handoff-board.md",
   "designHandoffInbox": "docs/workspace/current/design-handoff-inbox.md",
   "runtimeProcessMatchers": [],
   "runtimeProcessLabel": "configured",
@@ -70,15 +71,17 @@
     },
     {
       "windowName": "DesignWindow",
-      "path": "../DesignWindow",
-      "role": "Requirement design and handoff",
-      "managedAgents": true
+      "path": "docs/workspace/design",
+      "role": "Internal requirement design workspace",
+      "managedAgents": false,
+      "mode": "internal"
     },
     {
       "windowName": "TestWindow",
-      "path": "../TestWindow",
-      "role": "Real environment validation",
-      "managedAgents": true
+      "path": "docs/workspace/testing",
+      "role": "Internal test coordination workspace",
+      "managedAgents": false,
+      "mode": "internal"
     },
     {
       "windowName": "RealTestProject",

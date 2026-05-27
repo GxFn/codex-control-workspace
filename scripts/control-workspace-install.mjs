@@ -125,6 +125,7 @@ function normalizedRepositories(config) {
     .map((repo) => ({
       windowName: repo.windowName,
       path: slash(repo.path),
+      mode: repo.mode ?? (repo.path.startsWith("../") ? "external" : "internal"),
       role: repo.role ?? config.repositoryRoles?.[repo.windowName] ?? "Configured repository",
       managedAgents: repo.managedAgents !== false,
     }));
@@ -184,6 +185,7 @@ function statusPayload() {
       exists: existsSync(absolutePath) && statSync(absolutePath).isDirectory(),
       hasAgents: existsSync(path.join(absolutePath, "AGENTS.md")),
       withinParent: isInside(absolutePath, context.parentRoot),
+      mode: repo.mode,
     };
   });
   const discovered = discoverSiblingRepositories(context).map(({ absolutePath, ...item }) => item);
@@ -200,6 +202,20 @@ function statusPayload() {
     discoveredRepositories: discovered,
     missingConfiguredRepositories: missing.map((repo) => repo.windowName),
     outsideParentRepositories: outsideParent.map((repo) => repo.windowName),
+    setupQuestions: [
+      {
+        windowName: context.config.designWindow,
+        question: "Do you already have a requirement-design directory or repository? If yes, configure it as external; if no, use the internal workspace design board.",
+        internalCommand: "node scripts/control-workspace-install.mjs configure --internal-design --write",
+        externalCommand: `node scripts/control-workspace-install.mjs configure --repo ${context.config.designWindow}=../YourDesignRepo --write`,
+      },
+      {
+        windowName: context.config.testWindow,
+        question: "Do you already have a real-test directory or repository? If yes, configure it as external; if no, use the internal workspace test exchange.",
+        internalCommand: "node scripts/control-workspace-install.mjs configure --internal-test --write",
+        externalCommand: `node scripts/control-workspace-install.mjs configure --repo ${context.config.testWindow}=../YourTestRepo --write`,
+      },
+    ],
   };
 }
 
@@ -231,7 +247,8 @@ function parseKeyValueSpec(spec, kind) {
 function parseRepoSpecs(context) {
   const roleOverrides = new Map(getAllValues("--role").map((spec) => parseKeyValueSpec(spec, "--role")));
   const repoSpecs = getAllValues("--repo");
-  if (repoSpecs.length === 0 && !hasFlag("--use-discovered")) {
+  const internalOnly = hasFlag("--internal-design") || hasFlag("--internal-test");
+  if (repoSpecs.length === 0 && !hasFlag("--use-discovered") && !internalOnly) {
     fail("configure requires at least one --repo WindowName=../RepositoryPath, or --use-discovered for a dry-run proposal.");
   }
 
@@ -245,6 +262,7 @@ function parseRepoSpecs(context) {
       return {
         windowName,
         path: slash(repoPath),
+        mode: "external",
         role: roleOverrides.get(windowName)
           ?? context.config.repositoryRoles?.[windowName]
           ?? "Project repository; confirm scope and responsibility before enabling.",
@@ -256,6 +274,7 @@ function parseRepoSpecs(context) {
   return discoverSiblingRepositories(context).map((repo) => ({
     windowName: repo.suggestedWindowName,
     path: repo.path,
+    mode: "external",
     role: repo.role,
     managedAgents: true,
   }));
@@ -263,18 +282,55 @@ function parseRepoSpecs(context) {
 
 function configurePayload() {
   const context = commandContext();
-  const repositories = parseRepoSpecs(context);
   const workspaceName = getValue("--workspace-name", context.config.workspaceName);
   const controlWindow = getValue("--control-window", workspaceName);
   const designWindow = getValue("--design-window", context.config.designWindow);
   const testWindow = getValue("--test-window", context.config.testWindow);
   const realProjectWindow = getValue("--real-project-window", context.config.realProjectWindow);
+  const explicitRepositories = parseRepoSpecs(context);
+  const explicitWindows = new Set(explicitRepositories.map((repo) => repo.windowName));
+  const previousByWindow = new Map(normalizedRepositories(context.config).map((repo) => [repo.windowName, repo]));
+  const repositories = explicitRepositories.length > 0
+    ? [...explicitRepositories]
+    : normalizedRepositories(context.config).filter((repo) => ![designWindow, testWindow].includes(repo.windowName));
+
+  if (!explicitWindows.has(designWindow)) {
+    const previous = previousByWindow.get(designWindow);
+    repositories.push(hasFlag("--internal-design") || !previous
+      ? {
+          windowName: designWindow,
+          path: "docs/workspace/design",
+          mode: "internal",
+          role: "Internal requirement design workspace",
+          managedAgents: false,
+        }
+      : previous);
+  }
+
+  if (!explicitWindows.has(testWindow)) {
+    const previous = previousByWindow.get(testWindow);
+    repositories.push(hasFlag("--internal-test") || !previous
+      ? {
+          windowName: testWindow,
+          path: "docs/workspace/testing",
+          mode: "internal",
+          role: "Internal test coordination workspace",
+          managedAgents: false,
+        }
+      : previous);
+  }
+
+  if (!explicitWindows.has(realProjectWindow) && previousByWindow.has(realProjectWindow)) {
+    repositories.push(previousByWindow.get(realProjectWindow));
+  }
+
   const baseWindow = getValue("--base-window", context.config.baseWindow ?? repositories[0]?.windowName);
   const repositoryRoles = { ...context.config.repositoryRoles };
   for (const repo of repositories) {
     repositoryRoles[repo.windowName] = repo.role;
   }
   const names = repositories.map((repo) => repo.windowName);
+  const designRepo = repositories.find((repo) => repo.windowName === designWindow);
   const dispatchWindows = names.filter((name) => name !== designWindow && name !== realProjectWindow);
   const repoNames = names.filter((name) => ![designWindow, testWindow, realProjectWindow].includes(name));
   const protectedWorkspacePrefixes = repositories
@@ -291,6 +347,10 @@ function configurePayload() {
     baseWindow,
     workspaceRoot: slash(path.relative(context.controlRoot, context.parentRoot)) || ".",
     controlRepoDir: path.basename(context.controlRoot),
+    designHandoffBoard: designRepo?.mode === "external"
+      ? `${designRepo.path.replace(/\/+$/, "")}/docs/current/workspace-handoff-board.md`
+      : "docs/workspace/current/design-handoff-board.md",
+    testExchangePath: "docs/workspace/current/test-exchange.md",
     dispatchWindows,
     requiredDispatchWindows: names,
     repoNames,
@@ -425,6 +485,150 @@ function writeAgentsPayload() {
   return { ok: results.every((result) => result.ok), command: "write-agents", wrote: write, results };
 }
 
+function designBoardTemplate() {
+  return `# Workspace Handoff Board
+
+This board is intentionally small. DesignWindow records completed requirement design handoffs here; the control workspace imports ready rows with \`scripts/import-design-handoffs.mjs\`.
+
+## Handoff 清单
+
+| ID | 状态 | 标题 | 原始计划 | 需求设计 | Handoff | 用户确认 | 当前主线关系 | 建议 TODO | 优先级 | 下一步 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+`;
+}
+
+function internalDesignReadme(config) {
+  return `# Internal Design Workspace
+
+Use this directory when the user does not have an external ${config.designWindow} repository.
+
+- Handoff board: \`${config.designHandoffBoard}\`
+- Requirement design template: \`templates/requirement-design-template.md\`
+- Control imports: \`node scripts/import-design-handoffs.mjs --write\`
+`;
+}
+
+function internalTestingReadme(config) {
+  return `# Internal Test Coordination Workspace
+
+Use this directory when the user does not have an external ${config.testWindow} repository.
+
+- Test exchange: \`${config.testExchangePath}\`
+- Test handoff template: \`templates/test-handoff-template.md\`
+- Rule: only create real test handoffs when a real scenario is required.
+`;
+}
+
+function testExchangeTemplate() {
+  return `# Test Exchange
+
+This file records real-scenario validation handoffs and evidence.
+
+## Active Test Cards
+
+None.
+
+## History
+
+- Template initialized.
+`;
+}
+
+function externalTestAlignment(repo, config) {
+  return `# ${repo.windowName} Alignment
+
+This repository can act as an external test window for ${config.workspaceName}.
+
+- Control workspace test exchange: \`${config.testExchangePath}\`
+- Fill test cards in the control workspace first.
+- Keep probe scripts and real-environment evidence in this repository only when the test really needs this external environment.
+`;
+}
+
+function ensureTextFile(file, content, label) {
+  const exists = existsSync(file);
+  const changed = !exists;
+  if (write && changed) {
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, `${content.trimEnd()}\n`);
+  }
+  return {
+    label,
+    path: file,
+    exists,
+    changed,
+    wrote: write && changed,
+  };
+}
+
+function repoForWindow(config, windowName) {
+  return normalizedRepositories(config).find((repo) => repo.windowName === windowName) ?? null;
+}
+
+function syncTemplatesPayload() {
+  const context = commandContext();
+  const windowFilter = getValue("--window");
+  const all = hasFlag("--all") || !windowFilter;
+  const windows = [
+    context.config.designWindow,
+    context.config.testWindow,
+  ].filter((name) => all || name === windowFilter);
+  if (windows.length === 0) {
+    fail(`sync-templates only supports ${context.config.designWindow} or ${context.config.testWindow}.`);
+  }
+
+  const results = [];
+  for (const windowName of windows) {
+    if (windowName === context.config.designWindow) {
+      const repo = repoForWindow(context.config, windowName) ?? {
+        windowName,
+        path: "docs/workspace/design",
+        mode: "internal",
+        role: "Internal requirement design workspace",
+        managedAgents: false,
+      };
+      const repoRoot = repositoryAbsPath(context.controlRoot, repo);
+      const boardPath = path.resolve(context.controlRoot, context.config.designHandoffBoard);
+      if (repo.mode === "external" && (!existsSync(repoRoot) || !statSync(repoRoot).isDirectory())) {
+        results.push({ windowName, mode: repo.mode, ok: false, issue: "external design directory missing", path: repo.path });
+        continue;
+      }
+      results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(boardPath, designBoardTemplate(), "design handoff board") });
+      if (repo.mode === "internal") {
+        results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(path.join(repoRoot, "README.md"), internalDesignReadme(context.config), "internal design readme") });
+      }
+    }
+
+    if (windowName === context.config.testWindow) {
+      const repo = repoForWindow(context.config, windowName) ?? {
+        windowName,
+        path: "docs/workspace/testing",
+        mode: "internal",
+        role: "Internal test coordination workspace",
+        managedAgents: false,
+      };
+      const repoRoot = repositoryAbsPath(context.controlRoot, repo);
+      if (repo.mode === "external" && (!existsSync(repoRoot) || !statSync(repoRoot).isDirectory())) {
+        results.push({ windowName, mode: repo.mode, ok: false, issue: "external test directory missing", path: repo.path });
+        continue;
+      }
+      results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(path.resolve(context.controlRoot, context.config.testExchangePath), testExchangeTemplate(), "test exchange") });
+      if (repo.mode === "internal") {
+        results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(path.join(repoRoot, "README.md"), internalTestingReadme(context.config), "internal testing readme") });
+      } else {
+        results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(path.join(repoRoot, "docs/current/test-window-alignment.md"), externalTestAlignment(repo, context.config), "external test alignment") });
+      }
+    }
+  }
+
+  return {
+    ok: results.every((result) => result.ok),
+    command: "sync-templates",
+    wrote: write,
+    results,
+  };
+}
+
 function help() {
   return {
     ok: true,
@@ -434,12 +638,14 @@ function help() {
       configure: "Write workspace.config.json after user-confirmed --repo mappings.",
       prompts: "Print child-window prompts for confirming scope and refreshing AGENTS.md.",
       "write-agents": "Append or refresh managed scope blocks in configured child AGENTS.md files.",
+      "sync-templates": "Create missing internal Design/Test templates or minimal external alignment templates.",
     },
     examples: [
       "node scripts/control-workspace-install.mjs discover --json",
       "node scripts/control-workspace-install.mjs configure --repo BaseWindow=../MyApp --repo PluginWindow=../MyPlugin --write",
       "node scripts/control-workspace-install.mjs prompts --window BaseWindow",
       "node scripts/control-workspace-install.mjs write-agents --all --write",
+      "node scripts/control-workspace-install.mjs sync-templates --all --write",
     ],
   };
 }
@@ -473,6 +679,9 @@ switch (command) {
     break;
   case "write-agents":
     printResult(writeAgentsPayload());
+    break;
+  case "sync-templates":
+    printResult(syncTemplatesPayload());
     break;
   default:
     fail(`Unknown install command: ${command}`);

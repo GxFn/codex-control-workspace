@@ -100,8 +100,12 @@ test("configure writes user-confirmed sibling mappings into workspace.config.jso
     [
       ["BaseWindow", "../BaseWindow"],
       ["PluginWindow", "../PluginWindow"],
+      ["DesignWindow", "docs/workspace/design"],
+      ["TestWindow", "docs/workspace/testing"],
     ],
   );
+  assert.equal(config.designHandoffBoard, "docs/workspace/current/design-handoff-board.md");
+  assert.equal(config.testExchangePath, "docs/workspace/current/test-exchange.md");
 });
 
 test("prompts use sibling control script paths for child windows", () => {
@@ -138,4 +142,54 @@ test("write-agents is dry-run by default and writes managed scope blocks with --
   const pluginAgents = readFileSync(path.join(fixture.plugin, "AGENTS.md"), "utf8");
   assert.match(pluginAgents, /Existing rule/);
   assert.match(pluginAgents, /Window name: `PluginWindow`/);
+});
+
+test("sync-templates creates internal Design and Test surfaces when no external directories exist", () => {
+  const fixture = makeFixture();
+  runJson(fixture, [
+    "configure",
+    "--repo",
+    "BaseWindow=../BaseWindow",
+    "--internal-design",
+    "--internal-test",
+    "--write",
+  ]);
+  const dryRun = runJson(fixture, ["sync-templates", "--all"]);
+  assert.equal(dryRun.wrote, false);
+  assert.equal(dryRun.results.some((result) => result.changed), true);
+
+  const payload = runJson(fixture, ["sync-templates", "--all", "--write"]);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.wrote, true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/current/design-handoff-board.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/design/README.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/current/test-exchange.md")), true);
+  assert.equal(existsSync(path.join(fixture.control, "docs/workspace/testing/README.md")), true);
+});
+
+test("external Design and Test directories get only alignment templates", () => {
+  const fixture = makeFixture();
+  const design = path.join(fixture.parent, "DesignWindow");
+  const testWindow = path.join(fixture.parent, "TestWindow");
+  mkdirSync(design, { recursive: true });
+  mkdirSync(testWindow, { recursive: true });
+  runJson(fixture, [
+    "configure",
+    "--repo",
+    "BaseWindow=../BaseWindow",
+    "--repo",
+    "DesignWindow=../DesignWindow",
+    "--repo",
+    "TestWindow=../TestWindow",
+    "--write",
+  ]);
+
+  const config = JSON.parse(readFileSync(path.join(fixture.control, "workspace.config.json"), "utf8"));
+  assert.equal(config.designHandoffBoard, "../DesignWindow/docs/current/workspace-handoff-board.md");
+
+  const payload = runJson(fixture, ["sync-templates", "--all", "--write"]);
+  assert.equal(payload.ok, true);
+  assert.equal(existsSync(path.join(design, "docs/current/workspace-handoff-board.md")), true);
+  assert.equal(existsSync(path.join(testWindow, "docs/current/test-window-alignment.md")), true);
+  assert.equal(existsSync(path.join(testWindow, "docs/current/test-exchange.md")), false);
 });

@@ -32,10 +32,11 @@ MyWorkspace/
 1. Create or choose a parent folder for the project family.
 2. Clone this repository into that parent as a sibling of the repos it will manage.
 3. Ask Codex to inspect the sibling directories, propose scope, and wait for your confirmation.
-4. Write `workspace.config.json` only after the scope is confirmed.
-5. Generate child-window prompts and write managed scope blocks into sibling `AGENTS.md` files.
-6. Keep `docs/workspace/index.md` as the single control entrypoint.
-7. Run:
+4. Decide whether `DesignWindow` and `TestWindow` are external sibling directories or internal workspace templates.
+5. Write `workspace.config.json` only after the scope is confirmed.
+6. Generate child-window prompts and write managed scope blocks into sibling `AGENTS.md` files.
+7. Keep `docs/workspace/index.md` as the single control entrypoint.
+8. Run:
 
 ```sh
 node scripts/control-workspace-install.mjs discover --json
@@ -60,12 +61,22 @@ running configure or write-agents.
 After confirmation:
 
 ```sh
-node scripts/control-workspace-install.mjs configure --repo BaseWindow=../ProductRepo --repo PluginWindow=../PluginRepo --write
+node scripts/control-workspace-install.mjs configure --repo BaseWindow=../ProductRepo --repo PluginWindow=../PluginRepo --internal-design --internal-test --write
+node scripts/control-workspace-install.mjs sync-templates --all --write
 node scripts/control-workspace-install.mjs prompts
 node scripts/control-workspace-install.mjs write-agents --all --write
 ```
 
 The managed `AGENTS.md` scope block is intentionally small. It tells each child window which control workspace owns the scope, what its window name is, and what directory it is allowed to touch.
+
+If the user already has design or test repositories, configure them explicitly instead of using the internal flags:
+
+```sh
+node scripts/control-workspace-install.mjs configure --repo DesignWindow=../DesignRepo --repo TestWindow=../TestRepo --write
+node scripts/control-workspace-install.mjs sync-templates --all --write
+```
+
+External design/test directories receive only the minimum alignment files needed by the control scripts. Internal mode keeps the design handoff board and test exchange inside this repository.
 
 ## Design Rules
 

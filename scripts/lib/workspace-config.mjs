@@ -25,12 +25,13 @@ export const defaultWorkspaceConfig = {
     "AgentWindow",
     "DashboardWindow",
     "PluginWindow",
+    "DesignWindow",
     "TestWindow",
     "RealTestProject",
   ],
   repoNames: ["BaseWindow", "CoreWindow", "AgentWindow", "DashboardWindow", "PluginWindow"],
   testExchangePath: "docs/workspace/current/test-exchange.md",
-  designHandoffBoard: "../DesignWindow/docs/current/workspace-handoff-board.md",
+  designHandoffBoard: "docs/workspace/current/design-handoff-board.md",
   designHandoffInbox: "docs/workspace/current/design-handoff-inbox.md",
   runtimeProcessMatchers: [],
   runtimeProcessLabel: "configured",
@@ -50,8 +51,8 @@ export const defaultWorkspaceConfig = {
     { windowName: "AgentWindow", path: "../AgentWindow", role: "Agent runtime and orchestration", managedAgents: true },
     { windowName: "DashboardWindow", path: "../DashboardWindow", role: "Frontend UI", managedAgents: true },
     { windowName: "PluginWindow", path: "../PluginWindow", role: "Host integration or plugin entry", managedAgents: true },
-    { windowName: "DesignWindow", path: "../DesignWindow", role: "Requirement design and handoff", managedAgents: true },
-    { windowName: "TestWindow", path: "../TestWindow", role: "Real environment validation", managedAgents: true },
+    { windowName: "DesignWindow", path: "docs/workspace/design", role: "Internal requirement design workspace", managedAgents: false, mode: "internal" },
+    { windowName: "TestWindow", path: "docs/workspace/testing", role: "Internal test coordination workspace", managedAgents: false, mode: "internal" },
     { windowName: "RealTestProject", path: "../RealTestProject", role: "Protected real test project", managedAgents: false },
   ],
   protectedWorkspacePrefixes: [],
@@ -106,6 +107,7 @@ export function loadWorkspaceConfig(options = {}) {
         .filter((repo) => repo && repo.windowName && repo.path)
         .map((repo) => ({
           ...repo,
+          mode: repo.mode ?? (repo.path.startsWith("../") ? "external" : "internal"),
           role: repo.role ?? repositoryRoles[repo.windowName] ?? "Configured repository",
           managedAgents: repo.managedAgents !== false,
         }))

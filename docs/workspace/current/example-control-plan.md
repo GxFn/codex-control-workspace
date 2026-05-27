@@ -54,6 +54,7 @@
 | `AgentWindow` | 无任务 | 否 | Template only. |
 | `DashboardWindow` | 无任务 | 否 | Template only. |
 | `PluginWindow` | 无任务 | 否 | Template only. |
+| `DesignWindow` | 无任务 | 否 | Template setup only; use DesignWindow when a real requirement design task exists. |
 | `TestWindow` | 无任务 | 否 | Template only. |
 | `RealTestProject` | 无任务 | 否 | Protected project. |
 
@@ -68,6 +69,7 @@
 | `AgentWindow`<br>无任务 | Not sent. |
 | `DashboardWindow`<br>无任务 | Not sent. |
 | `PluginWindow`<br>无任务 | Not sent. |
+| `DesignWindow`<br>无任务 | Not sent. |
 | `TestWindow`<br>无任务 | Not sent. |
 | `RealTestProject`<br>无任务 | Not sent. |
 
@@ -106,7 +108,22 @@ No dispatch prompt until a real plan is created.
   "currentIndexType": "当前计划",
   "currentIndexDescription": "Example control plan.",
   "currentStatusSummary": "Freshly extracted control workspace template; replace this with a real plan before dispatch.",
-  "indexRows": [],
-  "currentIndexRows": []
+  "indexRows": [
+    {
+      "type": "Design Handoff Board",
+      "doc": "docs/workspace/current/design-handoff-board.md",
+      "status": "maintained",
+      "description": "Internal DesignWindow handoff board when no external design repository is configured.",
+      "insertAfter": "Global TODO Board"
+    }
+  ],
+  "currentIndexRows": [
+    {
+      "type": "Design Handoff Board",
+      "doc": "docs/workspace/current/design-handoff-board.md",
+      "description": "Internal DesignWindow handoff board.",
+      "insertAfter": "Global TODO"
+    }
+  ]
 }
 -->

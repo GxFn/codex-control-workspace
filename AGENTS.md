@@ -156,6 +156,7 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/con
 - Control workspace 仓库不承载产品源码包，不作为 npm package、CLI、Dashboard、Plugin 或 Agent runtime 发布；它应作为独立仓库与产品子仓库并列安装。
 - Control workspace 仓库可以作为 `GxFn/ControlWorkspace` 总控文档仓库，但只跟踪 workspace 自己的说明、计划、验收、索引、脚本、模板和 skill 资产；不得把 `BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow`、`PluginWindow`、`DesignWindow`、`TestWindow` 或真实测试项目子仓库加入本仓库的 git 跟踪、submodule 或 gitlink。
 - 同级产品仓库的目录范围、窗口名、职责和是否写入 `AGENTS.md` 管理块，由 `workspace.config.json` 的 `repositories` 决定。首次安装或目录变化时，先运行 `node scripts/control-workspace-install.mjs discover --json` 让 Codex 列出同级目录并等待用户确认，再用 `configure --write` 写入配置。
+- `DesignWindow` 和 `TestWindow` 可以是外部同级目录，也可以由本仓库内部模板承接。安装时必须先问用户是否已有需求设计 / 测试目录；没有则使用 `--internal-design` / `--internal-test` 并运行 `sync-templates --write` 创建内部入口；已有则只向外部目录同步必要对齐模板，不复制整套 workspace。
 - 子仓库源码、测试脚本和测试文档改动必须在各自仓库独立提交；本仓库只能通过安装脚本在用户确认后向同级仓库 `AGENTS.md` 写入或刷新 scope 管理块。
 - 只有主控窗口可以提交 ControlWorkspace 仓库里的文档、脚本、模板或 skill 资产。其它执行窗口不得自行对 ControlWorkspace 仓库执行 git add / commit / push。
 - workspace 可以保管总控通用能力，例如 `scripts/`、`skills/`、`templates/` 下的验证脚本、分派模板、文档模板、Codex skill 草案或跨窗口协作工具。此类能力必须服务于工作区总控、文档治理、验证或协作，不得复制或替代子仓库产品实现。
@@ -163,12 +164,12 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/con
 - workspace 内的 `skills/` 是可复用 skill 资产或草案的保管位置，不代表自动安装或自动启用；若某个 skill 需要安装到 Codex runtime、插件包或子仓库，必须在文档中明确安装位置、消费方和同步方式。
 - `docs/workspace/index.md` 是 workspace 级唯一总控入口。当前状态、活跃 TODO、测试交流和正在执行的 workspace 总控计划优先写到 `docs/workspace/current/`；完成后再归档或提炼到长期文档。
 - `docs/requirement-designs/` 保存较大需求的原始计划书、需求设计文档和代码实现依赖调研；不要把具体 wave 派发、执行验收或回填堆到这里。
-- `DesignWindow/docs/current/` 保存 Design 活跃草案和 `workspace-signal` / `workspace-handoff`；总控接收后再决定是否转写到 workspace 正式账本。Design 不直接改总控当前状态。
+- Design 活跃草案和 `workspace-signal` / `workspace-handoff` 可以保存在外部 `DesignWindow/docs/current/`，也可以使用内部 `docs/workspace/current/design-handoff-board.md` 与 `docs/workspace/design/`；总控接收后再决定是否转写到 workspace 正式账本。Design 不直接改总控当前状态。
 - `docs/goal-stage-confirmation/` 保存“需求目标 + 分阶段确认”的长期流程；可复用模板统一保存到 `templates/`；具体某次任务的目标阶段确认文档写到 `docs/workspace/current/` 并从索引挂载。
 - 与某个子仓库强相关的长期协作文档，优先写到 `docs/CoreWindow/`、`docs/AgentWindow/`、`docs/DashboardWindow/`、`docs/PluginWindow/` 或 `docs/BaseWindow/`，并从 workspace 总控文档或索引挂回。
 - `docs/` 根层级不再作为新的总控文档默认落点；除非用户明确要求兼容旧文档位置，否则不要继续把新协作文档散落在 `docs/` 根层级。已存在的历史目录可作为背景材料读取；需要重写、续写或归档时，短期执行入口优先在 `docs/workspace/current/`，长期规则 / 契约 / 地图才写入 `docs/workspace/`。
 - 子仓库内 `docs/` 只放随源码长期维护的产品文档、发布文档或用户文档；不要把跨仓库协作临时文档散落到子仓库内部。
-- 即使真实测试项目自身包含 `docs/`，开发协作文件、阶段计划、验收记录、扫描结果和 BaseWindow 验证记录仍统一通过 workspace 总控文档或 `TestWindow/docs/` 记录；真实测试项目仓库内 `docs/` 只保存必要的长期项目文档。
+- 即使真实测试项目自身包含 `docs/`，开发协作文件、阶段计划、验收记录、扫描结果和 BaseWindow 验证记录仍统一通过 workspace 总控文档、内部 `docs/workspace/current/test-exchange.md`，或外部 `TestWindow/docs/` 记录；真实测试项目仓库内 `docs/` 只保存必要的长期项目文档。
 - 长期文档不得写入用户本机绝对路径、API key、token 或其它私密信息。文档命名使用小写 kebab-case 和执行日 `YYYY-MM-DD`。
 
 详细文档落点、索引、模板字段和账本维护规则见 `skills/dev/control-workspace-governance/references/workspace-ledgers.md`。

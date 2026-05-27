@@ -38,7 +38,19 @@ node scripts/control-workspace-install.mjs discover --json
 node scripts/control-workspace-install.mjs status --json
 ```
 
-用户确认后，写入配置：
+用户确认后，写入配置。若用户没有独立需求设计目录和测试目录，使用内部模式：
+
+```sh
+node scripts/control-workspace-install.mjs configure \
+  --repo BaseWindow=../ProductRepo \
+  --repo PluginWindow=../PluginRepo \
+  --internal-design \
+  --internal-test \
+  --write
+node scripts/control-workspace-install.mjs sync-templates --all --write
+```
+
+若用户已有独立 Design / Test 目录，只把它们作为同级外部目录接入，并同步必要模板：
 
 ```sh
 node scripts/control-workspace-install.mjs configure \
@@ -47,7 +59,17 @@ node scripts/control-workspace-install.mjs configure \
   --repo DesignWindow=../DesignRepo \
   --repo TestWindow=../TestRepo \
   --write
+node scripts/control-workspace-install.mjs sync-templates --all --write
 ```
+
+内部模式会在 control workspace 内使用：
+
+- `docs/workspace/current/design-handoff-board.md`
+- `docs/workspace/current/test-exchange.md`
+- `docs/workspace/design/`
+- `docs/workspace/testing/`
+
+外部模式不会复制整套 workspace，只在外部 Design/Test 目录下创建总控对齐所需的最小模板，例如 Design handoff board 或 Test alignment 说明。
 
 生成给子窗口的提示词：
 
@@ -97,7 +119,7 @@ node scripts/workspace-control.mjs status
 - `repositories`: 每个同级仓库的窗口名、路径、职责和是否写入 `AGENTS.md`。
 - `dispatchWindows`: 可以接收任务的窗口。
 - `repoNames`: 需要统计 git 状态的产品仓库窗口。
-- `designHandoffBoard`: Design 仓库 handoff board 路径，通常是 `../DesignWindow/docs/current/workspace-handoff-board.md`。
+- `designHandoffBoard`: Design handoff board 路径。内部模式是 `docs/workspace/current/design-handoff-board.md`；外部模式通常是 `../DesignWindow/docs/current/workspace-handoff-board.md`。
 - `testExchangePath`: 总控仓库内测试交流文档路径。
 
 不要把真实 thread id、密钥或本机私密路径写进 tracked 配置或文档。

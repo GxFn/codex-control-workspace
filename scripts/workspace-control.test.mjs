@@ -50,6 +50,12 @@ test("--print install maps to control workspace install script", () => {
   assert.match(result.stdout, /node scripts\/control-workspace-install\.mjs prompts --window BaseWindow/);
 });
 
+test("--print install supports internal Design/Test template sync", () => {
+  const result = run(["--print", "install", "configure", "--internal-design", "--internal-test", "--write"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /node scripts\/control-workspace-install\.mjs configure --internal-design --internal-test --write/);
+});
+
 test("--print vad preflight defaults to current-plan preflight", () => {
   const result = run(["--print", "vad", "preflight", "--json"]);
   assert.equal(result.status, 0, result.stderr);

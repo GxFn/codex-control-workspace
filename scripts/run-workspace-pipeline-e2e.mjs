@@ -123,6 +123,7 @@ function dispatchRows({ completed }) {
 | \`AgentWindow\`<br>无任务 | fixture 不改 Agent。 |
 | \`DashboardWindow\`<br>已完成 | E2E fixture 实现窗口已回填。 |
 | \`PluginWindow\`<br>无任务 | fixture 不改 Plugin。 |
+| \`DesignWindow\`<br>已完成 | E2E fixture 需求设计 handoff 已导入。 |
 | \`TestWindow\`<br>已完成 | E2E fixture 测试单已回填通过。 |
 | \`RealTestProject\`<br>无任务 | 不触碰真实项目。 |`;
   }
@@ -132,6 +133,7 @@ function dispatchRows({ completed }) {
 | \`AgentWindow\`<br>无任务 | fixture 不改 Agent。 |
 | \`DashboardWindow\`<br>待启动 | 承接 E2E fixture 实现窗口。 |
 | \`PluginWindow\`<br>无任务 | fixture 不改 Plugin。 |
+| \`DesignWindow\`<br>已完成 | E2E fixture 需求设计 handoff 已导入。 |
 | \`TestWindow\`<br>阻塞 | 等 Dashboard fixture 回填后测试。 |
 | \`RealTestProject\`<br>无任务 | 不触碰真实项目。 |`;
 }
@@ -183,6 +185,7 @@ function planContent({ completed = false } = {}) {
 | \`AgentWindow\` | 无任务 | 否 | fixture 不改 Agent。 |
 | \`DashboardWindow\` | ${completed ? "已完成" : "主线任务"} | ${completed ? "否" : "是"} | ${completed ? "已回填" : "当前可推进"}。 |
 | \`PluginWindow\` | 无任务 | 否 | fixture 不改 Plugin。 |
+| \`DesignWindow\` | 已完成 | 否 | fixture Design handoff 已导入。 |
 | \`TestWindow\` | ${completed ? "已完成" : "阻塞"} | 否 | ${completed ? "测试已通过" : "等待上游"}。 |
 | \`RealTestProject\` | 无任务 | 否 | fixture 不触碰真实项目。 |
 
@@ -272,6 +275,7 @@ function idlePlanContent() {
 | \`AgentWindow\`<br>无任务 | fixture 已归档。 |
 | \`DashboardWindow\`<br>无任务 | fixture 已归档。 |
 | \`PluginWindow\`<br>无任务 | fixture 已归档。 |
+| \`DesignWindow\`<br>已完成 | fixture 需求设计 handoff 已归档。 |
 | \`TestWindow\`<br>已完成 | fixture 测试已完成。 |
 | \`RealTestProject\`<br>无任务 | fixture 不触碰真实项目。 |
 
@@ -301,6 +305,39 @@ function idlePlanContent() {
 
 function writeWorkspaceFixture() {
   writeFile(path.join(fixtureRoot, "AGENTS.md"), "# Fixture AGENTS\n");
+  writeFile(
+    path.join(fixtureRoot, "workspace.config.json"),
+    JSON.stringify(
+      {
+        workspaceName: "ControlWorkspace",
+        controlWindow: "ControlWorkspace",
+        designWindow: "DesignWindow",
+        testWindow: "TestWindow",
+        realProjectWindow: "RealTestProject",
+        baseWindow: "BaseWindow",
+        workspaceRoot: "..",
+        controlRepoDir: "codex-control-workspace",
+        allowMissingRepos: true,
+        dispatchWindows: ["BaseWindow", "CoreWindow", "AgentWindow", "DashboardWindow", "PluginWindow", "TestWindow"],
+        requiredDispatchWindows: ["BaseWindow", "CoreWindow", "AgentWindow", "DashboardWindow", "PluginWindow", "DesignWindow", "TestWindow", "RealTestProject"],
+        repoNames: ["BaseWindow", "CoreWindow", "AgentWindow", "DashboardWindow", "PluginWindow"],
+        designHandoffBoard: "../DesignWindow/docs/current/workspace-handoff-board.md",
+        designHandoffInbox: "docs/workspace/current/design-handoff-inbox.md",
+        testExchangePath: "docs/workspace/current/test-exchange.md",
+        repositories: [
+          { windowName: "BaseWindow", path: "../BaseWindow", role: "Base runtime", managedAgents: true, mode: "external" },
+          { windowName: "CoreWindow", path: "../CoreWindow", role: "Core runtime", managedAgents: true, mode: "external" },
+          { windowName: "AgentWindow", path: "../AgentWindow", role: "Agent runtime", managedAgents: true, mode: "external" },
+          { windowName: "DashboardWindow", path: "../DashboardWindow", role: "Dashboard UI", managedAgents: true, mode: "external" },
+          { windowName: "PluginWindow", path: "../PluginWindow", role: "Plugin entry", managedAgents: true, mode: "external" },
+          { windowName: "DesignWindow", path: "../DesignWindow", role: "Requirement design and handoff", managedAgents: true, mode: "external" },
+          { windowName: "TestWindow", path: "docs/workspace/testing", role: "Internal test coordination workspace", managedAgents: false, mode: "internal" }
+        ]
+      },
+      null,
+      2,
+    ),
+  );
   writeFile(path.join(fixtureRoot, "docs/requirement-designs/e2e-flow/requirement-design-2026-05-25.md"), designDoc("Workspace Requirement Design Copy"));
   writeFile(path.join(fixtureRoot, "docs/workspace/current/e2e-workspace-plan-2026-05-25.md"), planContent());
   writeFile(path.join(fixtureRoot, "docs/workspace/current/e2e-idle-control-2026-05-25.md"), idlePlanContent());
@@ -326,6 +363,7 @@ function writeWorkspaceFixture() {
 | \`AgentWindow\`<br>无任务 | fixture。 |
 | \`DashboardWindow\`<br>待启动 | fixture。 |
 | \`PluginWindow\`<br>无任务 | fixture。 |
+| \`DesignWindow\`<br>已完成 | fixture handoff 已导入。 |
 | \`TestWindow\`<br>阻塞 | fixture。 |
 | \`RealTestProject\`<br>无任务 | fixture。 |
 

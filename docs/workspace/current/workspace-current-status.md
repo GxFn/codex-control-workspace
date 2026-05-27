@@ -45,6 +45,7 @@ Send to: none
 | `AgentWindow`<br>无任务 | Not sent. |
 | `DashboardWindow`<br>无任务 | Not sent. |
 | `PluginWindow`<br>无任务 | Not sent. |
+| `DesignWindow`<br>无任务 | Not sent. |
 | `TestWindow`<br>无任务 | Not sent. |
 | `RealTestProject`<br>无任务 | Not sent. |
 
