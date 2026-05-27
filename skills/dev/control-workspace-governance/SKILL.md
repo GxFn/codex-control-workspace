@@ -1,9 +1,9 @@
 ---
-name: alembic-workspace-control
+name: control-workspace-governance
 description: Use when working inside ControlWorkspace on AGENTS.md / skill layering, TODO / Backlog intake, Design handoff intake, idle-window scheduling, window coverage, task-package dispatch, producer/consumer sequencing, unified dispatch prompts, test handoffs, validation boundaries, or workspace script pipelines. This skill supplements AGENTS.md and must not override its hard boundaries.
 ---
 
-# BaseWindow Workspace Control
+# Control Workspace Governance
 
 This skill holds detailed ControlWorkspace control-center procedures that are too bulky to keep fully resident in `AGENTS.md`.
 
@@ -43,5 +43,5 @@ This skill may guide workspace documentation, TODO intake, dispatch planning, an
 
 1. Classify whether the task is TODO intake, TODO rolling, wave dispatch, task-package planning, test / validation judgment, script pipeline work, or prompt generation.
 2. Load only the matching reference file.
-3. Update the current workspace plan, `global-todo-board`, `alembic-test-exchange`, or Design inbox only when that is the correct ledger.
+3. Update the current workspace plan, `global-todo-board`, `test-exchange`, or Design inbox only when that is the correct ledger.
 4. Run the workspace validation commands required by `AGENTS.md` and the current plan.

@@ -2,14 +2,15 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
 
 const args = process.argv.slice(2);
 const workspaceRoot = path.resolve(getValue("--root", process.cwd()));
 const json = args.includes("--json");
 const indexPath = path.join(workspaceRoot, "docs/workspace/index.md");
-const workspaceConfig = loadWorkspaceConfig();
-const testWindowName = workspaceConfig.testWindow ?? "AlembicTest";
-const exchangePath = path.join(workspaceRoot, workspaceConfig.testExchangePath ?? "docs/workspace/current/alembic-test-exchange.md");
+const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
+const testWindowName = workspaceConfig.testWindow;
+const exchangePath = path.join(workspaceRoot, workspaceConfig.testExchangePath);
 const sendEligibleStatuses = new Set(["待启动", "执行中"]);
 const activeTestStatuses = ["待启动", "执行中"];
 const issues = [];
@@ -29,15 +30,6 @@ function getValue(name, fallback = null) {
 
 function read(file) {
   return readFileSync(file, "utf8");
-}
-
-function loadWorkspaceConfig() {
-  const configArg = getValue("--config", process.env.CODEX_CONTROL_WORKSPACE_CONFIG ?? "workspace.config.json");
-  const configPath = path.isAbsolute(configArg) ? configArg : path.join(workspaceRoot, configArg);
-  if (!existsSync(configPath)) {
-    return {};
-  }
-  return JSON.parse(readFileSync(configPath, "utf8"));
 }
 
 function splitMarkdownRow(line) {
@@ -102,7 +94,7 @@ function parseDispatchRows(planContent) {
   return rows;
 }
 
-function isNonTestAlembicTestTask(row, planContent) {
+function isNonTestTargetTask(row, planContent) {
   const planSignals = `${row.task}\n${sectionContent(planContent, "目标判断")}\n${sectionContent(planContent, "窗口分派")}\n${sectionContent(planContent, "可复制提示词")}\n${sectionContent(planContent, "测试交接")}`;
   const isThreadRegistry = /thread id|线程/.test(row.task) && /登记|回填|收集|registry/i.test(row.task);
   const isVadSmoke =
@@ -133,18 +125,18 @@ function requireTerms(block, terms) {
 }
 
 const planPath = currentPlanPathFromIndex();
-let alembicTestSendEligible = false;
-let alembicTestNonTestOnly = false;
+let testWindowSendEligible = false;
+let testWindowNonTestOnly = false;
 let planRelative = null;
 
 if (planPath && existsSync(planPath)) {
   planRelative = path.relative(workspaceRoot, planPath);
   const planContent = read(planPath);
   const dispatchRows = parseDispatchRows(planContent);
-  const alembicTestRows = dispatchRows.filter((row) => row.windowName === testWindowName && sendEligibleStatuses.has(row.status));
-  alembicTestSendEligible = alembicTestRows.length > 0;
-  alembicTestNonTestOnly =
-    alembicTestRows.length > 0 && alembicTestRows.every((row) => isNonTestAlembicTestTask(row, planContent));
+  const testWindowRows = dispatchRows.filter((row) => row.windowName === testWindowName && sendEligibleStatuses.has(row.status));
+  testWindowSendEligible = testWindowRows.length > 0;
+  testWindowNonTestOnly =
+    testWindowRows.length > 0 && testWindowRows.every((row) => isNonTestTargetTask(row, planContent));
 } else if (planPath) {
   issues.push(`current plan is missing: ${path.relative(workspaceRoot, planPath)}`);
 }
@@ -158,7 +150,7 @@ if (existsSync(exchangePath)) {
   warnings.push(`${path.relative(workspaceRoot, exchangePath)} is missing.`);
 }
 
-if (alembicTestSendEligible && activeTests.length === 0 && !alembicTestNonTestOnly) {
+if (testWindowSendEligible && activeTests.length === 0 && !testWindowNonTestOnly) {
   issues.push(`${testWindowName} is send-eligible in the current plan, but no active ${testWindowName} test card exists.`);
 }
 
@@ -183,9 +175,10 @@ for (const block of activeTests) {
 const result = {
   ok: issues.length === 0,
   plan: planRelative,
-  alembicTestSendEligible,
-  alembicTestNonTestOnly,
-  alembicTestRegistryOnly: alembicTestNonTestOnly,
+  testWindowName,
+  testWindowSendEligible,
+  testWindowNonTestOnly,
+  testWindowRegistryOnly: testWindowNonTestOnly,
   activeTestCount: activeTests.length,
   activeTests: activeTests.map((block) => ({ title: block.title, status: block.status })),
   issues,
@@ -197,8 +190,8 @@ if (json) {
 } else if (result.ok) {
   console.log("Test boundary check passed.");
   console.log(`Plan: ${result.plan ?? "(none)"}`);
-  console.log(`${testWindowName} send-eligible: ${alembicTestSendEligible ? "yes" : "no"}`);
-  console.log(`${testWindowName} non-test task: ${alembicTestNonTestOnly ? "yes" : "no"}`);
+  console.log(`${testWindowName} send-eligible: ${testWindowSendEligible ? "yes" : "no"}`);
+  console.log(`${testWindowName} non-test task: ${testWindowNonTestOnly ? "yes" : "no"}`);
   console.log(`Active ${testWindowName} tests: ${activeTests.length}`);
   for (const warning of warnings) {
     console.log(`Warning: ${warning}`);

@@ -2,6 +2,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
 const workspaceDocsDir = path.join(workspaceRoot, "docs/workspace");
@@ -9,22 +10,29 @@ const currentDir = path.join(workspaceDocsDir, "current");
 const indexPath = path.join(workspaceDocsDir, "index.md");
 const args = process.argv.slice(2);
 const json = args.includes("--json");
+const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
+const configuredTestExchangeFile = path.basename(workspaceConfig.testExchangePath);
 
 const requiredCurrentFiles = [
   "index.md",
   "workspace-current-status.md",
   "global-todo-board.md",
-  "alembic-test-exchange.md",
+  configuredTestExchangeFile,
 ];
 
 const forbiddenRootFiles = [
   "workspace-current-status.md",
   "global-todo-board.md",
-  "alembic-test-exchange.md",
+  configuredTestExchangeFile,
 ];
 
-const oldShortPathPattern =
-  /docs\/workspace\/(?:workspace-current-status\.md|global-todo-board\.md|alembic-test-exchange\.md)/;
+const oldShortPathPattern = new RegExp(
+  `docs/workspace/(?:workspace-current-status\\.md|global-todo-board\\.md|${escapeRegExp(configuredTestExchangeFile)})`,
+);
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function relative(file) {
   return path.relative(workspaceRoot, file).split(path.sep).join("/");

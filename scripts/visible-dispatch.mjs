@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
 
 const rawArgs = process.argv.slice(2);
 const command = rawArgs[0] && !rawArgs[0].startsWith("--") ? rawArgs[0] : "status";
@@ -25,27 +26,16 @@ const stateDir = path.resolve(getValue("--state-dir", path.join(workspaceRoot, "
 const write = hasFlag("--write");
 const json = hasFlag("--json");
 
-function loadWorkspaceConfig() {
-  const configArg = getValue("--config", process.env.CODEX_CONTROL_WORKSPACE_CONFIG ?? "workspace.config.json");
-  const configPath = path.isAbsolute(configArg) ? configArg : path.join(workspaceRoot, configArg);
-  if (!existsSync(configPath)) {
-    return {};
-  }
-  try {
-    return JSON.parse(readFileSync(configPath, "utf8"));
-  } catch (error) {
+const workspaceConfig = loadWorkspaceConfig({
+  workspaceRoot,
+  args: options,
+  onError: (configPath, error) => {
     fail(`Invalid workspace config ${path.relative(workspaceRoot, configPath)}: ${error.message}`);
-  }
-}
-
-const workspaceConfig = loadWorkspaceConfig();
-const controlWindowName = workspaceConfig.controlWindow ?? "AlembicWorkspace";
-const testWindowName = workspaceConfig.testWindow ?? "AlembicTest";
-const dispatchWindowNames = Array.isArray(workspaceConfig.dispatchWindows)
-  ? workspaceConfig.dispatchWindows
-  : Array.isArray(workspaceConfig.windows)
-    ? workspaceConfig.windows
-    : ["Alembic", "AlembicCore", "AlembicAgent", "AlembicDashboard", "AlembicPlugin", "AlembicTest"];
+  },
+});
+const controlWindowName = workspaceConfig.controlWindow;
+const testWindowName = workspaceConfig.testWindow;
+const dispatchWindowNames = workspaceConfig.dispatchWindows;
 const dispatchWindows = new Set(dispatchWindowNames);
 const registryWindows = new Set([...dispatchWindows, controlWindowName]);
 const sendEligibleStatuses = new Set(["待启动", "执行中"]);

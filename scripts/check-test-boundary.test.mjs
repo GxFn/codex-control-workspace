@@ -9,6 +9,7 @@ import test from "node:test";
 
 const workspaceRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const script = path.join(workspaceRoot, "scripts/check-test-boundary.mjs");
+const legacyConfig = path.join(workspaceRoot, "scripts/fixtures/legacy-alembic-workspace.config.json");
 
 function writeFile(file, content) {
   mkdirSync(path.dirname(file), { recursive: true });
@@ -95,6 +96,7 @@ function run(root) {
   return spawnSync("node", [script, "--root", root, "--json"], {
     cwd: root,
     encoding: "utf8",
+    env: { ...process.env, CODEX_CONTROL_WORKSPACE_CONFIG: legacyConfig },
   });
 }
 
@@ -103,7 +105,7 @@ test("passes when AlembicTest is not send-eligible", () => {
   const result = run(root);
   assert.equal(result.status, 0, result.stderr);
   const parsed = JSON.parse(result.stdout);
-  assert.equal(parsed.alembicTestSendEligible, false);
+  assert.equal(parsed.testWindowSendEligible, false);
 });
 
 test("fails when AlembicTest is send-eligible without active test card", () => {
@@ -128,8 +130,8 @@ test("passes AlembicTest non-test thread registry tasks without a test card", ()
   const result = run(root);
   assert.equal(result.status, 0, result.stderr);
   const parsed = JSON.parse(result.stdout);
-  assert.equal(parsed.alembicTestSendEligible, true);
-  assert.equal(parsed.alembicTestNonTestOnly, true);
+  assert.equal(parsed.testWindowSendEligible, true);
+  assert.equal(parsed.testWindowNonTestOnly, true);
   assert.equal(parsed.activeTestCount, 0);
 });
 
@@ -153,8 +155,8 @@ test("passes AlembicTest non-test VAD smoke tasks without a test card", () => {
   const result = run(root);
   assert.equal(result.status, 0, result.stderr);
   const parsed = JSON.parse(result.stdout);
-  assert.equal(parsed.alembicTestSendEligible, true);
-  assert.equal(parsed.alembicTestNonTestOnly, true);
+  assert.equal(parsed.testWindowSendEligible, true);
+  assert.equal(parsed.testWindowNonTestOnly, true);
   assert.equal(parsed.activeTestCount, 0);
 });
 

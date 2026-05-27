@@ -2,6 +2,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
 const workspaceDocsDir = path.join(workspaceRoot, "docs/workspace");
@@ -10,6 +11,7 @@ const recordMapPath = path.join(workspaceDocsDir, "workspace-record-map.md");
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const json = args.includes("--json");
+const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
 
 function getArgValues(name) {
   const values = [];
@@ -158,10 +160,10 @@ function recordMapSkeleton() {
     "# Workspace Record Map",
     "",
     "状态：长期记录清单",
-    "维护窗口：AlembicWorkspace",
+    `维护窗口：${workspaceConfig.controlWindow}`,
     `更新日期：${new Date().toISOString().slice(0, 10)}`,
     "",
-    "本文是 AlembicWorkspace 的长期记录地图。当前开发区不直接散链到具体归档文件；需要历史细节时，从本文查询。",
+    `本文是 ${workspaceConfig.workspaceName} 的长期记录地图。当前开发区不直接散链到具体归档文件；需要历史细节时，从本文查询。`,
     "",
     "## Archive Topics",
     "",

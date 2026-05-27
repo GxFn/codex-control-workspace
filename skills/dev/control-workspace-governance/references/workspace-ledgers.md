@@ -34,7 +34,7 @@ Use this reference when creating, moving, syncing, or archiving ControlWorkspace
 - `docs/workspace/current/` holds current status, active TODO, test exchanges, and active workspace control plans.
 - `docs/workspace/current/workspace-current-status.md` is a short current snapshot, not the place for large historical backfill.
 - `docs/workspace/current/global-todo-board.md` is the cross-plan TODO / Backlog ledger.
-- `docs/workspace/current/alembic-test-exchange.md` is the total-control exchange point for real `TestWindow` handoffs and evidence.
+- `docs/workspace/current/test-exchange.md` is the total-control exchange point for real `TestWindow` handoffs and evidence.
 - `DesignWindow/docs/current/` holds Design-side drafts, signals, and handoff boards. Total control receives them, then decides whether to write workspace formal ledgers.
 
 ## Requirement And Goal Documents

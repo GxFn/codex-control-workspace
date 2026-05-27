@@ -28,8 +28,8 @@ workspace governance work.
 
 ## TestWindow Handoff
 
-- 只在测试确实需要真实项目环境、cold-start / rescan、Dashboard 手动观察、运行时监控、真实项目复现 / 回归或跨仓库集成环境证据时，才通过 `docs/workspace/current/alembic-test-exchange.md` 创建或更新测试单。
-- 测试单先按 `templates/alembic-test-handoff-template.md` 填写，再挂入 `docs/workspace/current/alembic-test-exchange.md`；测试单状态为 `待启动` 时才建议用户发送给 `TestWindow`。
+- 只在测试确实需要真实项目环境、cold-start / rescan、Dashboard 手动观察、运行时监控、真实项目复现 / 回归或跨仓库集成环境证据时，才通过 `docs/workspace/current/test-exchange.md` 创建或更新测试单。
+- 测试单先按 `templates/test-handoff-template.md` 填写，再挂入 `docs/workspace/current/test-exchange.md`；测试单状态为 `待启动` 时才建议用户发送给 `TestWindow`。
 - 测试单必须写清总控自测排除理由、需要的真实场景、测试前边界与多条件判断、验证命令、回填证据和停止条件。
 - 总控可以制定测试目标、验收标准、观察点、风险和回填要求；只有交给 `TestWindow` 的真实场景测试，测试脚本、测试配置、复现记录和长期验证报告才放在 `TestWindow/` 下。
 - 总控与 `TestWindow` 的任务和结果交流必须通过测试交流文档，不在普通聊天里口头传递测试范围、结果和下一步判断。
@@ -53,8 +53,8 @@ workspace governance work.
 
 ## Related Entrypoints
 
-- 测试交流规则：`docs/workspace/alembic-test-exchange-policy.md`
+- 测试交流规则：`docs/workspace/test-exchange-policy.md`
 - 测试执行长期规则：`TestWindow/docs/testing-operation-policy.md`
 - 默认测试参数：`TestWindow/config/defaults.json`
-- 测试单模板：`templates/alembic-test-handoff-template.md`
+- 测试单模板：`templates/test-handoff-template.md`
 - 机械校验：`scripts/check-test-boundary.mjs`

@@ -23,7 +23,7 @@ Skill assets kept here must:
 
 Current drafts:
 
-- `dev/alembic-workspace-control/`: trial extraction for bulky
+- `dev/control-workspace-governance/`: trial extraction for bulky
   ControlWorkspace control-center details. It currently holds TODO / Backlog,
   window dispatch, testing / validation, workspace ledger / document-surface,
   workspace script pipeline, VAD operation, phased migration, and workspace

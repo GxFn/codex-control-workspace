@@ -9,7 +9,7 @@ automatically installed, bundled, or promoted to stable workspace assets.
 
 Current development skills:
 
-- `alembic-workspace-control/`: total-control procedures and references for
+- `control-workspace-governance/`: total-control procedures and references for
   TODO, dispatch, testing, workspace ledger / document-surface, script pipeline,
   VAD operation, phased migration, and control architecture work. Hard
   anti-failure rules remain in workspace `AGENTS.md`.

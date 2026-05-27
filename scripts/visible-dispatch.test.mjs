@@ -9,6 +9,7 @@ import test from "node:test";
 
 const workspaceRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const script = path.join(workspaceRoot, "scripts/visible-dispatch.mjs");
+const legacyConfig = path.join(workspaceRoot, "scripts/fixtures/legacy-alembic-workspace.config.json");
 const visibleWindows = [
   "Alembic",
   "AlembicCore",
@@ -211,7 +212,12 @@ function run(root, args, { autoSession = true } = {}) {
   return spawnSync("node", [script, ...args, "--root", root], {
     cwd: root,
     encoding: "utf8",
-    env: { ...process.env, CODEX_HOME: path.join(root, ".codex"), CODEX_VAD_KEEP_AWAKE: "0" },
+    env: {
+      ...process.env,
+      CODEX_CONTROL_WORKSPACE_CONFIG: legacyConfig,
+      CODEX_HOME: path.join(root, ".codex"),
+      CODEX_VAD_KEEP_AWAKE: "0",
+    },
   });
 }
 
@@ -219,7 +225,12 @@ function runWithKeepAwake(root, args) {
   return spawnSync("node", [script, ...args, "--root", root], {
     cwd: root,
     encoding: "utf8",
-    env: { ...process.env, CODEX_HOME: path.join(root, ".codex"), CODEX_VAD_KEEP_AWAKE: "1" },
+    env: {
+      ...process.env,
+      CODEX_CONTROL_WORKSPACE_CONFIG: legacyConfig,
+      CODEX_HOME: path.join(root, ".codex"),
+      CODEX_VAD_KEEP_AWAKE: "1",
+    },
   });
 }
 

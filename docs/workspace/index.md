@@ -9,7 +9,7 @@ This file is the single workspace entrypoint. Current status, active TODO, test 
 | 当前计划 | [current/example-control-plan.md](current/example-control-plan.md) | draft | Example control plan for a freshly extracted control workspace. |
 | 当前状态 | [current/workspace-current-status.md](current/workspace-current-status.md) | draft | Fresh template status. |
 | Global TODO Board | [current/global-todo-board.md](current/global-todo-board.md) | maintained | Cross-plan TODO ledger. |
-| Test Exchange | [current/alembic-test-exchange.md](current/alembic-test-exchange.md) | maintained | Rename if desired; scripts and skills currently use this historical file name. |
+| Test Exchange | [current/test-exchange.md](current/test-exchange.md) | maintained | Real-scenario validation handoff and evidence ledger. |
 | Workspace Record Map | [workspace-record-map.md](workspace-record-map.md) | maintained | Long-term archive and evidence map. |
 | 当前短期工作区 | [current/](current/) | maintained | Current status, active TODO, test exchange, and current plans. |
 | Script Index | [../../scripts/README.md](../../scripts/README.md) | maintained | Mechanical script entrypoint. |

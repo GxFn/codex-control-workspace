@@ -2,7 +2,7 @@
 
 A local-first control workspace for coordinating multiple Codex windows across repositories.
 
-This repository packages the workflow that was proven in `AlembicWorkspace`: a total-control `AGENTS.md`, current-plan ledgers, task packages, visible heartbeat dispatch, target/controller skills, templates, and validation scripts. It is intentionally prompt-and-file based so a clone can work without a hosted service.
+This repository packages a proven total-control workflow: a project-level `AGENTS.md`, current-plan ledgers, task packages, visible heartbeat dispatch, target/controller skills, templates, and validation scripts. It is intentionally prompt-and-file based so a clone can work without a hosted service.
 
 ## What This Is
 
@@ -31,6 +31,6 @@ For visible automation dispatch, register real Codex thread ids locally under `.
 
 The repository keeps the original workflow shape on purpose. Most customization should be project parameters and naming, not a rewrite of the control discipline. If you need to change behavior, update `AGENTS.md`, the relevant skill, and script tests together.
 
-## First Version Scope
+## Configuration Boundary
 
-This first extraction includes the proven workspace machinery and a generic configuration file. Some documents and script messages still preserve Alembic-derived examples or file names where the scripts depend on them; those are safe examples, not runtime secrets. Future work should add an init command that generates a fully renamed project skeleton from `workspace.config.json`.
+Runtime scripts read project/window names, protected repo prefixes, Design handoff paths, test exchange paths, and optional process matchers from `workspace.config.json`. The script test suite keeps legacy Alembic fixture data only as regression coverage for the workflow this repository was extracted from; new workspaces should customize the config file and human-facing text.

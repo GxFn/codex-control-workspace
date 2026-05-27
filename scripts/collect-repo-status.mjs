@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
+import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
 const args = process.argv.slice(2);
@@ -15,19 +16,8 @@ function getArgValue(name) {
   return index >= 0 ? args[index + 1] : null;
 }
 
-function loadWorkspaceConfig() {
-  const configArg = getArgValue("--config") ?? process.env.CODEX_CONTROL_WORKSPACE_CONFIG ?? "workspace.config.json";
-  const configPath = path.isAbsolute(configArg) ? configArg : path.join(workspaceRoot, configArg);
-  if (!existsSync(configPath)) return {};
-  return JSON.parse(readFileSync(configPath, "utf8"));
-}
-
-const workspaceConfig = loadWorkspaceConfig();
-const repoNames = Array.isArray(workspaceConfig.repoNames)
-  ? workspaceConfig.repoNames
-  : Array.isArray(workspaceConfig.dispatchWindows)
-    ? workspaceConfig.dispatchWindows.filter((name) => name !== workspaceConfig.testWindow)
-    : ["Alembic", "AlembicCore", "AlembicAgent", "AlembicDashboard", "AlembicPlugin"];
+const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
+const repoNames = workspaceConfig.repoNames;
 const allowMissingRepos = workspaceConfig.allowMissingRepos === true;
 
 function runGit(repoPath, args) {

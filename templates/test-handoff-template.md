@@ -2,7 +2,7 @@
 
 Use this template only when the control center needs `TestWindow` to run a
 real-scenario test that total control cannot perform itself.
-Copy the filled section into `docs/workspace/current/alembic-test-exchange.md`.
+Copy the filled section into `docs/workspace/current/test-exchange.md`.
 
 ````text
 ### Test-<编号>：<测试名称>

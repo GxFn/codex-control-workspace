@@ -8,6 +8,7 @@ import test from "node:test";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const checkScript = path.join(scriptsDir, "check-dispatch-coverage.mjs");
+const legacyConfig = path.join(scriptsDir, "fixtures/legacy-alembic-workspace.config.json");
 
 function writeFile(file, content) {
   mkdirSync(path.dirname(file), { recursive: true });
@@ -68,6 +69,7 @@ function runCheck(root) {
   return spawnSync("node", [checkScript], {
     cwd: root,
     encoding: "utf8",
+    env: { ...process.env, CODEX_CONTROL_WORKSPACE_CONFIG: legacyConfig },
   });
 }
 

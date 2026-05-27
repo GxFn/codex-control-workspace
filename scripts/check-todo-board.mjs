@@ -2,6 +2,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
+import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
 const indexPath = path.join(workspaceRoot, "docs/workspace/index.md");
@@ -9,23 +10,8 @@ const args = process.argv.slice(2);
 const requireTodo = args.includes("--require");
 const json = args.includes("--json");
 
-function loadWorkspaceConfig() {
-  const configArg = getArgValue("--config") ?? process.env.CODEX_CONTROL_WORKSPACE_CONFIG ?? "workspace.config.json";
-  const configPath = path.isAbsolute(configArg) ? configArg : path.join(workspaceRoot, configArg);
-  if (!existsSync(configPath)) {
-    return {};
-  }
-  return JSON.parse(readFileSync(configPath, "utf8"));
-}
-
-const workspaceConfig = loadWorkspaceConfig();
-const requiredWindows = Array.isArray(workspaceConfig.requiredDispatchWindows)
-  ? workspaceConfig.requiredDispatchWindows
-  : Array.isArray(workspaceConfig.dispatchWindows)
-    ? workspaceConfig.dispatchWindows
-    : Array.isArray(workspaceConfig.windows)
-      ? workspaceConfig.windows
-      : ["Alembic", "AlembicCore", "AlembicAgent", "AlembicDashboard", "AlembicPlugin", "AlembicTest"];
+const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
+const requiredWindows = workspaceConfig.requiredDispatchWindows;
 
 function getArgValue(name) {
   const eq = args.find((arg) => arg.startsWith(`${name}=`));

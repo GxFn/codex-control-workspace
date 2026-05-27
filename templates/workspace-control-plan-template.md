@@ -169,7 +169,7 @@
   - 不能推出的结论：
   - 停止或不开始条件：
 - 测试单：
-- 测试交流入口：[alembic-test-exchange.md](alembic-test-exchange.md)
+- 测试交流入口：[test-exchange.md](test-exchange.md)
 - 真实项目保护说明：
 
 ## 回填区

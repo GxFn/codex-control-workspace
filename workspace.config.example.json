@@ -23,6 +23,27 @@
     "TestWindow",
     "RealTestProject"
   ],
+  "repoNames": [
+    "BaseWindow",
+    "CoreWindow",
+    "AgentWindow",
+    "DashboardWindow",
+    "PluginWindow"
+  ],
+  "testExchangePath": "docs/workspace/current/test-exchange.md",
+  "designHandoffBoard": "DesignWindow/docs/current/workspace-handoff-board.md",
+  "designHandoffInbox": "docs/workspace/current/design-handoff-inbox.md",
+  "runtimeProcessMatchers": [],
+  "runtimeProcessLabel": "configured",
+  "protectedWorkspacePrefixes": [
+    "BaseWindow/",
+    "CoreWindow/",
+    "AgentWindow/",
+    "DashboardWindow/",
+    "PluginWindow/",
+    "TestWindow/",
+    "RealTestProject/"
+  ],
   "repositoryRoles": {
     "BaseWindow": "Local platform or base runtime",
     "CoreWindow": "Shared deterministic core",

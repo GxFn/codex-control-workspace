@@ -1,0 +1,51 @@
+{
+  "workspaceName": "AlembicWorkspace",
+  "controlWindow": "AlembicWorkspace",
+  "designWindow": "AlembicDesign",
+  "testWindow": "AlembicTest",
+  "realProjectWindow": "BiliDili",
+  "allowMissingRepos": true,
+  "dispatchWindows": [
+    "Alembic",
+    "AlembicCore",
+    "AlembicAgent",
+    "AlembicDashboard",
+    "AlembicPlugin",
+    "AlembicTest"
+  ],
+  "requiredDispatchWindows": [
+    "Alembic",
+    "AlembicCore",
+    "AlembicAgent",
+    "AlembicDashboard",
+    "AlembicPlugin",
+    "AlembicTest",
+    "BiliDili"
+  ],
+  "repoNames": [
+    "Alembic",
+    "AlembicCore",
+    "AlembicAgent",
+    "AlembicDashboard",
+    "AlembicPlugin"
+  ],
+  "testExchangePath": "docs/workspace/current/alembic-test-exchange.md",
+  "designHandoffBoard": "AlembicDesign/docs/current/workspace-handoff-board.md",
+  "designHandoffInbox": "docs/workspace/current/design-handoff-inbox.md",
+  "runtimeProcessMatchers": [
+    "AlembicDashboard",
+    "Alembic",
+    "alembic",
+    "alembic-codex-mcp"
+  ],
+  "runtimeProcessLabel": "Alembic-related",
+  "protectedWorkspacePrefixes": [
+    "Alembic/",
+    "AlembicCore/",
+    "AlembicAgent/",
+    "AlembicDashboard/",
+    "AlembicPlugin/",
+    "AlembicTest/",
+    "BiliDili/"
+  ]
+}

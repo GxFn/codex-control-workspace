@@ -92,7 +92,7 @@ No dispatch prompt until a real plan is created.
   - Does not prove: any product behavior.
   - Stop condition: missing project-specific target.
 - Test card: none.
-- Test exchange: [alembic-test-exchange.md](alembic-test-exchange.md)
+- Test exchange: [test-exchange.md](test-exchange.md)
 
 ## 回填区
 

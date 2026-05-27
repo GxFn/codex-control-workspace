@@ -1,20 +1,11 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
 
-const protectedWorkspacePrefixes = [
-  "Alembic/",
-  "AlembicCore/",
-  "AlembicAgent/",
-  "AlembicDashboard/",
-  "AlembicPlugin/",
-  "AlembicTest/",
-  // Real test project directories are protected paths only; they are not
-  // workspace dispatch windows and all operations must go through AlembicTest.
-  "BiliDili/",
-];
-
-const disallowedTrackedPaths = [".DS_Store"];
+const workspaceConfig = loadWorkspaceConfig();
+const protectedWorkspacePrefixes = workspaceConfig.protectedWorkspacePrefixes;
+const disallowedTrackedPaths = workspaceConfig.disallowedTrackedPaths;
 
 function git(args) {
   return execFileSync("git", args, { encoding: "utf8" }).trim();

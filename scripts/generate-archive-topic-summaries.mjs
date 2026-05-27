@@ -98,7 +98,7 @@ function inferKind(fileName) {
   if (fileName.includes("goal-stage-confirmation")) return "goal confirmation";
   if (fileName.includes("real-code-analysis") || fileName.includes("deep-audit")) return "code analysis";
   if (fileName.includes("global-todo-completed")) return "completed TODO archive";
-  if (fileName.includes("alembic-test-exchange")) return "test exchange history";
+  if (fileName.includes("test-exchange")) return "test exchange history";
   if (fileName.includes("closure-standard")) return "standard history";
   if (fileName.includes("acceptance")) return "acceptance / next plan";
   if (fileName.includes("wave")) return "wave plan";

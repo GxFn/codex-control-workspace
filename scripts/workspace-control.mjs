@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.dirname(scriptsDir);
@@ -11,6 +12,7 @@ const printOnly = rawArgs.includes("--print");
 const args = rawArgs.filter((arg) => arg !== "--print");
 const command = args[0] ?? "help";
 const commandArgs = args.slice(1);
+const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args: rawArgs });
 
 const testScripts = [
   "scripts/check-decision-preflight.test.mjs",
@@ -23,7 +25,7 @@ const testScripts = [
 ];
 
 const helpText = `
-AlembicWorkspace control script aggregator
+${workspaceConfig.workspaceName} control script aggregator
 
 Usage:
   node scripts/workspace-control.mjs <command> [options]

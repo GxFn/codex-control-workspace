@@ -5,7 +5,7 @@
 总控窗口：ControlWorkspace
 状态：长期模板
 
-本模板用于跨仓库迁移、抽取、收敛、删除和发布封口。使用前先读取 `AGENTS.md` 和 `skills/dev/alembic-workspace-control/references/phased-migration.md`；本文只保留可复制骨架，迁移经验、扫描命令和反模式不在模板中重复。
+本模板用于跨仓库迁移、抽取、收敛、删除和发布封口。使用前先读取 `AGENTS.md` 和 `skills/dev/control-workspace-governance/references/phased-migration.md`；本文只保留可复制骨架，迁移经验、扫描命令和反模式不在模板中重复。
 
 ## 总控计划骨架
 
@@ -191,7 +191,7 @@ git log --oneline -8
   - 不能推出的结论：
   - 停止或不开始条件：
 - 测试单：
-- 测试交流入口：[alembic-test-exchange.md](alembic-test-exchange.md)
+- 测试交流入口：[test-exchange.md](test-exchange.md)
 
 ## 回填区
 

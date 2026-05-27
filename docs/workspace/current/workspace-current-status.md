@@ -13,7 +13,7 @@ Status: draft
 ## Current Ledgers
 
 - Global TODO: [global-todo-board.md](global-todo-board.md)
-- Test exchange: [alembic-test-exchange.md](alembic-test-exchange.md)
+- Test exchange: [test-exchange.md](test-exchange.md)
 - Current map: [index.md](index.md)
 
 ## Window Dispatch

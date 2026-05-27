@@ -47,7 +47,7 @@
 - 是否联网由需求判断：涉及通用架构模式、安全 / 权限、多项目 / 多租户控制、后台进程、协议、发布链路、平台规则、外部标准或用户明确要求最佳实践，且本地代码不足以支撑设计时，应联网调研。纯本地代码验收、既有实现收口或文档治理可以不联网，但应在计划或回复里说明理由。
 - 外部调研不能替代本地代码事实。方案必须同时满足用户目标、真实代码结构、现有模块边界和验证可行性；不要因为业界实践看起来更“标准”就忽略 BaseWindow 当前系统的真实连通性。
 - 当前 BaseWindow 子仓库包括 `BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow` 和 `PluginWindow`；独立需求设计 / signal 判断窗口是 `DesignWindow`，独立真实场景测试验证窗口是 `TestWindow`。
-- 产品和模块长期路线遵循 `Plugin first, BaseWindow install enhances`：`PluginWindow` 是 Codex host agent 入口，`BaseWindow` 是本地增强底座。具体边界以 `docs/workspace/alembic-plugin-first-enhancement-contract.md` 为准。
+- 产品和模块路线默认遵循 `Plugin first, BaseWindow install enhances`：`PluginWindow` 是 Codex host agent 入口，`BaseWindow` 是本地增强底座。具体边界以当前计划或项目自己的长期契约文档为准。
 - `host agent` 表示外部宿主 Agent 能力来源；当前默认语境是 Codex host agent。不要把 `host agent` 与 `AgentWindow` 或 BaseWindow internal AI 混用。
 - 真实测试项目不作为总控直接分派窗口；涉及真实项目扫描、接入、复现、回归验证或项目自身维护时，才通过 `TestWindow` 承接。不要为了测试 BaseWindow 而改坏真实测试项目。
 - 不要在旧工作区或旧克隆路径下工作；当前统一以本 workspace 内的 BaseWindow 系列仓库为准。
@@ -93,7 +93,7 @@
 - **分配计划**：用户要求“派发任务”“做一轮计划分配”“开始执行分配计划”时，必须先回到当前目标和完成定义，判断目标是否已经达到、剩余差距是什么、下一波是否直接推进该差距；再滚动当前 TODO / Backlog，并基于已确认文档和 TODO 依赖做阶段顺序、任务包、窗口覆盖、producer / consumer 依赖判断、分派表和可复制提示词。若当前计划没有最终完成定义、目标状态判断或后续阶段收束路线，必须先补计划或暂停确认，不能直接按 TODO 派发。
 - **规则治理 / skill 治理**：只修改 workspace 文档、脚本、模板或 skill 资产；先判断这次治理解决哪个真实流程缺口，不触碰产品源码，不创建测试单，除非治理变更影响当前计划或用户要求验证。
 - **验收 / 归档**：读取回填证据，独立复核原始证据，做功能完整性检查、TODO 滚动和必要归档。证据不足时先判断总控能否自测复核。
-- **测试交接**：只有真实项目验证、cold-start / rescan、复现、回归、Dashboard 手动观察、运行时监控或跨仓库集成环境证据，才通过 `docs/workspace/current/alembic-test-exchange.md` 创建或更新 `TestWindow` 测试单。
+- **测试交接**：只有真实项目验证、cold-start / rescan、复现、回归、Dashboard 手动观察、运行时监控或跨仓库集成环境证据，才通过 `docs/workspace/current/test-exchange.md` 创建或更新 `TestWindow` 测试单。
 
 如果一个请求同时命中多个分区，先执行能解除当前阻塞的最小分区；其余事项记录为 TODO 或下一步。
 
@@ -126,7 +126,7 @@
 - 执行窗口回填 workspace 文档后，不得自行提交 ControlWorkspace 仓库；workspace 文档提交只能由主控窗口在验收、去重、修正索引和确认无空转后统一完成。
 - `TestWindow` 自身未提交的 probe、报告、脚本索引或临时测试资产不作为总控验收阻塞；只要回填证据足够、产品仓库和真实测试项目没有非预期改动，提交 hash 可以记录为 `无`。
 
-测试单、证据解释和验证命令细节见 `skills/dev/alembic-workspace-control/references/testing-validation.md`。
+测试单、证据解释和验证命令细节见 `skills/dev/control-workspace-governance/references/testing-validation.md`。
 
 ## 分派、TODO 与自动化硬边界
 
@@ -149,7 +149,7 @@
 - `TestWindow` 下一跳默认由总控调起；非 `TestWindow` 窗口不得创建、处理或验证 `TestWindow` heartbeat，除非当前计划和 finish JSON 同时显式授权该例外。
 - VAD thread id 必须是真实 Codex thread id，只能保存在 `.workspace-local/visible-dispatch/`；不得把 thread id 写入 tracked 文档、GitHub、提示词或回填正文。严禁使用 `current-codex-thread`、`current thread`、`<thread id>`、`unknown`、说明文字或任何占位符登记窗口。
 
-TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/alembic-workspace-control/` 与 `skills/dev/visible-automation-dispatch-target/`。
+TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/control-workspace-governance/` 与 `skills/dev/visible-automation-dispatch-target/`。
 
 ## Workspace 治理与文档账本
 
@@ -170,7 +170,7 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/ale
 - 即使真实测试项目自身包含 `docs/`，开发协作文件、阶段计划、验收记录、扫描结果和 BaseWindow 验证记录仍统一通过 workspace 总控文档或 `TestWindow/docs/` 记录；真实测试项目仓库内 `docs/` 只保存必要的长期项目文档。
 - 长期文档不得写入用户本机绝对路径、API key、token 或其它私密信息。文档命名使用小写 kebab-case 和执行日 `YYYY-MM-DD`。
 
-详细文档落点、索引、模板字段和账本维护规则见 `skills/dev/alembic-workspace-control/references/workspace-ledgers.md`。
+详细文档落点、索引、模板字段和账本维护规则见 `skills/dev/control-workspace-governance/references/workspace-ledgers.md`。
 
 ## 需求到 Wave 流程
 
@@ -182,7 +182,7 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/ale
 
 ## 总控脚本与自动化
 
-- 当用户要求检查、升级或选择 workspace 脚本，评估流水线是否可继续自动化，或判断是否需要脚本使用 skill 时，读取 `skills/dev/alembic-workspace-control/SKILL.md`，并按 `references/script-pipeline.md` 执行细则。
+- 当用户要求检查、升级或选择 workspace 脚本，评估流水线是否可继续自动化，或判断是否需要脚本使用 skill 时，读取 `skills/dev/control-workspace-governance/SKILL.md`，并按 `references/script-pipeline.md` 执行细则。
 - `scripts/README.md` 是 workspace 脚本入口索引；新增、重命名或删除 `scripts/*.mjs` 后，必须同步更新该索引，并运行 `node scripts/check-script-docs.mjs`。
 - 新建或调整当前总控计划、Design handoff board、测试交流、归档入口或相关模板时，必须遵守 `scripts/README.md` 中的脚本可读格式说明和 `templates/workspace-control-plan-template.md`；不要随意重命名脚本依赖章节或改变窗口分派 / TODO / 任务包表结构。
 - `node scripts/verify-control-center.mjs` 是默认总控验证编排；不要把它能自动覆盖的机械检查重复拆成口头流程，除非当前任务只需要其中一个更小脚本。
@@ -190,7 +190,7 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/ale
 
 ## 统一窗口分派提示词
 
-当用户需要把下一波任务复制到其它 Codex 窗口时，总控窗口默认只输出一条通用提示词，让各窗口根据当前总控文档自行领取分配给自己的任务。详细发送 / 不发送判断见 `skills/dev/alembic-workspace-control/references/window-dispatch.md`。
+当用户需要把下一波任务复制到其它 Codex 窗口时，总控窗口默认只输出一条通用提示词，让各窗口根据当前总控文档自行领取分配给自己的任务。详细发送 / 不发送判断见 `skills/dev/control-workspace-governance/references/window-dispatch.md`。
 
 ```text
 先读取 AGENTS.md、docs/workspace/index.md、docs/workspace/current/<当前总控文档名>.md，以及你所在窗口/目标仓库的 AGENTS.md。
@@ -213,14 +213,14 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/ale
 - Skill / reference 只放完整操作细则、命令顺序、模板字段、示例、排错和脚本说明；它们不能替代 `AGENTS.md` 中的硬规则，也不能降低 `AGENTS.md` 的优先级。
 - 修改 `AGENTS.md` 的分层前，必须先设计三层承接：最高硬规则是执行前停止条件；下层章节是常驻边界和地图入口；skill / reference 是按需加载的操作细则。每个 `AGENTS.md` 到 skill 的指向都要写清触发场景、承接文件和哪些结论不得下沉，不能只写“见 skill”。
 - 使用地图：
-  - 做 `AGENTS.md` / skill / template / script 整理时，读 `skills/dev/alembic-workspace-control/references/control-architecture.md`；最高停止卡、历史防错硬规则和总控边界仍留在 `AGENTS.md`。
-  - 做 TODO / Backlog 入账、滚动、优先级、空闲窗口调度时，读 `skills/dev/alembic-workspace-control/references/todo-backlog.md`；TODO 不替代用户目标和完成定义。
-  - 做 wave、任务包、窗口覆盖、producer / consumer 顺序和可复制提示词时，读 `skills/dev/alembic-workspace-control/references/window-dispatch.md`；分派前的定位声明和上游证据门禁仍留在 `AGENTS.md`。
-  - 做测试边界、`TestWindow` 交接、证据解释和验证命令选择时，读 `skills/dev/alembic-workspace-control/references/testing-validation.md`；总控默认自测和 `TestWindow` 真实场景边界仍留在 `AGENTS.md`。
-  - 做脚本维护、脚本验证、Design handoff 导入、current plan 同步和 runtime 检查时，读 `skills/dev/alembic-workspace-control/references/script-pipeline.md`；脚本不得替代总控判断仍留在 `AGENTS.md`。
-  - 做 workspace 文档落点、索引、归档、模板字段和 skill 资产账本时，读 `skills/dev/alembic-workspace-control/references/workspace-ledgers.md`；workspace 不跟踪子仓库和真实测试项目仍留在 `AGENTS.md`。
-  - 做 VAD mode / registry / queue / group / heartbeat 操作时，读 `skills/dev/alembic-workspace-control/references/visible-automation-dispatch.md`；thread id 真实性、next heartbeat 权限和 `TestWindow` 边界仍留在 `AGENTS.md`。
-  - 做跨仓库迁移、能力抽取、删除清理或发布封口时，读 `skills/dev/alembic-workspace-control/references/phased-migration.md`；不得薄实现、空壳迁移或提前删除仍留在 `AGENTS.md`。
+  - 做 `AGENTS.md` / skill / template / script 整理时，读 `skills/dev/control-workspace-governance/references/control-architecture.md`；最高停止卡、历史防错硬规则和总控边界仍留在 `AGENTS.md`。
+  - 做 TODO / Backlog 入账、滚动、优先级、空闲窗口调度时，读 `skills/dev/control-workspace-governance/references/todo-backlog.md`；TODO 不替代用户目标和完成定义。
+  - 做 wave、任务包、窗口覆盖、producer / consumer 顺序和可复制提示词时，读 `skills/dev/control-workspace-governance/references/window-dispatch.md`；分派前的定位声明和上游证据门禁仍留在 `AGENTS.md`。
+  - 做测试边界、`TestWindow` 交接、证据解释和验证命令选择时，读 `skills/dev/control-workspace-governance/references/testing-validation.md`；总控默认自测和 `TestWindow` 真实场景边界仍留在 `AGENTS.md`。
+  - 做脚本维护、脚本验证、Design handoff 导入、current plan 同步和 runtime 检查时，读 `skills/dev/control-workspace-governance/references/script-pipeline.md`；脚本不得替代总控判断仍留在 `AGENTS.md`。
+  - 做 workspace 文档落点、索引、归档、模板字段和 skill 资产账本时，读 `skills/dev/control-workspace-governance/references/workspace-ledgers.md`；workspace 不跟踪子仓库和真实测试项目仍留在 `AGENTS.md`。
+  - 做 VAD mode / registry / queue / group / heartbeat 操作时，读 `skills/dev/control-workspace-governance/references/visible-automation-dispatch.md`；thread id 真实性、next heartbeat 权限和 `TestWindow` 边界仍留在 `AGENTS.md`。
+  - 做跨仓库迁移、能力抽取、删除清理或发布封口时，读 `skills/dev/control-workspace-governance/references/phased-migration.md`；不得薄实现、空壳迁移或提前删除仍留在 `AGENTS.md`。
 - `skills/dev/visible-automation-dispatch-target/`：VAD 目标窗口 claim / finish / record-arm / record-stop 命令细节；role guard、thread id 真实性、next heartbeat 权限和 `TestWindow` 边界必须同时在 `AGENTS.md` 明文常驻。
 - `skills/dev/visible-automation-dispatch-controller/`：VAD controller-return heartbeat 的证据复核、下一波决策和避免小任务漂移的操作步骤；总控事实裁决和验收底线仍以 `AGENTS.md` 为准。
 - 新增或扩展完整能力时，先判断它是硬边界还是可按需加载的操作细则；硬边界写入 `AGENTS.md`，步骤、模板字段、脚本顺序、示例和排错规则写入 skill reference。

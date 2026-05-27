@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
+import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
 
 const args = process.argv.slice(2);
 const json = args.includes("--json");
 const strict = args.includes("--strict");
+const workspaceConfig = loadWorkspaceConfig({ args });
+const processMatchers = Array.isArray(workspaceConfig.runtimeProcessMatchers)
+  ? workspaceConfig.runtimeProcessMatchers
+  : [];
+const processLabel = workspaceConfig.runtimeProcessLabel ?? "configured";
 
 function parsePsLine(line) {
   const match = line.trim().match(/^(\d+)\s+(.+)$/);
@@ -18,27 +24,20 @@ function parsePsLine(line) {
 }
 
 function classify(command) {
-  const lower = command.toLowerCase();
-  if (
-    command.includes("dist/bin/daemon-server.js") ||
-    command.includes("daemon-server.js") ||
-    /\balembic\s+start\b/.test(lower)
-  ) {
-    return "alembic-daemon";
-  }
-
-  if (command.includes("alembic-codex-mcp") || command.includes("alembic-codex-mcp-wrapper")) {
-    return "codex-mcp";
-  }
-
-  if (
-    (command.includes("vite") || command.includes("npm run dev")) &&
-    (command.includes("AlembicDashboard") || command.includes("Alembic"))
-  ) {
-    return "dashboard-dev";
-  }
-
-  return null;
+  const matched = processMatchers.some((matcher) => {
+    if (typeof matcher !== "string" || matcher.length === 0) {
+      return false;
+    }
+    if (matcher.startsWith("/") && matcher.endsWith("/") && matcher.length > 2) {
+      try {
+        return new RegExp(matcher.slice(1, -1)).test(command);
+      } catch {
+        return command.includes(matcher);
+      }
+    }
+    return command.includes(matcher);
+  });
+  return matched ? "configured-runtime" : null;
 }
 
 function readProcesses() {
@@ -67,7 +66,7 @@ try {
   readError = error instanceof Error ? error.message : String(error);
 }
 
-const blockingKinds = new Set(["alembic-daemon", "dashboard-dev"]);
+const blockingKinds = new Set(["configured-runtime"]);
 const blocking = processes.filter((processInfo) => blockingKinds.has(processInfo.kind));
 const result = {
   ok: !strict || (!readError && blocking.length === 0),
@@ -86,7 +85,7 @@ if (json) {
   console.log("Runtime residue check completed.");
   console.log(`Strict mode: ${strict ? "yes" : "no"}`);
   console.log(`Blocking residues: ${blocking.length}`);
-  console.log(`Known Alembic-related processes: ${processes.length}`);
+  console.log(`Known ${processLabel} processes: ${processes.length}`);
 
   if (processes.length > 0) {
     console.log("");

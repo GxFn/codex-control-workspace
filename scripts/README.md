@@ -96,7 +96,7 @@ Current scripts:
   archive review to clean accepted current-plan runtime noise explicitly. The
   script never calls Codex automation APIs, accepts evidence, selects TODOs, or
   writes product repositories. Use
-  `skills/dev/alembic-workspace-control/references/visible-automation-dispatch.md`
+  `skills/dev/control-workspace-governance/references/visible-automation-dispatch.md`
   for the operating map and `skills/dev/visible-automation-dispatch-*` for
   heartbeat role rules.
 - `collect-repo-status.mjs`: summarizes branch, HEAD, dirty state,

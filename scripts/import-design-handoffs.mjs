@@ -2,12 +2,14 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { loadWorkspaceConfig } from "./lib/workspace-config.mjs";
 
 const workspaceRoot = process.cwd();
 const args = process.argv.slice(2);
 const writeInbox = args.includes("--write");
 const json = args.includes("--json");
 const targetId = getArgValue("--id", null);
+const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
 const allowedStatuses = new Set([
   "draft",
   "ready-for-workspace",
@@ -45,11 +47,11 @@ function getArgValue(name, fallback) {
 
 const boardPath = path.resolve(
   workspaceRoot,
-  getArgValue("--board", "AlembicDesign/docs/current/workspace-handoff-board.md"),
+  getArgValue("--board", workspaceConfig.designHandoffBoard),
 );
 const inboxPath = path.resolve(
   workspaceRoot,
-  getArgValue("--inbox", "docs/workspace/current/design-handoff-inbox.md"),
+  getArgValue("--inbox", workspaceConfig.designHandoffInbox),
 );
 
 function splitMarkdownRow(line) {
@@ -343,12 +345,12 @@ function renderInbox(entries, issues) {
   return `# Design Handoff Inbox
 
 更新日期：${date}
-维护窗口：AlembicWorkspace
-来源清单：[AlembicDesign workspace handoff board](${boardLink})
+维护窗口：${workspaceConfig.controlWindow}
+来源清单：[${workspaceConfig.designWindow} workspace handoff board](${boardLink})
 
 ## 定位
 
-本文件由 \`scripts/import-design-handoffs.mjs --write\` 从 AlembicDesign 清单生成，用于提醒总控有哪些 Design 正规需求已准备接收。它不是全局 TODO，也不是执行计划；总控接收后仍需正式写入 \`global-todo-board\`、当前计划 \`TODO / Backlog\` 或需求目录，并按当前主线、优先级、依赖和目标阶段确认推进。
+本文件由 \`scripts/import-design-handoffs.mjs --write\` 从 ${workspaceConfig.designWindow} 清单生成，用于提醒总控有哪些 Design 正规需求已准备接收。它不是全局 TODO，也不是执行计划；总控接收后仍需正式写入 \`global-todo-board\`、当前计划 \`TODO / Backlog\` 或需求目录，并按当前主线、优先级、依赖和目标阶段确认推进。
 
 ## 待总控接收
 
