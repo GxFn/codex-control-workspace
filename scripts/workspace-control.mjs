@@ -15,6 +15,7 @@ const commandArgs = args.slice(1);
 const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args: rawArgs });
 
 const testScripts = [
+  "scripts/collect-repo-status.test.mjs",
   "scripts/check-decision-preflight.test.mjs",
   "scripts/check-dispatch-coverage.test.mjs",
   "scripts/check-script-docs.test.mjs",
@@ -47,6 +48,7 @@ Commands:
 
 Common examples:
   node scripts/workspace-control.mjs status
+  node scripts/workspace-control.mjs status --json
   node scripts/workspace-control.mjs verify --dispatch --script-tests
   node scripts/workspace-control.mjs sync --write --verify --dispatch
   node scripts/workspace-control.mjs design --id PCVM-2026-05-25 --json
@@ -142,11 +144,12 @@ function verifyArgs(options) {
 }
 
 function buildStatus(options) {
-  assertKnownOptions(options, [], []);
+  assertKnownOptions(options, ["--json"], []);
+  const json = hasFlag(options, "--json");
   return [
-    { label: "repo status", ...nodeScript("collect-repo-status.mjs") },
-    { label: "current plan sync", ...nodeScript("sync-current-plan.mjs", ["--check"]) },
-    { label: "dispatch coverage", ...nodeScript("check-dispatch-coverage.mjs") },
+    { label: "repo status", key: "repoStatus", ...nodeScript("collect-repo-status.mjs", json ? ["--json"] : []) },
+    { label: "current plan sync", key: "currentPlanSync", ...nodeScript("sync-current-plan.mjs", ["--check", ...(json ? ["--json"] : [])]) },
+    { label: "dispatch coverage", key: "dispatchCoverage", ...nodeScript("check-dispatch-coverage.mjs", json ? ["--json"] : []) },
   ];
 }
 
@@ -226,7 +229,16 @@ function buildInstall(options) {
   const rest = options.slice(1);
   assertKnownOptions(
     rest,
-    ["--json", "--write", "--all", "--use-discovered", "--internal-design", "--internal-test"],
+    [
+      "--json",
+      "--write",
+      "--all",
+      "--use-discovered",
+      "--internal-design",
+      "--internal-test",
+      "--include-unmanaged",
+      "--include-real-project",
+    ],
     [
       "--root",
       "--parent",
@@ -449,6 +461,43 @@ function runStep(step) {
   return result.status ?? 1;
 }
 
+function runStatusJson(steps) {
+  const checks = [];
+  let ok = true;
+
+  for (const step of steps) {
+    const result = spawnSync(step.command, step.args, {
+      cwd: workspaceRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    const status = result.status ?? 1;
+    let payload = null;
+    if (result.stdout) {
+      try {
+        payload = JSON.parse(result.stdout);
+      } catch {
+        ok = false;
+      }
+    }
+    if (status !== 0) {
+      ok = false;
+    }
+    checks.push({
+      key: step.key ?? step.label,
+      label: step.label,
+      command: shellDisplay(step),
+      status,
+      ok: status === 0 && payload !== null,
+      payload,
+      stderr: result.stderr || "",
+    });
+  }
+
+  console.log(JSON.stringify({ ok, command: "status", checks }, null, 2));
+  process.exit(ok ? 0 : 1);
+}
+
 const steps = buildSteps();
 
 if (printOnly && steps.length > 0) {
@@ -457,6 +506,10 @@ if (printOnly && steps.length > 0) {
     console.log(`$ ${shellDisplay(step)}`);
   }
   process.exit(0);
+}
+
+if (command === "status" && hasFlag(commandArgs, "--json")) {
+  runStatusJson(steps);
 }
 
 for (const step of steps) {

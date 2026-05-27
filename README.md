@@ -37,7 +37,7 @@ MyWorkspace/
 4. Decide whether `DesignWindow` and `TestWindow` are external sibling directories or internal workspace templates.
 5. Write `workspace.config.json` only after the scope is confirmed.
 6. Unpack the control `AGENTS.md` into the parent workspace root so Codex auto-loads the control rules when the parent folder is opened.
-7. Generate child-window prompts and write managed scope blocks into sibling `AGENTS.md` files.
+7. Generate child-window prompts and write managed access cards into sibling `AGENTS.md` files.
 8. Keep `.workspace-active/workspace/index.md` as the single active control document entrypoint.
 9. Run:
 
@@ -69,9 +69,10 @@ node scripts/control-workspace-install.mjs sync-root-agents --write
 node scripts/control-workspace-install.mjs sync-templates --all --write
 node scripts/control-workspace-install.mjs prompts
 node scripts/control-workspace-install.mjs write-agents --all --write
+node scripts/control-workspace-install.mjs write-agents --all --include-unmanaged --write
 ```
 
-The managed `AGENTS.md` scope block is intentionally small. It tells each child window which control workspace owns the scope, what its window name is, and what directory it is allowed to touch.
+The managed `AGENTS.md` block is a compact child-window access card, not a full rule copy. It records the control workspace, window name, active index/status, current-plan entrypoint, VAD claim/finish boundary, and the per-window ledger path. Hard rules stay in the parent `AGENTS.md` and in each child repository's own stop card.
 
 If the user already has design or test repositories, configure them explicitly instead of using the internal flags:
 

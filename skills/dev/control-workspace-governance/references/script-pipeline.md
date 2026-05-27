@@ -14,6 +14,7 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
 
 - Aggregated command surface:
   `node scripts/workspace-control.mjs status`
+  `node scripts/workspace-control.mjs status --json`
   `node scripts/workspace-control.mjs verify --dispatch`
   `node scripts/workspace-control.mjs sync --write --verify --dispatch`
   `node scripts/workspace-control.mjs scripts --tests`

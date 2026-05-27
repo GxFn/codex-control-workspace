@@ -23,12 +23,16 @@ const configuredRepositories = new Map(
   (workspaceConfig.repositories ?? []).map((repo) => [repo.windowName, repo]),
 );
 
-function runGit(repoPath, args) {
+function runGit(repoPath, args, options = {}) {
   try {
-    return execFileSync("git", ["-C", repoPath, ...args], {
+    const output = execFileSync("git", ["-C", repoPath, ...args], {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
+    });
+    if (options.preserveStatusPrefix) {
+      return output.replace(/\r?\n$/, "");
+    }
+    return output.trim();
   } catch {
     return null;
   }
@@ -91,7 +95,7 @@ function inspectRepo(name) {
   const ahead = Number.parseInt(aheadText, 10);
   const behind = Number.parseInt(behindText, 10);
   const latest = runGit(repoPath, ["log", "-1", "--format=%h %s"]) || "";
-  const statusText = runGit(repoPath, ["status", "--porcelain=v1"]) || "";
+  const statusText = runGit(repoPath, ["status", "--porcelain=v1"], { preserveStatusPrefix: true }) || "";
   const status = parseStatus(statusText);
 
   return {

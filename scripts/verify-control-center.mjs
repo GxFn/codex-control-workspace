@@ -86,6 +86,7 @@ if (withScriptTests) {
     command: "node",
     args: [
       "--test",
+      "scripts/collect-repo-status.test.mjs",
       "scripts/check-decision-preflight.test.mjs",
       "scripts/check-dispatch-coverage.test.mjs",
       "scripts/check-script-docs.test.mjs",

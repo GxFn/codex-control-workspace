@@ -113,10 +113,11 @@ test("prompts use sibling control script paths for child windows", () => {
   const payload = runJson(fixture, ["prompts", "--window", "BaseWindow"]);
   assert.equal(payload.prompts.length, 1);
   assert.match(payload.prompts[0].prompt, /你是 BaseWindow 子窗口/);
+  assert.match(payload.prompts[0].prompt, /AGENTS\.md、\.\.\/AGENTS\.md、\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/index\.md/);
   assert.match(payload.prompts[0].prompt, /node \.\.\/codex-control-workspace\/scripts\/control-workspace-install\.mjs status --json/);
 });
 
-test("write-agents is dry-run by default and writes managed scope blocks with --write", () => {
+test("write-agents is dry-run by default and writes managed access cards with --write", () => {
   const fixture = makeFixture();
   let payload = runJson(fixture, ["write-agents", "--window", "BaseWindow"]);
   assert.equal(payload.results[0].changed, true);
@@ -127,7 +128,17 @@ test("write-agents is dry-run by default and writes managed scope blocks with --
   assert.equal(payload.results[0].wrote, true);
   const baseAgents = readFileSync(path.join(fixture.base, "AGENTS.md"), "utf8");
   assert.match(baseAgents, /codex-control-workspace:scope:start/);
+  assert.match(baseAgents, /## Workspace 接入卡/);
+  assert.match(baseAgents, /只记录本窗口接入坐标和自动化最小门禁/);
   assert.match(baseAgents, /Window name: `BaseWindow`/);
+  assert.match(baseAgents, /Parent workspace AGENTS: `\.\.\/AGENTS\.md`/);
+  assert.match(baseAgents, /Active workspace index: `\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/index\.md`/);
+  assert.match(baseAgents, /Current plan directory: `\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/current`/);
+  assert.match(baseAgents, /Window ledger: `\.\.\/workspace-ledger\/BaseWindow`/);
+  assert.match(baseAgents, /Automation 只是唤醒信封/);
+  assert.doesNotMatch(baseAgents, /回填必须包含完成范围/);
+  assert.doesNotMatch(baseAgents, /可以在本窗口 \/ 本仓库边界内使用 Codex 子 agent/);
+  assert.doesNotMatch(baseAgents, /完整能力改成薄实现/);
 
   runJson(fixture, [
     "configure",
@@ -141,7 +152,48 @@ test("write-agents is dry-run by default and writes managed scope blocks with --
   assert.equal(payload.results[0].wrote, true);
   const pluginAgents = readFileSync(path.join(fixture.plugin, "AGENTS.md"), "utf8");
   assert.match(pluginAgents, /Existing rule/);
+  assert.match(pluginAgents, /## Workspace 接入卡[\s\S]+Existing rule/);
   assert.match(pluginAgents, /Window name: `PluginWindow`/);
+});
+
+test("write-agents can explicitly include unmanaged Design/Test windows while skipping real projects", () => {
+  const fixture = makeFixture();
+  const design = path.join(fixture.parent, "DesignWindow");
+  const testWindow = path.join(fixture.parent, "TestWindow");
+  const realProject = path.join(fixture.parent, "RealTestProject");
+  mkdirSync(design, { recursive: true });
+  mkdirSync(testWindow, { recursive: true });
+  mkdirSync(realProject, { recursive: true });
+
+  runJson(fixture, [
+    "configure",
+    "--repo",
+    "BaseWindow=../BaseWindow",
+    "--repo",
+    "DesignWindow=../DesignWindow",
+    "--repo",
+    "TestWindow=../TestWindow",
+    "--repo",
+    "RealTestProject=../RealTestProject",
+    "--write",
+  ]);
+
+  const payload = runJson(fixture, ["write-agents", "--all", "--include-unmanaged", "--write"]);
+  assert.deepEqual(
+    payload.results.map((result) => result.windowName),
+    ["BaseWindow", "DesignWindow", "TestWindow"],
+  );
+  assert.equal(existsSync(path.join(realProject, "AGENTS.md")), false);
+
+  const designAgents = readFileSync(path.join(design, "AGENTS.md"), "utf8");
+  assert.match(designAgents, /Window name: `DesignWindow`/);
+  assert.match(designAgents, /Design handoff board: `docs\/current\/workspace-handoff-board\.md`/);
+  assert.doesNotMatch(designAgents, /不得派发实现/);
+
+  const testAgents = readFileSync(path.join(testWindow, "AGENTS.md"), "utf8");
+  assert.match(testAgents, /Window name: `TestWindow`/);
+  assert.match(testAgents, /Test exchange: `\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/current\/test-exchange\.md`/);
+  assert.doesNotMatch(testAgents, /不得成为默认测试队列/);
 });
 
 test("sync-root-agents unpacks parent AGENTS with control-repo paths", () => {

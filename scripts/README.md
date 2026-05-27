@@ -76,15 +76,21 @@ Current scripts:
   control repo, writes user-confirmed `workspace.config.json` repository scope,
   unpacks the source control `AGENTS.md` into the parent workspace root,
   prints child-window prompts for scope confirmation, and dry-runs or writes a
-  managed scope block into each configured child `AGENTS.md`. `DesignWindow`
+  managed child-window access-card block into each configured child `AGENTS.md`. `DesignWindow`
   and `TestWindow` may be configured as external sibling directories, or kept
   internal with workspace-owned templates when the user has no separate design
   / test directory. `sync-templates` creates the full required Design/Test
   support surfaces for either mode: Design operating policy, original-plan /
   requirement-design / signal / handoff templates, handoff board, Test
   operation policy, test handoff template, and external alignment notes where
-  applicable. It defaults to dry-run and refuses to write outside the
-  configured parent workspace. Use `discover`, `status`, `configure`,
+  applicable. `write-agents` refreshes the managed child access-card block with
+  the parent `AGENTS.md`, active workspace index/status, current plan directory,
+  window ledger, and VAD claim/finish boundary; it intentionally avoids
+  repeating each repository's own stop card. By default
+  it writes only `managedAgents` repositories, while `--include-unmanaged`
+  can explicitly include Design/Test windows and still skips the protected real
+  project unless `--include-real-project` is passed. It defaults to dry-run and
+  refuses to write outside the configured parent workspace. Use `discover`, `status`, `configure`,
   `sync-root-agents`, `prompts`, `write-agents`, and `sync-templates`.
   Runtime scripts read `.workspace-local/workspace.config.json` first when it
   exists, then tracked `workspace.config.json`, unless `--config` or
@@ -255,7 +261,7 @@ Workspace script tests:
 
 ```bash
 node scripts/check-script-docs.mjs
-node --test scripts/check-decision-preflight.test.mjs scripts/check-dispatch-coverage.test.mjs scripts/check-script-docs.test.mjs scripts/check-test-boundary.test.mjs scripts/control-workspace-install.test.mjs scripts/sync-current-plan.test.mjs scripts/visible-dispatch.test.mjs scripts/workspace-control.test.mjs
+node --test scripts/collect-repo-status.test.mjs scripts/check-decision-preflight.test.mjs scripts/check-dispatch-coverage.test.mjs scripts/check-script-docs.test.mjs scripts/check-test-boundary.test.mjs scripts/control-workspace-install.test.mjs scripts/sync-current-plan.test.mjs scripts/visible-dispatch.test.mjs scripts/workspace-control.test.mjs
 node scripts/workspace-control.mjs scripts --tests
 node scripts/verify-control-center.mjs --with-script-tests
 ```
@@ -265,10 +271,12 @@ Sibling install / adoption flow:
 ```bash
 node scripts/control-workspace-install.mjs discover --json
 node scripts/control-workspace-install.mjs status --json
+node scripts/workspace-control.mjs status --json
 node scripts/control-workspace-install.mjs configure --repo BaseWindow=../BaseWindow --repo PluginWindow=../PluginWindow --internal-design --internal-test --write
 node scripts/control-workspace-install.mjs sync-templates --all --write
 node scripts/control-workspace-install.mjs prompts
 node scripts/control-workspace-install.mjs write-agents --all --write
+node scripts/control-workspace-install.mjs write-agents --all --include-unmanaged --write
 node scripts/workspace-control.mjs install status --json
 ```
 

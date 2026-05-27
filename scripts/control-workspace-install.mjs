@@ -105,6 +105,11 @@ function relativeCommandPath(fromDir, absoluteScriptPath) {
   return relative.startsWith(".") ? relative : `./${relative}`;
 }
 
+function relativePathFrom(fromDir, absolutePath) {
+  const relative = slash(path.relative(fromDir, absolutePath));
+  return relative === "" ? "." : relative;
+}
+
 function toWindowName(directoryName) {
   return directoryName
     .split(/[^A-Za-z0-9]+/)
@@ -403,9 +408,12 @@ function buildChildPrompt(context, repo) {
   const absolutePath = repositoryAbsPath(context.controlRoot, repo);
   const relativeScript = relativeCommandPath(absolutePath, path.join(context.controlRoot, "scripts/control-workspace-install.mjs"));
   const controlPath = slash(path.relative(absolutePath, context.controlRoot)) || ".";
+  const parentAgents = relativePathFrom(absolutePath, path.join(context.parentRoot, "AGENTS.md"));
+  const activeIndex = relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceIndexPath ?? ".workspace-active/workspace/index.md"));
+  const activeStatus = relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceCurrentStatusPath ?? ".workspace-active/workspace/current/workspace-current-status.md"));
   return `你是 ${repo.windowName} 子窗口，目标目录是 ${repo.path}，职责是：${repo.role}。
 
-先读取本目录 AGENTS.md；如果缺少 codex-control-workspace scope 管理块，先确认目录范围，不要跨目录工作。
+先读取本目录 AGENTS.md、${parentAgents}、${activeIndex}、${activeStatus}；如果缺少 codex-control-workspace 接入卡，先确认目录范围，不要跨目录工作。
 
 请先运行：
 node ${relativeScript} status --json
@@ -445,32 +453,87 @@ const ROOT_AGENTS_END = "<!-- codex-control-workspace:root-agents:end -->";
 function scopeBlock(context, repo) {
   const absolutePath = repositoryAbsPath(context.controlRoot, repo);
   const controlRelative = slash(path.relative(absolutePath, context.controlRoot)) || ".";
+  const parentAgents = relativePathFrom(absolutePath, path.join(context.parentRoot, "AGENTS.md"));
+  const activeIndex = relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceIndexPath ?? ".workspace-active/workspace/index.md"));
+  const activeStatus = relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceCurrentStatusPath ?? ".workspace-active/workspace/current/workspace-current-status.md"));
+  const currentDir = relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceCurrentDir ?? ".workspace-active/workspace/current"));
+  const windowLedger = relativePathFrom(absolutePath, windowLedgerDirFor({
+    workspaceRoot: context.controlRoot,
+    config: context.config,
+    windowName: repo.windowName,
+  }));
+  const designBoard = relativePathFrom(
+    absolutePath,
+    resolveMaybeRelative(context.controlRoot, context.config.designHandoffBoard ?? ".workspace-active/workspace/current/design-handoff-board.md"),
+  );
+  const testExchange = relativePathFrom(
+    absolutePath,
+    resolveMaybeRelative(context.controlRoot, context.config.testExchangePath ?? ".workspace-active/workspace/current/test-exchange.md"),
+  );
+  const isDesign = repo.windowName === context.config.designWindow;
+  const isTest = repo.windowName === context.config.testWindow;
+  const roleNote = [];
+  if (isDesign) {
+    roleNote.push(`- Design handoff board: \`${designBoard}\``);
+  } else if (isTest) {
+    roleNote.push(`- Test exchange: \`${testExchange}\``);
+  }
+  const roleNoteText = roleNote.length > 0 ? `\n${roleNote.join("\n")}` : "";
   return `${AGENTS_START}
-## Codex Control Workspace Scope
+## Workspace 接入卡
+
+本节由 control workspace 安装脚本维护，只记录本窗口接入坐标和自动化最小门禁。硬规则以父级 AGENTS 与本文件的“本窗口最高停止卡”为准；不要在这里重复仓库专属规则。
+
+### 坐标
 
 - Control workspace: \`${controlRelative}\`
 - Window name: \`${repo.windowName}\`
-- Directory scope: \`${repo.path}\`
-- Responsibility: ${repo.role}
+- Parent workspace AGENTS: \`${parentAgents}\`
+- Active workspace index: \`${activeIndex}\`
+- Active workspace status: \`${activeStatus}\`
+- Current plan directory: \`${currentDir}\`
+- Window ledger: \`${windowLedger}\`${roleNoteText}
 
-Rules:
-- Stay inside this repository unless the control workspace explicitly assigns a cross-repository task.
-- Read this file before claiming work from the control workspace.
-- If the requested window name, directory path, or responsibility does not match this block, stop and report the mismatch.
-- Use the control workspace current plan and task package as the source of task scope; do not invent broader work from automation payloads.
+### 领取 workspace 任务时
+
+1. 先读本文件。
+2. 再读父级 \`${parentAgents}\`。
+3. 再读 \`${activeIndex}\` 和 \`${activeStatus}\`。
+4. 如果有当前计划、任务包或 VAD heartbeat，只按 \`${currentDir}\` 中明确分配给 \`${repo.windowName}\` 的内容执行。
+
+### VAD 最小门禁
+
+- Automation 只是唤醒信封，不改变本窗口职责，也不扩大任务范围；具体任务仍以 claim 结果和当前计划为准。
+- VAD 模式下只允许 claim / finish \`${repo.windowName}\` 对应任务；\`claim --json\` 没有返回本窗口任务时必须停止。
+- 只有 finish JSON 同时明确允许下一跳时，才可创建下一条 heartbeat；否则停止并回报总控。
+- 非 TestWindow 不得创建、处理或验证 TestWindow heartbeat，除非当前计划和 finish JSON 同时显式授权。
+- Thread id 只能写入 control workspace 的本地 runtime；不得写入 tracked 文档、回填正文或 GitHub。
+
+### 文档落点
+
+- 长期跨仓库协作文档、计划、验收、扫描和边界记录写入 \`${windowLedger}\`；本仓库 \`docs/\` 只放随源码维护的产品、发布或用户文档。
 ${AGENTS_END}`;
+}
+
+function removeScopeBlock(existing) {
+  const start = existing.indexOf(AGENTS_START);
+  const end = existing.indexOf(AGENTS_END);
+  if (start >= 0 && end > start) {
+    return `${existing.slice(0, start).trimEnd()}\n\n${existing.slice(end + AGENTS_END.length).trimStart()}`.trim();
+  }
+  return existing.trim();
 }
 
 function upsertScopeBlock(existing, block) {
   if (!existing.trim()) {
     return `# Repository Agent Instructions\n\n${block}\n`;
   }
-  const start = existing.indexOf(AGENTS_START);
-  const end = existing.indexOf(AGENTS_END);
-  if (start >= 0 && end > start) {
-    return `${existing.slice(0, start).trimEnd()}\n\n${block}\n\n${existing.slice(end + AGENTS_END.length).trimStart()}`.trimEnd() + "\n";
+  const withoutBlock = removeScopeBlock(existing);
+  const titleMatch = withoutBlock.match(/^# .+\n/);
+  if (titleMatch) {
+    return `${titleMatch[0].trimEnd()}\n\n${block}\n\n${withoutBlock.slice(titleMatch[0].length).trimStart()}\n`;
   }
-  return `${existing.trimEnd()}\n\n${block}\n`;
+  return `${block}\n\n${withoutBlock}\n`;
 }
 
 function replaceAllLiteral(content, from, to) {
@@ -570,11 +633,14 @@ function writeAgentsPayload() {
   const context = commandContext();
   const windowFilter = getValue("--window");
   const all = hasFlag("--all");
+  const includeUnmanaged = hasFlag("--include-unmanaged");
+  const includeRealProject = hasFlag("--include-real-project");
   if (!windowFilter && !all) {
     fail("write-agents requires --window <WindowName> or --all.");
   }
   const targets = normalizedRepositories(context.config)
-    .filter((repo) => repo.managedAgents !== false)
+    .filter((repo) => repo.managedAgents !== false || includeUnmanaged)
+    .filter((repo) => includeRealProject || repo.windowName !== context.config.realProjectWindow)
     .filter((repo) => all || repo.windowName === windowFilter);
   if (targets.length === 0) {
     fail(`No managed repository found${windowFilter ? ` for ${windowFilter}` : ""}.`);
@@ -878,7 +944,7 @@ function help() {
       configure: "Write workspace.config.json after user-confirmed --repo mappings.",
       prompts: "Print child-window prompts for confirming scope and refreshing AGENTS.md.",
       "sync-root-agents": "Unpack the control AGENTS.md into the parent workspace AGENTS.md so Codex auto-loads total-control rules at the outer workspace root.",
-      "write-agents": "Append or refresh managed scope blocks in configured child AGENTS.md files.",
+      "write-agents": "Append or refresh managed access-card blocks in configured child AGENTS.md files.",
       "sync-templates": "Create missing internal Design/Test templates or minimal external alignment templates.",
       "ledger-paths": "Show project ledger directories for configured windows.",
     },

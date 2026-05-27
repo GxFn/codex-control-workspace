@@ -44,6 +44,18 @@ test("--print vad status maps to visible-dispatch status", () => {
   assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs status --json/);
 });
 
+test("status --json returns a machine-readable aggregate", () => {
+  const result = run(["status", "--json"]);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.command, "status");
+  assert.deepEqual(
+    payload.checks.map((check) => check.key),
+    ["repoStatus", "currentPlanSync", "dispatchCoverage"],
+  );
+});
+
 test("--print install maps to control workspace install script", () => {
   const result = run(["--print", "install", "prompts", "--window", "BaseWindow"]);
   assert.equal(result.status, 0, result.stderr);
@@ -54,6 +66,12 @@ test("--print install supports internal Design/Test template sync", () => {
   const result = run(["--print", "install", "configure", "--internal-design", "--internal-test", "--write"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /node scripts\/control-workspace-install\.mjs configure --internal-design --internal-test --write/);
+});
+
+test("--print install write-agents supports explicit unmanaged window refresh", () => {
+  const result = run(["--print", "install", "write-agents", "--all", "--include-unmanaged", "--write"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /node scripts\/control-workspace-install\.mjs write-agents --all --include-unmanaged --write/);
 });
 
 test("--print vad preflight defaults to current-plan preflight", () => {
