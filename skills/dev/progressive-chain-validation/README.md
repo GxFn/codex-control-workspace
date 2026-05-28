@@ -2,7 +2,7 @@
 
 Development source: https://github.com/GxFn/progressive-chain-validation.git
 
-Current observed upstream HEAD: `badbf0aa23bbaaff2cf185491a6785a61b74c1d8`
+Current observed upstream HEAD: `3322646aa57c67c164eec20626ec5edd9d05b113`
 
 Owner: GxFn
 
@@ -13,6 +13,9 @@ Workspace role:
 - `SKILL.md` is a lightweight routing skill for workspace use; canonical PCV
   method instructions, references, templates, and source changes remain in the
   independent `progressive-chain-validation/` checkout.
+- Workspace owns the state machine. PCV node status is recorded inside
+  Workspace current / ledger documents as canonical Workspace status plus PCV
+  evidence labels; this bridge must not become a second state authority.
 - Keep active PCV source development in the independent source repository only
   when the user wants ControlWorkspace to manage PCV source changes.
 - Do not assume it is installed in Codex runtime unless a sync/link step has

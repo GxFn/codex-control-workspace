@@ -142,6 +142,48 @@ test("armed Alembic window remains send-covered after automation creation", () =
   assert.match(result.stdout, /Send prompts to: Alembic/);
 });
 
+test("overlong dispatch prompt fails closed unless explicitly allowed", () => {
+  const root = createFixture("");
+  writeFile(
+    path.join(root, "docs/workspace/current/example-plan.md"),
+    `
+# Example Plan
+
+状态：待启动
+发送给：\`Alembic\`
+
+## 窗口分派
+
+发送给：\`Alembic\`
+
+| 窗口 / 状态 | 任务 |
+| --- | --- |
+| \`Alembic\`<br>待启动 | 执行任务。 |
+| \`AlembicCore\`<br>观察中 | 当前不发送。 |
+| \`AlembicAgent\`<br>无任务 | 当前不发送。 |
+| \`AlembicDashboard\`<br>无任务 | 当前不发送。 |
+| \`AlembicPlugin\`<br>无任务 | 当前不发送。 |
+| \`AlembicTest\`<br>阻塞 | 等待上游。 |
+| \`BiliDili\`<br>无任务 | 不改真实项目源码。 |
+
+## 可复制提示词
+
+发送给：\`Alembic\`
+
+\`\`\`text
+先读取 AGENTS.md、docs/workspace/index.md、docs/workspace/current/example-plan.md，以及你所在窗口/目标仓库的 AGENTS.md。
+先明确声明当前窗口定位和本轮仓库职责。
+${"重复任务细节会让提示词膨胀，应保留在任务包正文里。\n".repeat(60)}
+\`\`\`
+`,
+  );
+
+  const result = runCheck(root);
+
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout}\n${result.stderr}`, /dispatch prompt is too long/);
+});
+
 test("default workspace control template covers required windows and TODO scheduling", () => {
   const root = mkdtempSync(path.join(tmpdir(), "control-template-coverage-"));
   const template = readFileSync(path.join(repoRoot, "templates/workspace-control-plan-template.md"), "utf8");

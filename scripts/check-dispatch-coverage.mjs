@@ -16,6 +16,7 @@ const validStatuses = new Set(["待启动", "执行中", "已 arm", "待验收",
 const sendEligibleStatuses = new Set(["待启动", "执行中", "已 arm"]);
 const blockedStatus = "阻塞";
 const noSendStatuses = new Set(["待验收", "已完成", "暂停", "观察中", "无任务"]);
+const maxDispatchPromptChars = 1200;
 
 function getArgValue(name) {
   const eq = args.find((arg) => arg.startsWith(`${name}=`));
@@ -219,6 +220,11 @@ if (sendList.length > 0) {
   }
   if (!/定位/.test(promptContent)) {
     issues.push("dispatch prompt must require the execution window to state its repository/window positioning");
+  }
+  if (promptContent.length > maxDispatchPromptChars && !/dispatch-prompt-long-ok/.test(promptContent)) {
+    issues.push(
+      `dispatch prompt is too long (${promptContent.length} chars); keep task details in the task package or add <!-- dispatch-prompt-long-ok --> with a reason`,
+    );
   }
 }
 

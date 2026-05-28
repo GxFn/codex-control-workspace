@@ -141,8 +141,9 @@ Current scripts:
   every expected window, that the declared copyable prompt send list matches
   task statuses (`待启动`, `执行中`, or `已 arm`), and that sendable prompts
   require reading `AGENTS.md` plus an explicit window / repository positioning
-  statement. Nonstandard extra windows are allowed when they are not
-  send-eligible.
+  statement. It also fails overlong copyable prompts so task details stay in
+  task packages and window rules. Nonstandard extra windows are allowed when
+  they are not send-eligible.
 - `check-decision-preflight.mjs`: verifies that the current control plan
   records `总控决策记录` before document/state changes are treated as valid.
   It requires the trigger, demand / test-result interpretation, checked

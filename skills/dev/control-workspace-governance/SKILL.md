@@ -36,6 +36,7 @@ This skill may guide workspace documentation, TODO intake, dispatch planning, an
 - Total control self-tests by default; `TestWindow` is only for real project verification, cold-start, repro, smoke, regression, runtime / Dashboard observation, and cross-repo environment evidence.
 - A TODO or task package must serve the user goal and current completion definition; it must not become a reason to create empty work.
 - Dispatch prompts must keep the `AGENTS.md` read requirement and current-window / target-repository positioning declaration.
+- Workspace owns the only control state machine. PCV node state, scorecard readiness, and observability gaps are recorded inside Workspace plans as canonical Workspace status plus PCV evidence labels, not as a second state authority.
 - Hard anti-failure rules belong in `AGENTS.md`, not only in this skill. This skill may add command details and templates, but it must not hide or weaken those rules.
 - Before changing `AGENTS.md` or moving content into references, prepare an old-rule migration check: keep / downshift / rewrite / discard, and state which `AGENTS.md` section or reference now owns each rule.
 

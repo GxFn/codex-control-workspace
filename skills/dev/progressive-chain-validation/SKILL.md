@@ -12,7 +12,7 @@ This is the ControlWorkspace bridge into the external PCV canonical source. It d
 - Canonical PCV source repo: `https://github.com/GxFn/progressive-chain-validation.git`
 - Expected local checkout from the parent workspace root: `progressive-chain-validation/`
 - Canonical method package inside that checkout: `progressive-chain-validation/progressive-chain-validation/`
-- Current observed source commit: `badbf0aa23bbaaff2cf185491a6785a61b74c1d8`
+- Current observed source commit: `3322646aa57c67c164eec20626ec5edd9d05b113`
 
 When PCV execution, planning quality, node contract, metrics, overlays, or templates matter, load the canonical package from the local checkout first:
 
@@ -41,13 +41,15 @@ Use this bridge when:
 
 Do not use PCV as a generic replacement for normal workspace validation, TODO bookkeeping, VAD automation, or final acceptance. PCV is a chain-planning and node-validation tool; total-control judgment remains in workspace `AGENTS.md`.
 
+Workspace owns the state machine. PCV node state must be recorded inside the Workspace plan as canonical Workspace status plus PCV evidence labels; do not create a separate PCV status authority in ControlWorkspace.
+
 ## Workspace Routing
 
 - Active PCV planning lives in `.workspace-active/workspace/current/` when it is the current control surface.
 - Long-term Alembic PCVM requirements live in `workspace-ledger/requirement-designs/progressive-chain-validation-metrics/`.
 - Per-repository PCVM evidence remains under the relevant `workspace-ledger/<WindowName>/` folder.
 - PCV source changes belong in the independent `progressive-chain-validation/` repo, not in `codex-control-workspace/`.
-- This bridge directory only records how ControlWorkspace consumes PCV.
+- This bridge directory only records how ControlWorkspace consumes PCV. Runtime state, dispatch state, acceptance state, and PCV node state stay in Workspace current / ledger documents.
 
 ## Control Workflow
 
