@@ -70,9 +70,12 @@ Safety:
   script. Use --print to inspect the exact commands before running them.
 `.trim();
 
+class CliExit extends Error {}
+
 function fail(message) {
   console.error(message);
-  process.exit(1);
+  process.exitCode = 1;
+  throw new CliExit(message);
 }
 
 function hasFlag(options, name) {
@@ -516,26 +519,38 @@ function runStatusJson(steps) {
   }
 
   console.log(JSON.stringify({ ok, command: "status", checks }, null, 2));
-  process.exit(ok ? 0 : 1);
+  process.exitCode = ok ? 0 : 1;
 }
 
-const steps = buildSteps();
+function main() {
+  const steps = buildSteps();
 
-if (printOnly && steps.length > 0) {
-  console.log(`Workspace control command plan: ${command}`);
-  for (const step of steps) {
-    console.log(`$ ${shellDisplay(step)}`);
+  if (printOnly && steps.length > 0) {
+    console.log(`Workspace control command plan: ${command}`);
+    for (const step of steps) {
+      console.log(`$ ${shellDisplay(step)}`);
+    }
+    return;
   }
-  process.exit(0);
+
+  if (command === "status" && hasFlag(commandArgs, "--json")) {
+    runStatusJson(steps);
+    return;
+  }
+
+  for (const step of steps) {
+    const status = runStep(step);
+    if (status !== 0) {
+      process.exitCode = status;
+      return;
+    }
+  }
 }
 
-if (command === "status" && hasFlag(commandArgs, "--json")) {
-  runStatusJson(steps);
-}
-
-for (const step of steps) {
-  const status = runStep(step);
-  if (status !== 0) {
-    process.exit(status);
+try {
+  main();
+} catch (error) {
+  if (!(error instanceof CliExit)) {
+    throw error;
   }
 }

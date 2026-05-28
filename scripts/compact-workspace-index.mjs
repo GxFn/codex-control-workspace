@@ -329,5 +329,5 @@ if (json) {
 }
 
 if (!result.ok) {
-  process.exit(1);
+  process.exitCode = 1;
 }

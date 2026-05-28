@@ -22,6 +22,9 @@ Node CLI exit policy:
   of calling `process.exit()` after printing important stdout / stderr.
 - Reserve direct `process.exit()` for explicit worker processes after cleanup,
   or legacy scripts that do not emit automation-critical output.
+- `check-script-docs.mjs` enforces this policy. Direct `process.exit()` is
+  currently allowed only for the `visible-dispatch.mjs` keep-awake worker exit
+  path after it stops its owned child process.
 - Long-running background helpers must avoid holding the short-lived CLI open:
   spawn them with ignored stdio, detach only when they intentionally outlive
   the command, call `unref()`, and provide a local stop marker or equivalent
@@ -196,7 +199,8 @@ Current scripts:
   anything; use `--strict` only when a clean runtime surface is required.
 - `check-script-docs.mjs`: verifies that every workspace `scripts/*.mjs` file
   is represented in this README, that test scripts appear in the workspace
-  script-test instructions, and that `verify-control-center.mjs` with
+  script-test instructions, that normal CLI scripts do not call direct
+  `process.exit()`, and that `verify-control-center.mjs` with
   `--with-script-tests` runs all `*.test.mjs` files. Use `--root <workspace>`
   for fixture / CI execution and `--json` for machine output.
 - `verify-control-center.mjs`: one-command control-center verification that

@@ -46,6 +46,29 @@ function referencedScriptNames(content) {
   return names;
 }
 
+const allowedProcessExitLines = new Map([
+  // The keep-awake worker is an explicit long-lived child process. It exits
+  // only after stopping its own child process, so direct process.exit is scoped
+  // to that worker path rather than normal automation CLI output.
+  ["visible-dispatch.mjs", [/process\.exit\(code\)/]],
+]);
+
+function processExitIssues(scriptName, content) {
+  const allowed = allowedProcessExitLines.get(scriptName) ?? [];
+  const issues = [];
+  const lines = content.split(/\r?\n/);
+  for (const [index, line] of lines.entries()) {
+    if (!/^\s*process\.exit\(/.test(line)) {
+      continue;
+    }
+    if (allowed.some((pattern) => pattern.test(line))) {
+      continue;
+    }
+    issues.push(`${scriptName}:${index + 1} uses process.exit(); use process.exitCode and a controlled return/CLI exception instead.`);
+  }
+  return issues;
+}
+
 const workspaceRoot = path.resolve(getArgValue("--root", process.cwd()));
 const scriptsDir = path.join(workspaceRoot, "scripts");
 const readmePath = path.join(scriptsDir, "README.md");
@@ -107,6 +130,13 @@ for (const scriptName of testScripts) {
   }
 }
 
+for (const scriptName of scriptNames) {
+  const scriptPath = path.join(scriptsDir, scriptName);
+  if (existsSync(scriptPath)) {
+    issues.push(...processExitIssues(scriptName, read(scriptPath)));
+  }
+}
+
 const result = {
   ok: issues.length === 0,
   scriptCount: scriptNames.length,
@@ -139,5 +169,5 @@ if (json) {
 }
 
 if (!result.ok) {
-  process.exit(1);
+  process.exitCode = 1;
 }

@@ -27,13 +27,16 @@ const args = rawArgs.slice(1);
 const json = args.includes("--json");
 const write = args.includes("--write");
 
+class CliExit extends Error {}
+
 function fail(message) {
   if (json) {
     console.log(JSON.stringify({ ok: false, error: message }, null, 2));
   } else {
     console.error(message);
   }
-  process.exit(1);
+  process.exitCode = 1;
+  throw new CliExit(message);
 }
 
 function hasFlag(name) {
@@ -962,68 +965,78 @@ function help() {
   };
 }
 
-switch (command) {
-  case "help":
-  case "--help":
-  case "-h":
-    printResult(help());
-    break;
-  case "discover": {
-    const context = commandContext();
-    printResult({
-      ok: true,
-      command: "discover",
-      workspaceName: context.config.workspaceName,
-      controlRoot: context.controlRoot,
-      parentRoot: context.parentRoot,
-      discoveredRepositories: discoverSiblingRepositories(context).map(({ absolutePath, ...item }) => item),
-    });
-    break;
-  }
-  case "status":
-    printResult(statusPayload());
-    break;
-  case "configure":
-    printResult(configurePayload());
-    break;
-  case "prompts":
-    printResult(promptsPayload());
-    break;
-  case "write-agents":
-    printResult(writeAgentsPayload());
-    break;
-  case "sync-root-agents":
-    printResult(syncRootAgentsPayload());
-    break;
-  case "ledger-paths": {
-    const context = commandContext();
-    const repositories = normalizedRepositories(context.config)
-      .filter((repo) => repo.windowName !== context.config.realProjectWindow)
-      .map((repo) => {
-        const ledgerDir = windowLedgerDirFor({
-          workspaceRoot: context.controlRoot,
-          config: context.config,
-          windowName: repo.windowName,
-        });
-        return {
-          windowName: repo.windowName,
-          repositoryPath: repo.path,
-          ledgerPath: relativeFromControl(context.controlRoot, ledgerDir),
-          exampleDocument: `${relativeFromControl(context.controlRoot, ledgerDir)}/example-task-YYYY-MM-DD.md`,
-        };
+function main() {
+  switch (command) {
+    case "help":
+    case "--help":
+    case "-h":
+      printResult(help());
+      break;
+    case "discover": {
+      const context = commandContext();
+      printResult({
+        ok: true,
+        command: "discover",
+        workspaceName: context.config.workspaceName,
+        controlRoot: context.controlRoot,
+        parentRoot: context.parentRoot,
+        discoveredRepositories: discoverSiblingRepositories(context).map(({ absolutePath, ...item }) => item),
       });
-    printResult({
-      ok: true,
-      command: "ledger-paths",
-      projectLedgerRoot: relativeFromControl(context.controlRoot, context.ledgerPaths.projectLedgerRoot),
-      windowLedgerRoot: relativeFromControl(context.controlRoot, context.ledgerPaths.windowLedgerRoot),
-      repositories,
-    });
-    break;
+      break;
+    }
+    case "status":
+      printResult(statusPayload());
+      break;
+    case "configure":
+      printResult(configurePayload());
+      break;
+    case "prompts":
+      printResult(promptsPayload());
+      break;
+    case "write-agents":
+      printResult(writeAgentsPayload());
+      break;
+    case "sync-root-agents":
+      printResult(syncRootAgentsPayload());
+      break;
+    case "ledger-paths": {
+      const context = commandContext();
+      const repositories = normalizedRepositories(context.config)
+        .filter((repo) => repo.windowName !== context.config.realProjectWindow)
+        .map((repo) => {
+          const ledgerDir = windowLedgerDirFor({
+            workspaceRoot: context.controlRoot,
+            config: context.config,
+            windowName: repo.windowName,
+          });
+          return {
+            windowName: repo.windowName,
+            repositoryPath: repo.path,
+            ledgerPath: relativeFromControl(context.controlRoot, ledgerDir),
+            exampleDocument: `${relativeFromControl(context.controlRoot, ledgerDir)}/example-task-YYYY-MM-DD.md`,
+          };
+        });
+      printResult({
+        ok: true,
+        command: "ledger-paths",
+        projectLedgerRoot: relativeFromControl(context.controlRoot, context.ledgerPaths.projectLedgerRoot),
+        windowLedgerRoot: relativeFromControl(context.controlRoot, context.ledgerPaths.windowLedgerRoot),
+        repositories,
+      });
+      break;
+    }
+    case "sync-templates":
+      printResult(syncTemplatesPayload());
+      break;
+    default:
+      fail(`Unknown install command: ${command}`);
   }
-  case "sync-templates":
-    printResult(syncTemplatesPayload());
-    break;
-  default:
-    fail(`Unknown install command: ${command}`);
+}
+
+try {
+  main();
+} catch (error) {
+  if (!(error instanceof CliExit)) {
+    throw error;
+  }
 }

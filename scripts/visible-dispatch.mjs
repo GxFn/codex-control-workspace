@@ -152,6 +152,8 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+class CliExit extends Error {}
+
 function fail(message) {
   const payload = completeScriptPayload({ ok: false, error: message });
   if (json) {
@@ -162,7 +164,8 @@ function fail(message) {
       console.error(`Agent next: ${payload.agentNext}`);
     }
   }
-  process.exit(1);
+  process.exitCode = 1;
+  throw new CliExit(message);
 }
 
 function ensureWorkspacePath(file, label) {
@@ -1187,7 +1190,8 @@ function commandKeepAwakeWorker() {
       updatedAt: nowIso(),
       error: error.message,
     });
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   writeKeepAwakeControl({
@@ -1926,7 +1930,7 @@ function commandPreflight() {
     ].join("\n"),
   );
   if (!result.ready) {
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 
@@ -2770,7 +2774,7 @@ function commandAuditAutomation() {
     ].join("\n"),
   );
   if (!compliant && hasFlag("--strict")) {
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
 
@@ -3682,96 +3686,106 @@ function commandPruneHistory() {
   );
 }
 
-switch (command) {
-  case "help":
-  case "--help":
-  case "-h":
-    console.log(helpText);
-    break;
-  case "status":
-    commandStatus();
-    break;
-  case "init":
-    commandInit();
-    break;
-  case "mode":
-    commandMode();
-    break;
-  case "start-plan":
-    commandStart({ restart: false, operation: "start-plan" });
-    break;
-  case "resume-plan":
-    commandStart({ restart: true, operation: "resume-plan" });
-    break;
-  case "stop-plan":
-    commandStopPlan();
-    break;
-  case "keep-awake-worker":
-    commandKeepAwakeWorker();
-    break;
-  case "register":
-    commandRegister();
-    break;
-  case "unregister":
-    commandUnregister();
-    break;
-  case "preflight":
-    commandPreflight();
-    break;
-  case "enqueue":
-    commandEnqueue();
-    break;
-  case "arm":
-    commandArm();
-    break;
-  case "arm-batch":
-    commandArmBatch();
-    break;
-  case "record-arm":
-    commandRecordArm();
-    break;
-  case "record-return":
-    commandRecordReturn();
-    break;
-  case "record-stop":
-    commandRecordStop();
-    break;
-  case "claim":
-    commandClaim();
-    break;
-  case "complete":
-    commandComplete();
-    break;
-  case "block":
-    commandBlock();
-    break;
-  case "finish":
-    commandFinish();
-    break;
-  case "group-status":
-    commandGroupStatus();
-    break;
-  case "tick":
-    commandTick();
-    break;
-  case "controller-tick":
-    commandControllerTick();
-    break;
-  case "post-run-audit":
-    commandPostRunAudit();
-    break;
-  case "audit-automation":
-    commandAuditAutomation();
-    break;
-  case "accept":
-    commandAccept();
-    break;
-  case "cleanup":
-    commandCleanup();
-    break;
-  case "prune-history":
-    commandPruneHistory();
-    break;
-  default:
-    fail(`Unknown visible-dispatch command: ${command}\n\n${helpText}`);
+function main() {
+  switch (command) {
+    case "help":
+    case "--help":
+    case "-h":
+      console.log(helpText);
+      break;
+    case "status":
+      commandStatus();
+      break;
+    case "init":
+      commandInit();
+      break;
+    case "mode":
+      commandMode();
+      break;
+    case "start-plan":
+      commandStart({ restart: false, operation: "start-plan" });
+      break;
+    case "resume-plan":
+      commandStart({ restart: true, operation: "resume-plan" });
+      break;
+    case "stop-plan":
+      commandStopPlan();
+      break;
+    case "keep-awake-worker":
+      commandKeepAwakeWorker();
+      break;
+    case "register":
+      commandRegister();
+      break;
+    case "unregister":
+      commandUnregister();
+      break;
+    case "preflight":
+      commandPreflight();
+      break;
+    case "enqueue":
+      commandEnqueue();
+      break;
+    case "arm":
+      commandArm();
+      break;
+    case "arm-batch":
+      commandArmBatch();
+      break;
+    case "record-arm":
+      commandRecordArm();
+      break;
+    case "record-return":
+      commandRecordReturn();
+      break;
+    case "record-stop":
+      commandRecordStop();
+      break;
+    case "claim":
+      commandClaim();
+      break;
+    case "complete":
+      commandComplete();
+      break;
+    case "block":
+      commandBlock();
+      break;
+    case "finish":
+      commandFinish();
+      break;
+    case "group-status":
+      commandGroupStatus();
+      break;
+    case "tick":
+      commandTick();
+      break;
+    case "controller-tick":
+      commandControllerTick();
+      break;
+    case "post-run-audit":
+      commandPostRunAudit();
+      break;
+    case "audit-automation":
+      commandAuditAutomation();
+      break;
+    case "accept":
+      commandAccept();
+      break;
+    case "cleanup":
+      commandCleanup();
+      break;
+    case "prune-history":
+      commandPruneHistory();
+      break;
+    default:
+      fail(`Unknown visible-dispatch command: ${command}\n\n${helpText}`);
+  }
+}
+
+try {
+  main();
+} catch (error) {
+  if (!(error instanceof CliExit)) {
+    throw error;
+  }
 }

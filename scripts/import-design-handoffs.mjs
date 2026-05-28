@@ -388,13 +388,18 @@ ${allRows}`
 `;
 }
 
-if (!existsSync(boardPath)) {
+const boardExists = existsSync(boardPath);
+if (!boardExists && !json) {
   console.error(`Design handoff board not found: ${path.relative(workspaceRoot, boardPath)}`);
-  process.exit(1);
 }
 
-const boardContent = readFileSync(boardPath, "utf8");
-const parsed = parseBoard(boardContent);
+const boardContent = boardExists ? readFileSync(boardPath, "utf8") : "";
+const parsed = boardExists
+  ? parseBoard(boardContent)
+  : {
+      entries: [],
+      issues: [`Design handoff board not found: ${path.relative(workspaceRoot, boardPath)}`],
+    };
 const seenIds = new Set();
 const entryIssues = parsed.entries.flatMap((entry) => validateEntry(entry, seenIds));
 const targetEntry = targetId ? parsed.entries.find((entry) => entry.ID === targetId) : null;
@@ -448,5 +453,5 @@ if (json) {
 }
 
 if (issues.length > 0) {
-  process.exit(1);
+  process.exitCode = 1;
 }

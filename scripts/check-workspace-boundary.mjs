@@ -36,7 +36,7 @@ if (violations.length > 0) {
   for (const violation of violations) {
     console.error(`- ${violation}`);
   }
-  process.exit(1);
+  process.exitCode = 1;
 }
 
 console.log("Workspace boundary check passed.");

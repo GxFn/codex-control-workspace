@@ -72,3 +72,11 @@ test("fails when a test script is missing from verify-control-center", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stdout, /foo\.test\.mjs is not included/);
 });
+
+test("fails when a script uses direct process.exit", () => {
+  const root = makeFixture();
+  writeFile(path.join(root, "scripts/foo.mjs"), "#!/usr/bin/env node\nprocess.exit(1);\n");
+  const result = run(root);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /foo\.mjs:2 uses process\.exit/);
+});
