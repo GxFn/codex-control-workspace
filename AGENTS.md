@@ -223,6 +223,7 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/con
   - 做 workspace 文档落点、索引、归档、模板字段和 skill 资产账本时，读 `skills/dev/control-workspace-governance/references/workspace-ledgers.md`；workspace 不跟踪子仓库和真实测试项目仍留在 `AGENTS.md`。
   - 做 VAD mode / registry / queue / group / heartbeat 操作时，读 `skills/dev/control-workspace-governance/references/visible-automation-dispatch.md`；thread id 真实性、next heartbeat 权限和 `TestWindow` 边界仍留在 `AGENTS.md`。
   - 做跨仓库迁移、能力抽取、删除清理或发布封口时，读 `skills/dev/control-workspace-governance/references/phased-migration.md`；不得薄实现、空壳迁移或提前删除仍留在 `AGENTS.md`。
+  - 做 PCV / PCVM / Progressive Chain Validation、长链路 source-derived plan、cold-start / rescan 节点基线、before/after scorecard 或 metrics 对比时，读 `skills/dev/progressive-chain-validation/SKILL.md`；该 skill 只负责把 workspace 直接链入独立 `progressive-chain-validation` canonical source，不能替代总控停止卡、测试边界或验收裁决。
 - `skills/dev/visible-automation-dispatch-target/`：VAD 目标窗口 claim / finish / record-arm / record-stop 命令细节；role guard、thread id 真实性、next heartbeat 权限和 `TestWindow` 边界必须同时在 `AGENTS.md` 明文常驻。
 - `skills/dev/visible-automation-dispatch-controller/`：VAD controller-return heartbeat 的证据复核、下一波决策和避免小任务漂移的操作步骤；总控事实裁决和验收底线仍以 `AGENTS.md` 为准。
 - 新增或扩展完整能力时，先判断它是硬边界还是可按需加载的操作细则；硬边界写入 `AGENTS.md`，步骤、模板字段、脚本顺序、示例和排错规则写入 skill reference。

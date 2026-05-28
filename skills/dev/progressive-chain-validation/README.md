@@ -1,19 +1,20 @@
-# Progressive Chain Validation Source Ledger
+# Progressive Chain Validation Workspace Bridge
 
 Development source: https://github.com/GxFn/progressive-chain-validation.git
 
-Current observed upstream HEAD: `a6c371c8b123fc79f218d362cd6bae61a0679d61`
+Current observed upstream HEAD: `badbf0aa23bbaaff2cf185491a6785a61b74c1d8`
 
 Owner: GxFn
 
 Workspace role:
 
-- Treat this directory as a source ledger for the external PCV skill repository,
-  not as a complete Codex skill package.
-- It intentionally has no `SKILL.md`; do not install, sync, or advertise this
-  directory itself as a runnable skill.
-- Keep active local development under this directory only when the user wants
-  ControlWorkspace to manage PCV source changes.
+- Treat this directory as the ControlWorkspace bridge into the external PCV
+  canonical source repository.
+- `SKILL.md` is a lightweight routing skill for workspace use; canonical PCV
+  method instructions, references, templates, and source changes remain in the
+  independent `progressive-chain-validation/` checkout.
+- Keep active PCV source development in the independent source repository only
+  when the user wants ControlWorkspace to manage PCV source changes.
 - Do not assume it is installed in Codex runtime unless a sync/link step has
   been performed and recorded.
 - When pulling or syncing from the upstream repository, record the source commit
@@ -27,7 +28,6 @@ Intended use:
 
 Current contents:
 
-- This directory records the development slot and upstream source after the
-  repository rename.
-- The upstream repository stores the skill package under
+- `SKILL.md` records the workspace consumption path and handoff boundaries.
+- The upstream repository stores the canonical method package under
   `progressive-chain-validation/`.

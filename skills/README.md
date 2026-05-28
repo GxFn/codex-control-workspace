@@ -42,9 +42,10 @@ Current drafts:
   unattended acceptance, self-test / real-test judgment, next-wave decisions,
   and anti-small-task-drift rules close to the automation controller without
   moving hard boundaries out of `AGENTS.md`.
-- `dev/progressive-chain-validation/`: source ledger for the external PCV
-  repository. It is not a complete Codex skill package and intentionally has no
-  `SKILL.md`; do not install or advertise this directory as a runnable skill.
+- `dev/progressive-chain-validation/`: workspace bridge into the external PCV
+  repository. It has a lightweight `SKILL.md` for ControlWorkspace routing, but
+  canonical PCV method instructions, references, templates, and source changes remain
+  in the independent `progressive-chain-validation/` checkout.
 
 Development workflow:
 

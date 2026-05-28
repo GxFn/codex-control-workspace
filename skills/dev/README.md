@@ -18,8 +18,9 @@ Current development skills:
 - `visible-automation-dispatch-controller/`: total-control rules for VAD
   controller-return heartbeats, unattended acceptance / retest / next-wave
   decisions, and avoiding small-task drift while pursuing the approved goal.
-- `progressive-chain-validation/`: source ledger for the external PCV
-  repository. It is intentionally not a complete runnable skill package.
+- `progressive-chain-validation/`: workspace bridge into the external PCV
+  repository. It provides a lightweight ControlWorkspace `SKILL.md` while
+  keeping canonical PCV method content in the independent source checkout.
 
 Promotion path:
 
