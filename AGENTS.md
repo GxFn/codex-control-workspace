@@ -149,9 +149,14 @@
 - VAD 自动化模式下，脚本输出的下一跳 payload 只是投递信封，不代表当前窗口获得下一窗口职责。总控验收时若发现窗口把下一跳当成自身任务、跨窗口处理 `TestWindow`、或未按 role guard 执行，必须暂停自动验收并修正脚本 / prompt / AGENTS 规则后再继续。
 - 总控窗口拥有 automation 合规审计和删除权。任何当前 automation 若与当前总控计划、用户最新指令、VAD mode、dispatch group、task、目标窗口、真实 thread id、`TestWindow` 边界或下一跳权限不一致，或本地 `audit-automation` 无法证明其合规，必须删除该 automation，并在本地运行态或当前计划记录删除原因；不得为了“不中断自动化”保留不合规循环。
 - VAD mode enabled 只表示当前总控计划允许无人值守投递 / 回跳，不表示用户在电脑前的普通讨论、Design 需求设计、总控决策讨论或单窗口开发都自动进入无人值守循环。每次仍按最新用户输入和当前窗口职责判断；非 heartbeat / 非当前计划任务不得 claim、续跳或自动关闭。
-- 在 macOS 上，`node scripts/visible-dispatch.mjs mode --enable --write` 会启动本地防睡眠进程，`node scripts/visible-dispatch.mjs mode --disable --write` 必须停止该进程并关闭后续跳转。若防睡眠启动或停止失败，必须报告为自动化就绪风险，不得假装无人值守可靠。
+- VAD 生命周期命令必须语义明确：`node scripts/visible-dispatch.mjs init --write --json` 只初始化本地运行态；`node scripts/visible-dispatch.mjs start-plan --write --json` 是当前计划首次无人值守启动；`node scripts/visible-dispatch.mjs resume-plan --write --json` 是回跳验收后或人工中断后的正常续跑；`node scripts/visible-dispatch.mjs stop-plan --write --reason "<reason>"` 是关闭后续自动化跳转。不要使用含糊的旧启动 / 重启别名。
+- VAD 正常启动 / 续跑优先走 `start-plan` / `resume-plan` 快路径。它负责开启 mode、按当前计划补入队列并返回 heartbeat payload 或明确的 wait / review / attention 决策；不要把完整 `preflight`、全量 verify、长审计当作每次启动前置。只有快路径返回 `attention` / `blocked`、heartbeat 创建失败、thread 缺失、回填冲突或证据异常时，才进入诊断和中断排查。
+- 在 macOS 上，`start-plan` / `resume-plan` / 低层 `mode --enable --write` 会启动本地防睡眠进程，`stop-plan --write` / 低层 `mode --disable --write` 必须停止该进程并关闭后续跳转。若防睡眠启动或停止失败，必须报告为自动化就绪风险，不得假装无人值守可靠。
+- VAD heartbeat 提示词必须是轻量唤醒信封，只放动态变量、规则名和对应 skill 指向；首行必须是任务语义，例如“继续当前窗口任务”或“继续总控验收”，不得以 `VAD` / `Visible Automation Dispatch` 机制名开头抢占 UI 第一视线；不得把完整命令手册复制进提示词。目标窗口和总控必须按 `currentWindow` / `taskId` / `controlDoc` 或 `dispatchGroup` / `lastCompletedTarget` / `lastTaskId` / `controlPlan` 等变量，从对应 skill 推导命令；变量缺失或冲突时停止并回报。
 - VAD 目标窗口只能 claim / finish 自己窗口名对应的任务；如果 `claim --json` 没有返回本窗口任务，必须停止，不得尝试其它窗口名、不得代领、不得验证其它窗口工作。
-- VAD 下一跳 heartbeat 只在 `finish --chain-next --json` 同时返回 `chain.nextAction === "armNext"`、`chain.handoffPolicy === "target-courier"`、`chain.payload.courierAllowed === true`，且当前计划允许 target-window courier delivery 时才能创建。返回 `controllerArm`、`modeDisabled`、`registerWindow`、`wait`、`review`、无 payload 或无 courierAllowed 时，必须停止并回报总控。
+- VAD 下一目标窗口 heartbeat 只在 `finish --chain-next --json` 同时返回 `chain.nextAction === "armNext"`、`chain.handoffPolicy === "target-courier"`、`chain.payload.courierAllowed === true`，且当前计划允许 target-window courier delivery 时才能创建。
+- VAD 回跳总控 heartbeat 只在 `finish --chain-next --json` 同时返回 `chain.nextAction === "returnToController"`、`chain.handoffPolicy === "controller-return"`、`chain.payload.controllerReturnAllowed === true` 时才能创建；这是最后一个子窗口把 terminal dispatch group 交回总控验收的合法投递，不等于子窗口获得总控职责。
+- `finish --chain-next --json` 返回 `controllerArm`、`modeDisabled`、`registerWindow`、`registerController`、`wait`、`review`、无 payload、无 `courierAllowed` 且无 `controllerReturnAllowed` 时，必须停止并回报总控。
 - `TestWindow` 下一跳默认由总控调起；非 `TestWindow` 窗口不得创建、处理或验证 `TestWindow` heartbeat，除非当前计划和 finish JSON 同时显式授权该例外。
 - VAD thread id 必须是真实 Codex thread id，只能保存在 `.workspace-local/visible-dispatch/`；不得把 thread id 写入 tracked 文档、GitHub、提示词或回填正文。严禁使用 `current-codex-thread`、`current thread`、`<thread id>`、`unknown`、说明文字或任何占位符登记窗口。
 

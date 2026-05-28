@@ -41,6 +41,12 @@ const testWindowName = workspaceConfig.testWindow;
 const dispatchWindowNames = workspaceConfig.dispatchWindows;
 const dispatchWindows = new Set(dispatchWindowNames);
 const registryWindows = new Set([...dispatchWindows, controlWindowName]);
+const configuredControlRepoDir = workspaceConfig.controlRepoDir ?? path.basename(workspaceRoot);
+const configuredParentWorkspaceRoot = path.resolve(workspaceRoot, workspaceConfig.workspaceRoot ?? "..");
+const installedAsControlRepo =
+  configuredControlRepoDir &&
+  path.basename(workspaceRoot) === configuredControlRepoDir &&
+  path.resolve(configuredParentWorkspaceRoot, configuredControlRepoDir) === workspaceRoot;
 const sendEligibleStatuses = new Set(["待启动", "执行中"]);
 const heartbeatRrule = "FREQ=MINUTELY;INTERVAL=1";
 // Small create-time gap observed to avoid same-minute heartbeat coalescing.
@@ -64,7 +70,11 @@ Visible automation dispatch local state manager
 
 Usage:
   node scripts/visible-dispatch.mjs status [--json]
+  node scripts/visible-dispatch.mjs init [--write] [--json]
   node scripts/visible-dispatch.mjs mode --enable|--disable --write [--reason <text>] [--no-keep-awake]
+  node scripts/visible-dispatch.mjs start-plan --write [--plan <path>] [--group <id>] [--return-policy controller-last|target-courier] [--stagger-seconds <n>|--no-stagger] [--no-keep-awake] [--json]
+  node scripts/visible-dispatch.mjs resume-plan --write [--plan <path>] [--group <id>] [--return-policy controller-last|target-courier] [--stagger-seconds <n>|--no-stagger] [--no-keep-awake] [--json]
+  node scripts/visible-dispatch.mjs stop-plan --write [--reason <text>] [--json]
   node scripts/visible-dispatch.mjs register --window <name> --thread <threadId> [--cwd <cwd>] --write
   node scripts/visible-dispatch.mjs unregister --window <name> --write [--reason <text>]
   node scripts/visible-dispatch.mjs preflight [--from-plan|--task <taskId>|--group <id>|--window <name>] [--include-controller] [--json]
@@ -93,7 +103,14 @@ Safety:
   and finish-chain only print payloads that a Codex window can pass to
   codex_app.automation_update. preflight, arm, and arm-batch verify that target
   window thread ids resolve to local Codex session files before payloads are
-  used. mode=disabled is the close switch: it stops
+  used. init prepares local runtime files without dispatching anything.
+  start-plan is the first unattended launch for the active plan. resume-plan is
+  the normal continuation after a controller return or manual interruption.
+  Both are fast paths: they enable mode, enqueue the current plan only when
+  needed, and print heartbeat payloads or a wait/review/attention decision
+  without running the full diagnostic suite. stop-plan is the clean
+  close switch: it disables future finish-chain jumps and stops keep-awake.
+  mode=disabled is the close switch: it stops
   controller loops immediately, and any already-awake target window will record
   completion without receiving another finish-chain wake payload.
   On macOS, mode=enabled starts a local caffeinate keep-awake process unless
@@ -136,10 +153,14 @@ function nowIso() {
 }
 
 function fail(message) {
+  const payload = completeScriptPayload({ ok: false, error: message });
   if (json) {
-    console.log(JSON.stringify({ ok: false, error: message }, null, 2));
+    console.log(JSON.stringify(payload, null, 2));
   } else {
     console.error(message);
+    if (payload.agentNext) {
+      console.error(`Agent next: ${payload.agentNext}`);
+    }
   }
   process.exit(1);
 }
@@ -235,15 +256,139 @@ function readAll() {
 }
 
 function output(value, text) {
+  const payload = completeScriptPayload(value);
   if (json) {
-    console.log(JSON.stringify(value, null, 2));
+    console.log(JSON.stringify(payload, null, 2));
   } else {
-    console.log(text ?? JSON.stringify(value, null, 2));
+    const rendered = text ?? JSON.stringify(payload, null, 2);
+    console.log(rendered);
+    if (payload?.agentNext && !rendered.includes("Agent next:")) {
+      console.log(`Agent next: ${payload.agentNext}`);
+    }
   }
+}
+
+function completeScriptPayload(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return value;
+  }
+  return {
+    ...value,
+    scriptComplete: true,
+    agentNext: inferAgentNext(value),
+  };
+}
+
+function inferAgentNext(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "";
+  }
+  if (typeof value.agentNext === "string" && value.agentNext.trim()) {
+    return value.agentNext.trim();
+  }
+  if (value.ok === false) {
+    return "Stop and resolve the reported script error before continuing.";
+  }
+  if (value.chain?.nextAction) {
+    if (value.chain.nextAction === "armNext") {
+      return "Create the returned heartbeat payload only if its permission flags allow it, then run the matching record command.";
+    }
+    if (value.chain.nextAction === "returnToController") {
+      return "Create the returned controller heartbeat, then run record-return with the returned automation id.";
+    }
+    if (value.chain.nextAction === "noReturn") {
+      return "Do not create another heartbeat; wait for remaining group work or total-control review.";
+    }
+    return `Follow chain.nextAction=${value.chain.nextAction}.`;
+  }
+  if (value.topAction) {
+    if (value.topAction === "stopped") {
+      return "Stop the automation path and report the concise status.";
+    }
+    if (value.topAction === "review") {
+      return "Review evidence as total control; do not auto-accept script state as the verdict.";
+    }
+    if (value.topAction === "dispatch" || value.topAction === "arm") {
+      return "Use the returned payloads to create only the allowed heartbeat automations, then record the created ids.";
+    }
+    if (value.topAction === "wait") {
+      return "Wait for the outstanding target windows; do not create extra automation.";
+    }
+    return `Follow topAction=${value.topAction}.`;
+  }
+  if (Array.isArray(value.payloads) && value.payloads.length > 0) {
+    return "Create the returned heartbeat payloads with the configured stagger, then record the created automation ids.";
+  }
+  if (value.payload?.prompt && value.payload?.targetThreadId) {
+    return "Create this heartbeat payload with codex_app.automation_update, then run the matching record command.";
+  }
+  if (value.nextAction) {
+    return `Follow nextAction=${value.nextAction}.`;
+  }
+  if (value.operation === "stop-plan" || value.mode === "disabled") {
+    return "Automation is disabled; stop chaining and report status.";
+  }
+  if (value.operation === "start-plan" || value.operation === "resume-plan") {
+    return "Continue with the returned launch/resume decision; only dispatch payloads that are present and allowed.";
+  }
+  if (typeof value.message === "string" && value.message.trim()) {
+    return value.message.trim();
+  }
+  if (value.ok === true) {
+    return "Script completed; inspect this result and continue the current control workflow.";
+  }
+  return "Script completed; inspect this result before continuing.";
 }
 
 function relativeToWorkspace(file) {
   return path.relative(workspaceRoot, file).replaceAll(path.sep, "/");
+}
+
+function relativePath(from, to) {
+  const rel = path.relative(from, to).replaceAll(path.sep, "/");
+  return rel && !rel.startsWith(".") ? rel : rel || ".";
+}
+
+function workspaceRootPath(file) {
+  const abs = path.resolve(file);
+  if (!installedAsControlRepo) {
+    return relativeToWorkspace(abs);
+  }
+  return relativePath(configuredParentWorkspaceRoot, abs);
+}
+
+function repositoryRootForWindow(windowName) {
+  const repo = (workspaceConfig.repositories ?? []).find((item) => item?.windowName === windowName);
+  if (!repo?.path) {
+    return null;
+  }
+  return path.resolve(workspaceRoot, repo.path);
+}
+
+function promptPathForWindow(windowName, file) {
+  if (windowName === controlWindowName) {
+    return workspaceRootPath(file);
+  }
+  const repoRoot = repositoryRootForWindow(windowName);
+  if (installedAsControlRepo && repoRoot) {
+    return relativePath(repoRoot, file);
+  }
+  return relativeToWorkspace(file);
+}
+
+function scriptCommandForWindow(windowName, args) {
+  const suffix = `node scripts/visible-dispatch.mjs ${args}`;
+  if (!installedAsControlRepo) {
+    return suffix;
+  }
+  if (windowName === controlWindowName) {
+    return `cd ${configuredControlRepoDir} && ${suffix}`;
+  }
+  const repoRoot = repositoryRootForWindow(windowName);
+  if (!repoRoot) {
+    return `cd ${configuredControlRepoDir} && ${suffix}`;
+  }
+  return `cd ${relativePath(repoRoot, workspaceRoot)} && ${suffix}`;
 }
 
 function validateWindow(windowName, { allowController = false } = {}) {
@@ -1111,6 +1256,40 @@ function commandStatus() {
   );
 }
 
+function commandInit() {
+  const runtimeFiles = [
+    { key: "state", file: files.state, value: defaultState() },
+    { key: "registry", file: files.registry, value: defaultRegistry() },
+    { key: "queue", file: files.queue, value: defaultQueue() },
+    { key: "runs", file: files.runs, value: defaultRuns() },
+    { key: "groups", file: files.groups, value: defaultGroups() },
+  ];
+  const missing = runtimeFiles.filter((item) => !existsSync(item.file));
+  if (write) {
+    mkdirSync(stateDir, { recursive: true });
+    for (const item of missing) {
+      atomicWriteJson(item.file, item.value);
+    }
+  }
+  output(
+    {
+      ok: true,
+      wrote: write,
+      stateDir: relativeToWorkspace(stateDir),
+      created: missing.map((item) => item.key),
+      existing: runtimeFiles.filter((item) => existsSync(item.file)).map((item) => item.key),
+      nextStep:
+        "Register real thread ids if needed, then use start-plan for the first launch or resume-plan for a continuation.",
+    },
+    [
+      `Visible dispatch init ${write ? "applied" : "dry-run"}.`,
+      `State dir: ${relativeToWorkspace(stateDir)}`,
+      `Created: ${missing.map((item) => item.key).join(", ") || "none"}`,
+      "No mode change, queue claim, heartbeat payload, or automation deletion was performed.",
+    ].join("\n"),
+  );
+}
+
 function redactThreadEntry(entry) {
   return {
     ...entry,
@@ -1445,28 +1624,34 @@ function commandPostRunAudit() {
   }
 }
 
+function applyModeChange({ enable, reason = "", dryRun = !write } = {}) {
+  const state = readJson(files.state, defaultState());
+  const keepAwake = enable
+    ? startKeepAwake(state, { dryRun })
+    : stopKeepAwake(state, { dryRun, reason });
+  const modeOk = !(!enable && keepAwake.active && keepAwake.lastError);
+  const updatedAt = nowIso();
+  const next = {
+    ...state,
+    mode: enable ? "enabled" : "disabled",
+    loopEnabled: enable,
+    updatedAt,
+    stopRequestedAt: enable ? null : updatedAt,
+    disablePolicy: enable ? "" : "stop-next-chain",
+    reason,
+    keepAwake,
+  };
+  return { state, next, keepAwake, modeOk };
+}
+
 function commandMode() {
   const enable = hasFlag("--enable");
   const disable = hasFlag("--disable");
   if (enable === disable) {
     fail("Pass exactly one of --enable or --disable.");
   }
-  const state = readJson(files.state, defaultState());
   const reason = getValue("--reason", "");
-  const keepAwake = enable
-    ? startKeepAwake(state, { dryRun: !write })
-    : stopKeepAwake(state, { dryRun: !write, reason });
-  const modeOk = !(disable && keepAwake.active && keepAwake.lastError);
-  const next = {
-    ...state,
-    mode: enable ? "enabled" : "disabled",
-    loopEnabled: enable,
-    updatedAt: nowIso(),
-    stopRequestedAt: disable ? nowIso() : null,
-    disablePolicy: enable ? "" : "stop-next-chain",
-    reason,
-    keepAwake,
-  };
+  const { next, keepAwake, modeOk } = applyModeChange({ enable, reason });
   if (write) {
     atomicWriteJson(files.state, next);
   }
@@ -1490,6 +1675,39 @@ function commandMode() {
         : modeOk
           ? "Finish-chain is closed for the next jump; keep-awake has been stopped when it was owned by this runtime."
           : "Finish-chain is closed, but keep-awake did not stop; resolve this before reporting a clean shutdown.",
+    ].join("\n"),
+  );
+  if (!modeOk) {
+    process.exitCode = 1;
+  }
+}
+
+function commandStopPlan() {
+  if (!write) {
+    fail("stop-plan requires --write.");
+  }
+  const reason = getValue("--reason", "stop plan");
+  const { next, keepAwake, modeOk } = applyModeChange({ enable: false, reason });
+  atomicWriteJson(files.state, next);
+  output(
+    {
+      ok: modeOk,
+      wrote: true,
+      operation: "stop-plan",
+      mode: next.mode,
+      loopEnabled: Boolean(next.loopEnabled),
+      keepAwake,
+      nextStep: modeOk
+        ? "Future finish-chain payloads are disabled. Run post-run-audit only when you need to claim the automation surface is fully clean."
+        : "Keep-awake did not stop cleanly. Treat this as an automation shutdown risk and inspect the recorded worker/child process.",
+    },
+    [
+      "Visible dispatch stop-plan applied.",
+      `Mode: ${next.mode}`,
+      `Keep awake: ${keepAwake.active ? `active pid=${keepAwake.pid}` : keepAwake.message || "inactive"}`,
+      modeOk
+        ? "Finish-chain is closed. Post-run audit is optional unless you are reporting a clean final shutdown."
+        : "Finish-chain is closed, but keep-awake did not stop cleanly.",
     ].join("\n"),
   );
   if (!modeOk) {
@@ -1712,12 +1930,11 @@ function commandPreflight() {
   }
 }
 
-function commandEnqueue() {
-  if (!hasFlag("--from-plan")) {
-    fail("enqueue currently supports only --from-plan.");
-  }
-  const explicitPlan = getValue("--plan");
-  const planPath = explicitPlan ? path.resolve(workspaceRoot, explicitPlan) : currentPlanPathFromIndex();
+function defaultGroupIdForPlan(planPath) {
+  return path.basename(planPath, ".md").replace(/[^a-zA-Z0-9._:-]+/g, "-");
+}
+
+function enqueueFromPlan({ planPath, groupId = "", returnPolicy = "", writeChanges = false } = {}) {
   if (!existsSync(planPath)) {
     fail(`Plan not found: ${relativeToWorkspace(planPath)}`);
   }
@@ -1729,8 +1946,8 @@ function commandEnqueue() {
   }
   const queue = readJson(files.queue, defaultQueue());
   const groups = readJson(files.groups, defaultGroups());
-  const groupId = getValue("--group");
-  const returnPolicy = groupId ? validateReturnPolicy(getValue("--return-policy", "controller-last")) : "";
+  const normalizedGroupId = groupId ? sanitizeGroupId(groupId) : "";
+  const normalizedReturnPolicy = normalizedGroupId ? validateReturnPolicy(returnPolicy || "controller-last") : "";
   const created = [];
   const groupTaskIds = [];
   for (const row of rows) {
@@ -1747,8 +1964,8 @@ function commandEnqueue() {
       claim: null,
       leaseUntil: null,
       backfill: null,
-      groupId: groupId ? sanitizeGroupId(groupId) : undefined,
-      returnPolicy: returnPolicy || undefined,
+      groupId: normalizedGroupId || undefined,
+      returnPolicy: normalizedReturnPolicy || undefined,
     };
     groupTaskIds.push(taskId);
     if (!existing) {
@@ -1766,13 +1983,12 @@ function commandEnqueue() {
       });
     }
   }
-  if (groupId) {
-    const normalizedGroupId = sanitizeGroupId(groupId);
+  if (normalizedGroupId) {
     const existingGroup = groups.groups.find((group) => group.groupId === normalizedGroupId);
     const nextGroup = {
       groupId: normalizedGroupId,
       controlDoc: relativeToWorkspace(planPath),
-      returnPolicy,
+      returnPolicy: normalizedReturnPolicy,
       status: "open",
       taskIds: groupTaskIds,
       createdAt: existingGroup?.createdAt ?? nowIso(),
@@ -1786,23 +2002,48 @@ function commandEnqueue() {
     groups.updatedAt = nextGroup.updatedAt;
   }
   queue.updatedAt = nowIso();
-  if (write) {
+  if (writeChanges) {
     atomicWriteJson(files.queue, queue);
-    if (groupId) {
+    if (normalizedGroupId) {
       atomicWriteJson(files.groups, groups);
     }
   }
+  return {
+    ok: true,
+    wrote: writeChanges,
+    plan: relativeToWorkspace(planPath),
+    groupId: normalizedGroupId || null,
+    returnPolicy: normalizedReturnPolicy || null,
+    created,
+    taskCount: queue.tasks.length,
+    queue,
+    groups,
+  };
+}
+
+function commandEnqueue() {
+  if (!hasFlag("--from-plan")) {
+    fail("enqueue currently supports only --from-plan.");
+  }
+  const explicitPlan = getValue("--plan");
+  const planPath = explicitPlan ? path.resolve(workspaceRoot, explicitPlan) : currentPlanPathFromIndex();
+  const result = enqueueFromPlan({
+    planPath,
+    groupId: getValue("--group", ""),
+    returnPolicy: getValue("--return-policy", "controller-last"),
+    writeChanges: write,
+  });
   output(
     {
-      ok: true,
-      wrote: write,
-      plan: relativeToWorkspace(planPath),
-      groupId: groupId ? sanitizeGroupId(groupId) : null,
-      returnPolicy: returnPolicy || null,
-      created,
-      taskCount: queue.tasks.length,
+      ok: result.ok,
+      wrote: result.wrote,
+      plan: result.plan,
+      groupId: result.groupId,
+      returnPolicy: result.returnPolicy,
+      created: result.created,
+      taskCount: result.taskCount,
     },
-    `${write ? "Enqueued" : "Would enqueue"} ${created.length} visible dispatch task(s) from ${relativeToWorkspace(planPath)}.`,
+    `${write ? "Enqueued" : "Would enqueue"} ${result.created.length} visible dispatch task(s) from ${result.plan}.`,
   );
 }
 
@@ -1811,19 +2052,14 @@ function activeRegistryEntry(registry, windowName) {
 }
 
 function buildTaskPrompt(task) {
-  const claimCommand = `node scripts/visible-dispatch.mjs claim --window ${task.targetWindow} --write --json`;
-  const finishCommand = [
-    "node scripts/visible-dispatch.mjs finish",
-    `--window ${task.targetWindow}`,
-    "--backfill <完成范围/验证命令/验证结果/风险>",
-    "--write",
-    "--chain-next",
-    "--json",
-  ].join(" ");
+  const targetSkillPath = promptPathForWindow(
+    task.targetWindow,
+    path.resolve(workspaceRoot, "skills/dev/visible-automation-dispatch-target/SKILL.md"),
+  );
   return [
-    "Visible Automation Dispatch 自动化领取提示词。",
+    `继续当前窗口任务：${task.targetWindow}。`,
     "",
-    `先读取 AGENTS.md、${relativeToWorkspace(ledgerPaths.workspaceIndexPath)}、${relativeToWorkspace(path.resolve(workspaceRoot, task.controlDoc))}，以及你所在窗口/目标仓库的 AGENTS.md。`,
+    `先读取 AGENTS.md、${promptPathForWindow(task.targetWindow, ledgerPaths.workspaceIndexPath)}、${promptPathForWindow(task.targetWindow, path.resolve(workspaceRoot, task.controlDoc))}，以及你所在窗口/目标仓库的 AGENTS.md。`,
     "",
     "先明确声明当前窗口定位和本轮仓库职责。",
     "",
@@ -1834,12 +2070,11 @@ function buildTaskPrompt(task) {
     "完成后回填：完成范围、提交 hash、验证命令、验证结果、遗留风险和下一步建议。",
     "",
     "自动化补充：",
-    `- 当前窗口：${task.targetWindow}`,
-    `- 任务 id：${task.taskId}`,
-    '- 用完即弃：若消息包含 automation_id，先删除本条 automation，并运行 record-stop --reason "target received"；不要等 finish 再删，删除后继续 claim / 执行 / finish。',
-    `- claim：${claimCommand}`,
-    `- finish：${finishCommand}`,
-    `- 下一跳、record 命令、${testWindowName} 边界和 mode disabled 规则见 skills/dev/visible-automation-dispatch-target/SKILL.md。`,
+    `- currentWindow：${task.targetWindow}`,
+    `- taskId：${task.taskId}`,
+    `- controlDoc：${task.controlDoc}`,
+    `- rules：用完即弃；按 target skill 领取/完成；只处理本窗口任务；下一跳仅按 finish JSON 权限。`,
+    `- skill：${targetSkillPath}`,
   ].join("\n");
 }
 
@@ -1863,7 +2098,7 @@ function buildArmPayload(task, registry) {
     kind: "heartbeat",
     destination: "thread",
     targetThreadId: windowEntry.threadId,
-    name: `Visible dispatch ${task.targetWindow}`,
+    name: `继续 ${task.targetWindow} 任务`,
     rrule: heartbeatRrule,
     prompt,
     taskId: task.taskId,
@@ -1871,28 +2106,31 @@ function buildArmPayload(task, registry) {
     controlDoc: task.controlDoc,
     cadence: heartbeatRrule,
     chainMode: "finish-chain",
-    stopSwitchCommand: "node scripts/visible-dispatch.mjs mode --disable --write",
+    stopSwitchCommand: scriptCommandForWindow(task.targetWindow, "stop-plan --write"),
   };
   return { payload, reason: "" };
 }
 
 function buildControllerReturnPrompt(group, completedTask) {
+  const controllerSkillPath = workspaceRootPath(
+    path.resolve(workspaceRoot, "skills/dev/visible-automation-dispatch-controller/SKILL.md"),
+  );
   return [
-    "Visible Automation Dispatch 总控回跳提示词。",
+    `继续总控验收：${completedTask.targetWindow} 回填。`,
     "",
-    `先读取 AGENTS.md、${relativeToWorkspace(ledgerPaths.workspaceIndexPath)}、${relativeToWorkspace(ledgerPaths.workspaceCurrentStatusPath)}、${relativeToWorkspace(path.resolve(workspaceRoot, group.controlDoc))}，以及 skills/dev/visible-automation-dispatch-controller/SKILL.md。`,
+    `先读取 AGENTS.md、${promptPathForWindow(controlWindowName, ledgerPaths.workspaceIndexPath)}、${promptPathForWindow(controlWindowName, ledgerPaths.workspaceCurrentStatusPath)}、${promptPathForWindow(controlWindowName, path.resolve(workspaceRoot, group.controlDoc))}，以及 ${controllerSkillPath}。`,
     "",
     `先明确声明当前窗口定位：${controlWindowName} 总控；本轮职责：验收回跳 group，区分窗口自述、原始证据和总控裁决。`,
     "",
     "再按照当前总控文档和 controller skill 判断：接受、打回、补证、自测、创建下一阶段任务包、继续派发或停止等待用户确认。",
     "",
     "自动化补充：",
-    `- Dispatch group：${group.groupId}`,
-    `- Last completed target：${completedTask.targetWindow}`,
-    `- Last task id：${completedTask.taskId}`,
-    "- 用完即弃：若消息包含 automation_id，先运行 audit-automation；合规后删除本条 controller-return automation，并运行 record-stop --reason \"controller return received\"；删除后继续真实验收与下一步决策。",
-    `- group-status：node scripts/visible-dispatch.mjs group-status --group ${group.groupId} --json`,
-    "- controller-tick：node scripts/visible-dispatch.mjs controller-tick --json",
+    `- dispatchGroup：${group.groupId}`,
+    `- lastCompletedTarget：${completedTask.targetWindow}`,
+    `- lastTaskId：${completedTask.taskId}`,
+    `- controlPlan：${group.controlDoc}`,
+    "- rules：用完即弃；group-status；controller-tick；证据通过且目标未完成时 resume-plan；仅异常诊断 audit-automation。",
+    `- skill：${controllerSkillPath}`,
   ].join("\n");
 }
 
@@ -1915,7 +2153,7 @@ function buildControllerReturnPayload(group, completedTask, registry) {
     kind: "heartbeat",
     destination: "thread",
     targetThreadId: controllerEntry.threadId,
-    name: `Visible dispatch controller ${group.groupId}`,
+    name: "继续总控验收",
     rrule: heartbeatRrule,
     prompt: buildControllerReturnPrompt(group, completedTask),
     groupId: group.groupId,
@@ -1951,15 +2189,7 @@ function commandArm() {
   output({ ok: true, payload }, `Prepared arm payload for ${task.targetWindow} / ${taskId}.`);
 }
 
-function commandArmBatch() {
-  const groupId = sanitizeGroupId(getValue("--group"));
-  const staggerSeconds = hasFlag("--no-stagger")
-    ? 0
-    : parseNonNegativeInteger(
-        getValue("--stagger-seconds", String(defaultArmBatchStaggerSeconds)),
-        "--stagger-seconds",
-      );
-  const { state, registry, queue, groups } = readAll();
+function prepareArmBatch({ groupId, state, registry, queue, groups, staggerSeconds }) {
   if (state.mode !== "enabled") {
     fail("Visible dispatch mode is disabled; enable it before arming automation.");
   }
@@ -1991,24 +2221,169 @@ function commandArmBatch() {
       skipped.push({ taskId: task.taskId, targetWindow: task.targetWindow, status: task.status, reason });
     }
   }
+  return {
+    ok: skipped.length === 0,
+    group,
+    staggerSeconds,
+    staggerInstructions:
+      staggerSeconds > 0
+        ? "Create payloads in createOrder order; wait waitBeforeCreateSeconds before each create after the first."
+        : "No create-time stagger requested; payloads may be created back-to-back.",
+    payloads,
+    skipped,
+  };
+}
+
+function commandArmBatch() {
+  const groupId = sanitizeGroupId(getValue("--group"));
+  const staggerSeconds = hasFlag("--no-stagger")
+    ? 0
+    : parseNonNegativeInteger(
+        getValue("--stagger-seconds", String(defaultArmBatchStaggerSeconds)),
+        "--stagger-seconds",
+      );
+  const { state, registry, queue, groups } = readAll();
+  const result = prepareArmBatch({ groupId, state, registry, queue, groups, staggerSeconds });
   output(
     {
       ok: true,
-      group,
-      staggerSeconds,
-      staggerInstructions:
-        staggerSeconds > 0
-          ? "Create payloads in createOrder order; wait waitBeforeCreateSeconds before each create after the first."
-          : "No create-time stagger requested; payloads may be created back-to-back.",
-      payloads,
-      skipped,
+      group: result.group,
+      staggerSeconds: result.staggerSeconds,
+      staggerInstructions: result.staggerInstructions,
+      payloads: result.payloads,
+      skipped: result.skipped,
     },
     [
-      `Prepared ${payloads.length} arm payload(s) for dispatch group ${groupId}.`,
+      `Prepared ${result.payloads.length} arm payload(s) for dispatch group ${groupId}.`,
       `Create stagger: ${staggerSeconds}s between payloads.`,
-      `Skipped: ${skipped.map((item) => `${item.taskId}:${item.reason ?? item.status}`).join(", ") || "none"}`,
+      `Skipped: ${result.skipped.map((item) => `${item.taskId}:${item.reason ?? item.status}`).join(", ") || "none"}`,
     ].join("\n"),
   );
+}
+
+function commandStart({ restart = false, operation = restart ? "resume-plan" : "start-plan" } = {}) {
+  if (!write) {
+    fail(`${operation} requires --write.`);
+  }
+  const explicitPlan = getValue("--plan");
+  const planPath = explicitPlan ? path.resolve(workspaceRoot, explicitPlan) : currentPlanPathFromIndex();
+  if (!existsSync(planPath)) {
+    fail(`Plan not found: ${relativeToWorkspace(planPath)}`);
+  }
+  const staggerSeconds = hasFlag("--no-stagger")
+    ? 0
+    : parseNonNegativeInteger(
+        getValue("--stagger-seconds", String(defaultArmBatchStaggerSeconds)),
+        "--stagger-seconds",
+      );
+
+  const state = readJson(files.state, defaultState());
+  const keepAwake = startKeepAwake(state, { dryRun: false });
+  const enabledAt = nowIso();
+  const nextState = {
+    ...state,
+    mode: "enabled",
+    loopEnabled: true,
+    updatedAt: enabledAt,
+    stopRequestedAt: null,
+    disablePolicy: "",
+    reason: restart ? "resume plan fast path" : "start plan fast path",
+    keepAwake,
+  };
+  atomicWriteJson(files.state, nextState);
+
+  let tick = buildControllerTickResult();
+  const readyArmTask = tick.queueDecision?.tasks?.find((task) => task.nextAction === "arm" && task.groupId);
+  const groupId = sanitizeGroupId(getValue("--group", readyArmTask?.groupId || defaultGroupIdForPlan(planPath)));
+  const returnPolicy = validateReturnPolicy(getValue("--return-policy", "controller-last"));
+  let enqueueResult = null;
+  let armResult = null;
+  let action = tick.topAction || "idle";
+
+  if (tick.topAction === "wait" || tick.topAction === "review" || tick.topAction === "attention") {
+    action = tick.topAction;
+  } else {
+    const missingCount = tick.missingSendEligibleWindowCount ?? tick.missingSendEligibleWindows?.length ?? 0;
+    if (missingCount > 0) {
+      enqueueResult = enqueueFromPlan({ planPath, groupId, returnPolicy, writeChanges: true });
+      tick = buildControllerTickResult();
+    }
+    const all = readAll();
+    const group = all.groups.groups.find((item) => item.groupId === groupId);
+    if (group) {
+      armResult = prepareArmBatch({
+        groupId,
+        state: all.state,
+        registry: all.registry,
+        queue: all.queue,
+        groups: all.groups,
+        staggerSeconds,
+      });
+      action = armResult.payloads.length > 0 ? "createHeartbeats" : tick.topAction || "idle";
+    }
+  }
+
+  const skipped = armResult?.skipped ?? [];
+  const ok = skipped.length === 0 && !(keepAwake.enabled && !keepAwake.active && keepAwake.lastError);
+  const result = {
+    ok,
+    wrote: true,
+    mode: "enabled",
+    operation,
+    restart,
+    action,
+    plan: relativeToWorkspace(planPath),
+    groupId,
+    returnPolicy,
+    keepAwake,
+    tick: {
+      topAction: tick.topAction,
+      nextAction: tick.nextAction,
+      message: tick.message,
+      sendEligibleWindowCount: tick.sendEligibleWindowCount,
+      missingSendEligibleWindowCount: tick.missingSendEligibleWindowCount,
+    },
+    enqueue: enqueueResult
+      ? {
+          createdCount: enqueueResult.created.length,
+          taskCount: enqueueResult.taskCount,
+        }
+      : null,
+    arm: armResult
+      ? {
+          payloadCount: armResult.payloads.length,
+          staggerSeconds: armResult.staggerSeconds,
+          staggerInstructions: armResult.staggerInstructions,
+          payloads: armResult.payloads,
+          skipped,
+        }
+      : null,
+    nextStep:
+      armResult?.payloads.length > 0
+        ? "Create each payload with codex_app.automation_update in createOrder order, then run the matching record-arm command."
+        : action === "wait"
+          ? "Do not create new automation; wait for the active target to claim or backfill."
+          : action === "review"
+            ? "Review completed backfill evidence before dispatching more work."
+            : action === "attention"
+              ? "Run diagnostic commands for the attention-needed task before continuing."
+              : "No automation payload is needed right now.",
+  };
+  output(
+    result,
+    [
+      `Visible dispatch ${operation} fast path: ${action}.`,
+      `Mode: enabled; keep-awake=${keepAwake.active ? `active pid=${keepAwake.pid}` : keepAwake.message || "inactive"}`,
+      `Plan: ${result.plan}`,
+      `Group: ${groupId}`,
+      `Payloads: ${armResult?.payloads.length ?? 0}`,
+      `Skipped: ${skipped.map((item) => `${item.taskId}:${item.reason ?? item.status}`).join(", ") || "none"}`,
+      result.nextStep,
+    ].join("\n"),
+  );
+  if (!ok || action === "attention") {
+    process.exitCode = 1;
+  }
 }
 
 function commandRecordArm() {
@@ -2660,7 +3035,10 @@ function buildFinishChain({ state, registry, queue, groups, completedTask, chain
         message: `Dispatch group ${group.groupId} is terminal; create exactly one controller-return heartbeat.`,
         group: summary,
         payload,
-        recordReturnCommand: `node scripts/visible-dispatch.mjs record-return --group ${group.groupId} --automation-id <automation-id> --write`,
+        recordReturnCommand: scriptCommandForWindow(
+          completedTask.targetWindow,
+          `record-return --group ${group.groupId} --automation-id <automation-id> --write`,
+        ),
       };
     }
   }
@@ -2706,8 +3084,11 @@ function buildFinishChain({ state, registry, queue, groups, completedTask, chain
       message: `Next queued task targets ${nextQueued.targetWindow}; previous target window must not create this heartbeat. Total control should arm the next task.`,
       taskId: nextQueued.taskId,
       targetWindow: nextQueued.targetWindow,
-      armCommand: `node scripts/visible-dispatch.mjs arm --task ${nextQueued.taskId} --json`,
-      recordArmCommand: `node scripts/visible-dispatch.mjs record-arm --task ${nextQueued.taskId} --automation-id <automation-id> --write`,
+      armCommand: scriptCommandForWindow(controlWindowName, `arm --task ${nextQueued.taskId} --json`),
+      recordArmCommand: scriptCommandForWindow(
+        controlWindowName,
+        `record-arm --task ${nextQueued.taskId} --automation-id <automation-id> --write`,
+      ),
     };
   }
   const { payload, reason } = buildArmPayload(nextQueued, registry);
@@ -2728,7 +3109,10 @@ function buildFinishChain({ state, registry, queue, groups, completedTask, chain
     taskId: nextQueued.taskId,
     targetWindow: nextQueued.targetWindow,
     payload: { ...payload, courierAllowed: true },
-    recordArmCommand: `node scripts/visible-dispatch.mjs record-arm --task ${nextQueued.taskId} --automation-id <automation-id> --write`,
+    recordArmCommand: scriptCommandForWindow(
+      completedTask.targetWindow,
+      `record-arm --task ${nextQueued.taskId} --automation-id <automation-id> --write`,
+    ),
   };
 }
 
@@ -3307,8 +3691,20 @@ switch (command) {
   case "status":
     commandStatus();
     break;
+  case "init":
+    commandInit();
+    break;
   case "mode":
     commandMode();
+    break;
+  case "start-plan":
+    commandStart({ restart: false, operation: "start-plan" });
+    break;
+  case "resume-plan":
+    commandStart({ restart: true, operation: "resume-plan" });
+    break;
+  case "stop-plan":
+    commandStopPlan();
     break;
   case "keep-awake-worker":
     commandKeepAwakeWorker();

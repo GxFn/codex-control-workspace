@@ -17,6 +17,48 @@ owns the workspace script operating map.
 - **Manual discussion**: normal user interaction. Never claim or chain VAD
   tasks from an ordinary discussion turn.
 
+## Scenario Map
+
+Use semantic commands instead of old generic verbs:
+
+| Scenario | Command | Validation level | Notes |
+| --- | --- | --- | --- |
+| Initialize local runtime | `init --write --json` | Light | Creates missing local state files only. No mode change, no queue claim, no heartbeat payload, no Codex automation API. |
+| First unattended launch for a current plan | `start-plan --write --json` | Fast-path required checks | Enables mode / keep-awake, enqueues current-plan send-eligible rows when needed, verifies target thread readiness while preparing payloads. |
+| Normal continuation after controller return or manual interruption | `resume-plan --write --json` | Fast-path required checks | Reuses existing queue/group state, avoids duplicate tasks, returns `wait` / `review` / `attention` / payloads. |
+| Target heartbeat execution | target skill `claim` / `finish` | Role-local checks | Delete the received disposable heartbeat first, then claim only this window's task and finish with evidence. |
+| Controller-return execution | controller skill review flow | Evidence checks | Delete the received disposable return heartbeat first, then review raw evidence and decide next wave / stop / supplement. |
+| Pause or close unattended mode | `stop-plan --write --reason "<reason>"` | Shutdown check only | Stops future finish-chain jumps and keep-awake. Run `post-run-audit` only when claiming the whole automation surface is clean. |
+| Abnormal diagnosis | `controller-tick`, `preflight`, `audit-automation`, `post-run-audit` | Full or focused diagnostics | Use only after fast path reports `attention`, heartbeat creation fails, a target does not claim, or evidence/local state conflicts. |
+
+`mode --enable|--disable` remains a low-level switch for scripts and repair
+work. Normal operation should use `start-plan`, `resume-plan`, and `stop-plan`
+so the command name describes intent.
+
+## Fast Path First
+
+Use fast path commands for first launch and normal resume. They do the
+minimal useful work: enable mode, keep the Mac awake, classify current queue
+state, enqueue the current plan only when needed, and return either heartbeat
+payloads or a clear `wait` / `review` / `attention` decision.
+
+```text
+node scripts/visible-dispatch.mjs start-plan --write --json
+node scripts/visible-dispatch.mjs resume-plan --write --json
+node scripts/workspace-control.mjs vad start-plan --write --json
+node scripts/workspace-control.mjs vad resume-plan --write --json
+```
+
+- `createHeartbeats`: create returned payloads with `codex_app.automation_update`
+  in `createOrder` order, then run each `record-arm` command.
+- `wait`: do not create new automations; existing work is in flight.
+- `review`: review target backfill and make the total-control verdict.
+- `attention`: stop the fast path and run diagnostic commands below.
+
+Do not run full `preflight`, workspace verify, or automation audit before every
+normal hop. Use them after the fast path reports a problem, a target fails to
+claim, a heartbeat create fails, or evidence conflicts.
+
 ## Read-Only Orientation
 
 ```text
@@ -65,12 +107,14 @@ confirmation gate.
 ## Mode And Runtime
 
 ```text
-node scripts/visible-dispatch.mjs mode --enable --write
-node scripts/visible-dispatch.mjs mode --disable --write
+node scripts/visible-dispatch.mjs start-plan --write --json
+node scripts/visible-dispatch.mjs resume-plan --write --json
+node scripts/visible-dispatch.mjs stop-plan --write --reason "<reason>"
 ```
 
 - Enable mode only when the current plan explicitly allows unattended VAD
-  target fan-out or finish-chain continuation.
+  target fan-out or finish-chain continuation. Prefer `start-plan` / `resume-plan` over
+  raw `mode --enable` because they also classify queue state and prepare payloads.
 - Disable mode when the user stops automation, a hard gate triggers, or the
   current plan is no longer automation-owned.
 - On macOS, enabled mode starts a local watcher that owns `caffeinate -dims`.
@@ -82,18 +126,34 @@ node scripts/visible-dispatch.mjs mode --disable --write
 ## Target Fan-Out
 
 ```text
+node scripts/visible-dispatch.mjs start-plan --write --json
+node scripts/visible-dispatch.mjs resume-plan --write --json
+```
+
+Fast path is the normal fan-out route. It replaces the manual command chain
+below unless a problem needs diagnosis:
+
+```text
 node scripts/visible-dispatch.mjs preflight --from-plan --json
 node scripts/visible-dispatch.mjs enqueue --from-plan --group <dispatchGroupId> --return-policy controller-last --write
 node scripts/visible-dispatch.mjs arm-batch --group <dispatchGroupId> [--stagger-seconds <n>|--no-stagger] --json
 node scripts/visible-dispatch.mjs record-arm --task <taskId> --automation-id <automationId> --write
 ```
 
-Preflight must pass before payloads are used. Thread ids are local runtime data
-under `.workspace-local/visible-dispatch/`; never copy them into tracked docs.
-The script prints heartbeat payloads but does not call Codex automation APIs.
+`start-plan` / `resume-plan` and `arm-batch` verify target thread readiness while
+building payloads. Use explicit `preflight` when readiness fails or when you
+are diagnosing registry/session drift. Thread ids are local runtime data under
+`.workspace-local/visible-dispatch/`; never copy them into tracked docs. The
+script prints heartbeat payloads but does not call Codex automation APIs.
 Target payload text intentionally mirrors the manual copyable prompt first;
-automation-specific commands are a short supplement so the target window still
-works from the current control plan rather than from a separate hidden workflow.
+automation-specific content is only a lightweight variable supplement
+(`currentWindow`, `taskId`, `controlDoc`, rule names, and target skill path).
+The target window derives claim / finish / cleanup commands from those values
+and `skills/dev/visible-automation-dispatch-target/SKILL.md`, so heartbeat text
+does not drift into a second command manual.
+Automation-facing script JSON should expose `scriptComplete: true` and
+`agentNext`; text output should end with `Agent next:`. This is a continuation
+cue for Codex after long command chains, not total-control acceptance evidence.
 Batch payloads include `createOrder`, `createDelaySeconds`, and
 `waitBeforeCreateSeconds`; create them in order and wait the per-item interval
 before each create after the first. The default interval is intentionally small
@@ -140,9 +200,15 @@ permission flag:
 
 Controller-return payloads are generated by the script and should be used
 verbatim. The prompt must mirror the manual total-control workflow first, then
-include only a short automation supplement with group id, last completed task,
-`group-status`, `controller-tick`, and disposable cleanup. Do not handwrite the
-old `VAD controller-return heartbeat` prompt in target-window logic.
+include only a short automation supplement with `dispatchGroup`,
+`lastCompletedTarget`, `lastTaskId`, `controlPlan`, rule names, and controller
+skill path. `用完即弃`, `group-status`, `controller-tick`, normal
+`resume-plan`, and abnormal `audit-automation` commands are derived from those
+variables by `skills/dev/visible-automation-dispatch-controller/SKILL.md`.
+The first line should be human/task oriented, such as `继续总控验收：<window>
+回填。`, and must not start with the automation mechanism name.
+Do not handwrite full command lines or the old `VAD controller-return
+heartbeat` prompt in target-window logic.
 
 ## Acceptance And Cleanup
 
@@ -170,11 +236,11 @@ history may be cleaned; it does not replace archive or evidence review.
 For common checks, use:
 
 ```text
+node scripts/workspace-control.mjs vad start-plan --write
+node scripts/workspace-control.mjs vad resume-plan --write
 node scripts/workspace-control.mjs vad status
 node scripts/workspace-control.mjs vad controller --compact
-node scripts/workspace-control.mjs vad preflight
-node scripts/workspace-control.mjs vad enable --write
-node scripts/workspace-control.mjs vad disable --write
+node scripts/workspace-control.mjs vad stop-plan --write
 node scripts/workspace-control.mjs vad post-run-audit
 node scripts/workspace-control.mjs vad prune --include-current-accepted --write
 ```

@@ -86,6 +86,24 @@ test("--print vad controller supports compact output", () => {
   assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs controller-tick --compact --json/);
 });
 
+test("--print vad start-plan maps to first-launch fast path", () => {
+  const result = run(["--print", "vad", "start-plan", "--write", "--group", "g1", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs start-plan --write --group g1 --json/);
+});
+
+test("--print vad resume-plan maps to continuation fast path", () => {
+  const result = run(["--print", "vad", "resume-plan", "--write", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs resume-plan --write --json/);
+});
+
+test("vad start old generic command is not accepted", () => {
+  const result = run(["--print", "vad", "start", "--write", "--json"]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Unknown vad subcommand: start/);
+});
+
 test("--print vad audit maps to automation compliance audit", () => {
   const result = run(["--print", "vad", "audit", "--automation-id", "auto-1", "--window", "Alembic", "--role", "target", "--json"]);
   assert.equal(result.status, 0, result.stderr);
@@ -101,16 +119,16 @@ test("--print vad post-run-audit maps to visible-dispatch post-run audit", () =>
   assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs post-run-audit --json/);
 });
 
-test("vad enable requires explicit write gate", () => {
-  const result = run(["--print", "vad", "enable"]);
+test("vad stop-plan requires explicit write gate", () => {
+  const result = run(["--print", "vad", "stop-plan"]);
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /vad enable requires --write/);
+  assert.match(result.stderr, /vad stop-plan requires --write/);
 });
 
-test("--print vad disable preserves write gate and reason", () => {
-  const result = run(["--print", "vad", "disable", "--write", "--reason", "manual stop", "--json"]);
+test("--print vad stop-plan preserves write gate and reason", () => {
+  const result = run(["--print", "vad", "stop-plan", "--write", "--reason", "manual stop", "--json"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs mode --disable --write --reason manual stop --json/);
+  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs stop-plan --write --reason manual stop --json/);
 });
 
 test("--print vad prune forwards current accepted cleanup option", () => {

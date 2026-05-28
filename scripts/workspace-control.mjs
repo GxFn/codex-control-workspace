@@ -54,6 +54,10 @@ Common examples:
   node scripts/workspace-control.mjs design --id PCVM-2026-05-25 --json
   node scripts/workspace-control.mjs install status --json
   node scripts/workspace-control.mjs install prompts --window BaseWindow
+  node scripts/workspace-control.mjs vad init --write --json
+  node scripts/workspace-control.mjs vad start-plan --write --json
+  node scripts/workspace-control.mjs vad resume-plan --write --json
+  node scripts/workspace-control.mjs vad stop-plan --write --json
   node scripts/workspace-control.mjs vad status --json
   node scripts/workspace-control.mjs vad controller --compact --json
   node scripts/workspace-control.mjs vad audit --automation-id <id> --json
@@ -279,6 +283,56 @@ function buildVad(options) {
       assertKnownOptions(rest, ["--json"]);
       return [{ label: "visible dispatch status", ...nodeScript("visible-dispatch.mjs", ["status", ...(hasFlag(rest, "--json") ? ["--json"] : [])]) }];
     }
+    case "init": {
+      assertKnownOptions(rest, ["--write", "--json"]);
+      return [{
+        label: "visible dispatch init",
+        ...nodeScript("visible-dispatch.mjs", [
+          "init",
+          ...(hasFlag(rest, "--write") ? ["--write"] : []),
+          ...(hasFlag(rest, "--json") ? ["--json"] : []),
+        ]),
+      }];
+    }
+    case "start-plan":
+    case "resume-plan": {
+      assertKnownOptions(
+        rest,
+        ["--write", "--json", "--no-stagger", "--no-keep-awake"],
+        ["--plan", "--group", "--return-policy", "--stagger-seconds"],
+      );
+      if (!hasFlag(rest, "--write")) {
+        fail(`vad ${subcommand} requires --write.`);
+      }
+      const out = [subcommand, "--write"];
+      for (const valueFlag of ["--plan", "--group", "--return-policy", "--stagger-seconds"]) {
+        const value = getValue(rest, valueFlag);
+        if (value) {
+          out.push(valueFlag, value);
+        }
+      }
+      for (const flag of ["--no-stagger", "--no-keep-awake", "--json"]) {
+        if (hasFlag(rest, flag)) {
+          out.push(flag);
+        }
+      }
+      return [{ label: `visible dispatch ${subcommand} fast path`, ...nodeScript("visible-dispatch.mjs", out) }];
+    }
+    case "stop-plan": {
+      assertKnownOptions(rest, ["--write", "--json"], ["--reason"]);
+      if (!hasFlag(rest, "--write")) {
+        fail(`vad ${subcommand} requires --write.`);
+      }
+      const out = ["stop-plan", "--write"];
+      const reason = getValue(rest, "--reason");
+      if (reason) {
+        out.push("--reason", reason);
+      }
+      if (hasFlag(rest, "--json")) {
+        out.push("--json");
+      }
+      return [{ label: "visible dispatch stop plan", ...nodeScript("visible-dispatch.mjs", out) }];
+    }
     case "controller":
     case "controller-tick": {
       assertKnownOptions(rest, ["--json", "--compact"]);
@@ -348,39 +402,6 @@ function buildVad(options) {
       }
       return [{ label: "visible dispatch group status", ...nodeScript("visible-dispatch.mjs", ["group-status", "--group", group, ...(hasFlag(rest, "--json") ? ["--json"] : [])]) }];
     }
-    case "enable": {
-      assertKnownOptions(rest, ["--write", "--json", "--no-keep-awake"], ["--reason"]);
-      if (!hasFlag(rest, "--write")) {
-        fail("vad enable requires --write.");
-      }
-      const out = ["mode", "--enable", "--write"];
-      const reason = getValue(rest, "--reason");
-      if (reason) {
-        out.push("--reason", reason);
-      }
-      if (hasFlag(rest, "--no-keep-awake")) {
-        out.push("--no-keep-awake");
-      }
-      if (hasFlag(rest, "--json")) {
-        out.push("--json");
-      }
-      return [{ label: "visible dispatch enable mode", ...nodeScript("visible-dispatch.mjs", out) }];
-    }
-    case "disable": {
-      assertKnownOptions(rest, ["--write", "--json"], ["--reason"]);
-      if (!hasFlag(rest, "--write")) {
-        fail("vad disable requires --write.");
-      }
-      const out = ["mode", "--disable", "--write"];
-      const reason = getValue(rest, "--reason");
-      if (reason) {
-        out.push("--reason", reason);
-      }
-      if (hasFlag(rest, "--json")) {
-        out.push("--json");
-      }
-      return [{ label: "visible dispatch disable mode", ...nodeScript("visible-dispatch.mjs", out) }];
-    }
     case "prune": {
       assertKnownOptions(rest, ["--write", "--json", "--include-current-accepted"]);
       if (!hasFlag(rest, "--write")) {
@@ -397,7 +418,7 @@ function buildVad(options) {
       }];
     }
     default:
-      fail(`Unknown vad subcommand: ${subcommand}. Expected status, controller, preflight, audit, group, enable, disable, post-run-audit, or prune.`);
+      fail(`Unknown vad subcommand: ${subcommand}. Expected status, init, start-plan, resume-plan, stop-plan, controller, preflight, audit, group, post-run-audit, or prune.`);
   }
 }
 

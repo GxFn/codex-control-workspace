@@ -10,7 +10,22 @@ Scripts in this directory should:
 - avoid writing into child source repositories unless the user has confirmed
   an install-scope `AGENTS.md` write, or a current control plan explicitly
   assigns that work;
-- report clear pass/fail evidence that can be pasted into workspace docs.
+- report clear pass/fail evidence that can be pasted into workspace docs;
+- when used by automation, finish with an explicit agent-facing completion
+  cue. JSON output should expose `scriptComplete: true` and `agentNext`; text
+  output should end with a concise `Agent next:` line. The cue is not a
+  verdict, only the next control action for Codex to consider.
+
+Node CLI exit policy:
+
+- Prefer setting `process.exitCode` and letting the event loop drain instead
+  of calling `process.exit()` after printing important stdout / stderr.
+- Reserve direct `process.exit()` for explicit worker processes after cleanup,
+  or legacy scripts that do not emit automation-critical output.
+- Long-running background helpers must avoid holding the short-lived CLI open:
+  spawn them with ignored stdio, detach only when they intentionally outlive
+  the command, call `unref()`, and provide a local stop marker or equivalent
+  shutdown path.
 
 Human-facing document policy:
 
@@ -101,21 +116,31 @@ Current scripts:
   It stores mode, window registry, queue, groups, and automation-run metadata
   under ignored `.workspace-local/visible-dispatch/`; prints heartbeat payloads
   for Codex automation tools using a manual-prompt-like target message plus a
-  short automation supplement; adds a small default `arm-batch` create-time
+  short automation supplement; exposes `init`, `start-plan --write --json`,
+  `resume-plan --write --json`, and `stop-plan --write --json` as the named
+  automation lifecycle commands. `init` prepares local runtime files without
+  dispatching, `start-plan` is the first launch for a current plan,
+  `resume-plan` is the normal continuation after a controller return or manual
+  interruption, and `stop-plan` closes future finish-chain jumps and
+  keep-awake. The launch / resume fast paths enable mode, enqueue the current
+  plan only when needed, and return either heartbeat payloads or a clear wait /
+  review / attention decision; adds a small default `arm-batch` create-time
   stagger so multiple heartbeat automations are not all created in the same
   moment, with `--stagger-seconds` / `--no-stagger` reserved for explicit
   scheduling tests; and exposes mode, preflight, enqueue, arm, arm-batch,
   claim, finish, accept, block, record-stop, record-return, cleanup, prune, and
   controller classification commands, plus `audit-automation` for local
-  compliance checks before total control deletes stale or off-plan Codex
-  automations. Target and controller heartbeat automations are disposable
+  compliance checks when a normal chain reports attention, stale state, or
+  off-plan Codex automations. Target and controller heartbeat automations are disposable
   wakeups: after receipt, the Codex window deletes the app automation and uses
   `record-stop` locally so the same heartbeat cannot interrupt later. Target
   wakeups are consumed before claim / finish, not cleaned up at the end. The
   controller-return prompt is generated as the same manual-prompt-like
-  total-control workflow plus a short automation supplement; target windows
-  should use the printed payload verbatim instead of hand-writing old return
-  prompts. `controller-tick --compact` gives a short machine-readable status
+  total-control workflow plus a short automation supplement; prompt first lines
+  are task-oriented (`继续当前窗口任务` / `继续总控验收`) so the Codex UI shows the
+  real work before the automation mechanism. Target windows should use the
+  printed payload verbatim instead of hand-writing old return prompts.
+  `controller-tick --compact` gives a short machine-readable status
   for total-control returns; `post-run-audit` verifies that an ended run is
   really disabled, has no live local automation runs, no send-eligible windows,
   no non-terminal dispatch tasks, and no stale current-status automation text.
@@ -304,12 +329,14 @@ node scripts/verify-control-center.mjs --with-runtime
 Visible Automation Dispatch local state:
 
 ```bash
+node scripts/workspace-control.mjs vad init --write --json
+node scripts/workspace-control.mjs vad start-plan --write --json
+node scripts/workspace-control.mjs vad resume-plan --write --json
 node scripts/workspace-control.mjs vad status --json
 node scripts/workspace-control.mjs vad controller --compact --json
-node scripts/workspace-control.mjs vad preflight --json
 node scripts/workspace-control.mjs vad audit --automation-id <automationId> --json
 node scripts/workspace-control.mjs vad post-run-audit --json
-node scripts/workspace-control.mjs vad disable --write --reason "manual stop"
+node scripts/workspace-control.mjs vad stop-plan --write --reason "manual stop"
 ```
 
 Design handoff inbox refresh:

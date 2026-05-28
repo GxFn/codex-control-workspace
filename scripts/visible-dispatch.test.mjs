@@ -221,6 +221,24 @@ function run(root, args, { autoSession = true } = {}) {
   });
 }
 
+function runGeneric(controlRoot, args, { autoSession = true } = {}) {
+  if (autoSession) {
+    for (const threadId of argValues(args, "--thread")) {
+      writeCodexSession(controlRoot, threadId);
+    }
+  }
+  return spawnSync("node", [script, ...args, "--root", controlRoot], {
+    cwd: controlRoot,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      CODEX_CONTROL_WORKSPACE_CONFIG: "",
+      CODEX_HOME: path.join(controlRoot, ".codex"),
+      CODEX_VAD_KEEP_AWAKE: "0",
+    },
+  });
+}
+
 function runWithKeepAwake(root, args) {
   return spawnSync("node", [script, ...args, "--root", root], {
     cwd: root,
@@ -270,6 +288,19 @@ test("status is read-only and defaults to disabled mode", () => {
   const parsed = JSON.parse(result.stdout);
   assert.equal(parsed.mode, "disabled");
   assert.equal(parsed.registeredWindows, 0);
+  assert.equal(parsed.scriptComplete, true);
+  assert.match(parsed.agentNext, /Automation is disabled|Script completed/);
+});
+
+test("init prepares local runtime files without enabling dispatch", () => {
+  const root = makeFixture();
+  const result = run(root, ["init", "--write", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.wrote, true);
+  assert.deepEqual(parsed.created.sort(), ["groups", "queue", "registry", "runs", "state"]);
+  assert.equal(readJson(root, ".workspace-local/visible-dispatch/state.json").mode, "disabled");
+  assert.equal(readJson(root, ".workspace-local/visible-dispatch/dispatch-queue.json").tasks.length, 0);
 });
 
 test("mode changes require explicit write", () => {
@@ -283,6 +314,20 @@ test("mode changes require explicit write", () => {
   assert.equal(JSON.parse(written.stdout).state.mode, "enabled");
   assert.equal(JSON.parse(written.stdout).state.keepAwake.enabled, false);
   assert.equal(readJson(root, ".workspace-local/visible-dispatch/state.json").mode, "enabled");
+});
+
+test("stop-plan disables future dispatch jumps without running post-run audit", () => {
+  const root = makeFixture();
+  run(root, ["mode", "--enable", "--write"]);
+  const result = run(root, ["stop-plan", "--write", "--reason", "manual stop", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.operation, "stop-plan");
+  assert.equal(parsed.mode, "disabled");
+  assert.equal(parsed.loopEnabled, false);
+  const state = readJson(root, ".workspace-local/visible-dispatch/state.json");
+  assert.equal(state.mode, "disabled");
+  assert.equal(state.reason, "manual stop");
 });
 
 test("mode enable and disable manage the local keep-awake process on macOS", { skip: process.platform !== "darwin" }, () => {
@@ -456,30 +501,32 @@ test("arm outputs a heartbeat payload without calling automation APIs", () => {
   assert.equal(result.status, 0, result.stderr);
   const parsed = JSON.parse(result.stdout);
   assert.equal(parsed.payload.kind, "heartbeat");
+  assert.equal(parsed.payload.name, "继续 Alembic 任务");
   assert.equal(parsed.payload.targetThreadId, "thread-visible-1");
   assert.equal(parsed.payload.rrule, "FREQ=MINUTELY;INTERVAL=1");
   assert.equal(parsed.payload.chainMode, "finish-chain");
-  assert.match(parsed.payload.prompt, /Visible Automation Dispatch 自动化领取提示词/);
+  assert.match(parsed.payload.prompt, /继续当前窗口任务：Alembic/);
   assert.match(parsed.payload.prompt, /先读取 AGENTS\.md、docs\/workspace\/index\.md/);
   assert.match(parsed.payload.prompt, /先明确声明当前窗口定位和本轮仓库职责/);
   assert.match(parsed.payload.prompt, /Codex 子 agent/);
   assert.match(parsed.payload.prompt, /最终由当前窗口统一复核和回填/);
   assert.match(parsed.payload.prompt, /完成后回填：完成范围、提交 hash、验证命令/);
-  assert.match(parsed.payload.prompt, /当前窗口：Alembic/);
-  assert.match(parsed.payload.prompt, /任务 id：plan__Alembic/);
+  assert.match(parsed.payload.prompt, /currentWindow：Alembic/);
+  assert.match(parsed.payload.prompt, /taskId：plan__Alembic/);
+  assert.match(parsed.payload.prompt, /controlDoc：docs\/workspace\/current\/plan\.md/);
   assert.match(parsed.payload.prompt, /用完即弃/);
-  assert.match(parsed.payload.prompt, /不要等 finish 再删/);
-  assert.match(parsed.payload.prompt, /继续 claim \/ 执行 \/ finish/);
-  assert.match(parsed.payload.prompt, /claim --window Alembic --write/);
-  assert.match(parsed.payload.prompt, /finish --window Alembic/);
+  assert.match(parsed.payload.prompt, /按 target skill 领取\/完成/);
+  assert.match(parsed.payload.prompt, /只处理本窗口任务/);
   assert.match(parsed.payload.prompt, /visible-automation-dispatch-target\/SKILL\.md/);
-  assert.match(parsed.payload.prompt, /record-stop/);
+  assert.doesNotMatch(parsed.payload.prompt, /claim --window Alembic --write/);
+  assert.doesNotMatch(parsed.payload.prompt, /finish --window Alembic/);
+  assert.doesNotMatch(parsed.payload.prompt, /record-stop --automation-id/);
   assert.doesNotMatch(parsed.payload.prompt, /target completed/);
   assert.doesNotMatch(parsed.payload.prompt, /courierAllowed === true/);
   assert.doesNotMatch(parsed.payload.prompt, /recordArmCommand/);
   assert.doesNotMatch(parsed.payload.prompt, /无人值守接续规则/);
   assert.doesNotMatch(parsed.payload.prompt, /returnToController/);
-  assert.ok(parsed.payload.prompt.length < 1250);
+  assert.ok(parsed.payload.prompt.length < 1050);
 });
 
 test("preflight verifies registered target threads resolve to local Codex sessions", () => {
@@ -566,6 +613,61 @@ test("arm-batch prepares payloads for every queued task in a dispatch group", ()
   assert.equal(parsed.payloads.every((item) => item.payload.chainMode === "finish-chain"), true);
   assert.doesNotMatch(parsed.payloads[0].payload.prompt, /returnToController/);
   assert.ok(parsed.payloads.every((item) => item.payload.prompt.length < 1100));
+});
+
+test("start-plan fast path enables mode, enqueues current plan, and prepares payloads", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "visible-dispatch-start-fast-"));
+  writeFile(path.join(root, "AGENTS.md"), "# Fixture\n");
+  writeTwoWindowPlan(root);
+  run(root, ["register", "--window", "Alembic", "--thread", "thread-Alembic", "--write"]);
+  run(root, ["register", "--window", "AlembicCore", "--thread", "thread-AlembicCore", "--write"]);
+
+  const result = run(root, [
+    "start-plan",
+    "--write",
+    "--group",
+    "batch-1",
+    "--return-policy",
+    "controller-last",
+    "--json",
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.mode, "enabled");
+  assert.equal(parsed.operation, "start-plan");
+  assert.equal(parsed.action, "createHeartbeats");
+  assert.equal(parsed.enqueue.createdCount, 2);
+  assert.equal(parsed.arm.payloadCount, 2);
+  assert.deepEqual(
+    parsed.arm.payloads.map((item) => item.targetWindow).sort(),
+    ["Alembic", "AlembicCore"],
+  );
+});
+
+test("old generic start command is not accepted", () => {
+  const root = makeFixture();
+  const result = run(root, ["start", "--write", "--json"]);
+  assert.notEqual(result.status, 0);
+  assert.match(JSON.parse(result.stdout).error, /Unknown visible-dispatch command: start/);
+});
+
+test("resume-plan fast path preserves an already queued group without duplicating tasks", () => {
+  const root = mkdtempSync(path.join(os.tmpdir(), "visible-dispatch-restart-fast-"));
+  writeFile(path.join(root, "AGENTS.md"), "# Fixture\n");
+  writeTwoWindowPlan(root);
+  run(root, ["register", "--window", "Alembic", "--thread", "thread-Alembic", "--write"]);
+  run(root, ["register", "--window", "AlembicCore", "--thread", "thread-AlembicCore", "--write"]);
+  run(root, ["start-plan", "--write", "--group", "batch-1", "--json"]);
+
+  const result = run(root, ["resume-plan", "--write", "--group", "batch-1", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  const parsed = JSON.parse(result.stdout);
+  assert.equal(parsed.operation, "resume-plan");
+  assert.equal(parsed.action, "createHeartbeats");
+  assert.equal(parsed.enqueue, null);
+  assert.equal(parsed.arm.payloadCount, 2);
+  const queue = readJson(root, ".workspace-local/visible-dispatch/dispatch-queue.json");
+  assert.equal(queue.tasks.length, 2);
 });
 
 test("arm-batch supports explicit stagger interval and no-stagger mode", () => {
@@ -1323,19 +1425,27 @@ test("controller-last dispatch group returns to total control only after the fin
   assert.equal(secondParsed.chain.nextAction, "returnToController");
   assert.equal(secondParsed.chain.handoffPolicy, "controller-return");
   assert.equal(secondParsed.chain.payload.targetWindow, "AlembicWorkspace");
+  assert.equal(secondParsed.chain.payload.name, "继续总控验收");
   assert.equal(secondParsed.chain.payload.targetThreadId, "thread-controller");
   assert.equal(secondParsed.chain.payload.controllerReturnAllowed, true);
-  assert.match(secondParsed.chain.payload.prompt, /Visible Automation Dispatch 总控回跳提示词/);
+  assert.match(secondParsed.chain.payload.prompt, /继续总控验收：AlembicCore 回填/);
   assert.match(secondParsed.chain.payload.prompt, /先读取 AGENTS\.md、docs\/workspace\/index\.md/);
   assert.match(secondParsed.chain.payload.prompt, /先明确声明当前窗口定位：AlembicWorkspace 总控/);
   assert.match(secondParsed.chain.payload.prompt, /区分窗口自述、原始证据和总控裁决/);
+  assert.match(secondParsed.chain.payload.prompt, /dispatchGroup：batch-return/);
+  assert.match(secondParsed.chain.payload.prompt, /lastCompletedTarget：AlembicCore/);
+  assert.match(secondParsed.chain.payload.prompt, /lastTaskId：batch-return-plan__AlembicCore/);
+  assert.match(secondParsed.chain.payload.prompt, /controlPlan：docs\/workspace\/current\/batch-return-plan\.md/);
   assert.match(secondParsed.chain.payload.prompt, /用完即弃/);
   assert.match(secondParsed.chain.payload.prompt, /audit-automation/);
-  assert.match(secondParsed.chain.payload.prompt, /controller return received/);
+  assert.match(secondParsed.chain.payload.prompt, /resume-plan/);
   assert.match(secondParsed.chain.payload.prompt, /group-status/);
   assert.match(secondParsed.chain.payload.prompt, /controller-tick/);
+  assert.doesNotMatch(secondParsed.chain.payload.prompt, /record-stop --automation-id/);
+  assert.doesNotMatch(secondParsed.chain.payload.prompt, /group-status --group batch-return/);
+  assert.doesNotMatch(secondParsed.chain.payload.prompt, /controller-tick --json/);
   assert.doesNotMatch(secondParsed.chain.payload.prompt, /VAD controller-return heartbeat/);
-  assert.ok(secondParsed.chain.payload.prompt.length < 1300);
+  assert.ok(secondParsed.chain.payload.prompt.length < 1100);
   assert.match(secondParsed.chain.recordReturnCommand, /record-return --group batch-return/);
 
   const recorded = run(root, [
@@ -1355,6 +1465,121 @@ test("controller-last dispatch group returns to total control only after the fin
   assert.equal(statusParsed.group.completedCount, 2);
   const runs = readJson(root, ".workspace-local/visible-dispatch/automation-runs.json");
   assert.equal(runs.runs.some((run) => run.runType === "controller-return"), true);
+});
+
+test("installed control repo prompts use parent-root paths for controller returns", () => {
+  const parentRoot = mkdtempSync(path.join(os.tmpdir(), "visible-dispatch-installed-parent-"));
+  const controlRoot = path.join(parentRoot, "codex-control-workspace");
+  mkdirSync(path.join(parentRoot, "BaseWindow"), { recursive: true });
+  mkdirSync(path.join(parentRoot, "CoreWindow"), { recursive: true });
+  writeFile(path.join(controlRoot, "AGENTS.md"), "# Control Fixture\n");
+  writeFile(
+    path.join(controlRoot, ".workspace-active/workspace/index.md"),
+    `
+# Workspace Index
+
+## 当前总控入口
+
+| 类型 | 文档 | 状态 | 说明 |
+| --- | --- | --- | --- |
+| 当前计划 | [current/batch-return-plan.md](current/batch-return-plan.md) | 待启动 | Batch return fixture |
+`,
+  );
+  writeFile(
+    path.join(controlRoot, ".workspace-active/workspace/current/batch-return-plan.md"),
+    `
+# Batch Return Plan
+
+状态：待启动
+
+## 窗口分派
+
+发送给：\`BaseWindow\`、\`CoreWindow\`
+
+| 窗口 / 状态 | 任务 |
+| --- | --- |
+| \`BaseWindow\`<br>待启动 | Batch task for BaseWindow |
+| \`CoreWindow\`<br>待启动 | Batch task for CoreWindow |
+| \`AgentWindow\`<br>无任务 | None |
+| \`DashboardWindow\`<br>无任务 | None |
+| \`PluginWindow\`<br>无任务 | None |
+| \`TestWindow\`<br>无任务 | None |
+| \`RealTestProject\`<br>无任务 | None |
+`,
+  );
+
+  assert.equal(runGeneric(controlRoot, ["mode", "--enable", "--write"]).status, 0);
+  assert.equal(
+    runGeneric(controlRoot, ["register", "--window", "ControlWorkspace", "--thread", "thread-controller", "--write"])
+      .status,
+    0,
+  );
+  assert.equal(runGeneric(controlRoot, ["register", "--window", "BaseWindow", "--thread", "thread-base", "--write"]).status, 0);
+  assert.equal(
+    runGeneric(controlRoot, [
+      "enqueue",
+      "--from-plan",
+      "--group",
+      "installed-return",
+      "--return-policy",
+      "controller-last",
+      "--write",
+    ]).status,
+    0,
+  );
+
+  const armed = runGeneric(controlRoot, ["arm", "--task", "batch-return-plan__BaseWindow", "--json"]);
+  assert.equal(armed.status, 0, armed.stderr);
+  const armPrompt = JSON.parse(armed.stdout).payload.prompt;
+  assert.match(armPrompt, /\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/index\.md/);
+  assert.match(armPrompt, /currentWindow：BaseWindow/);
+  assert.match(armPrompt, /taskId：batch-return-plan__BaseWindow/);
+  assert.match(armPrompt, /controlDoc：\.workspace-active\/workspace\/current\/batch-return-plan\.md/);
+  assert.match(armPrompt, /visible-automation-dispatch-target\/SKILL\.md/);
+  assert.doesNotMatch(armPrompt, /cd \.\.\/codex-control-workspace && node scripts\/visible-dispatch\.mjs claim/);
+
+  assert.equal(runGeneric(controlRoot, ["claim", "--window", "BaseWindow", "--write"]).status, 0);
+  assert.equal(
+    runGeneric(controlRoot, [
+      "finish",
+      "--window",
+      "BaseWindow",
+      "--backfill",
+      "base evidence",
+      "--chain-next",
+      "--write",
+    ]).status,
+    0,
+  );
+  assert.equal(runGeneric(controlRoot, ["claim", "--window", "CoreWindow", "--write"]).status, 0);
+  const finished = runGeneric(controlRoot, [
+    "finish",
+    "--window",
+    "CoreWindow",
+    "--backfill",
+    "core evidence",
+    "--chain-next",
+    "--write",
+    "--json",
+  ]);
+  assert.equal(finished.status, 0, finished.stderr);
+  const prompt = JSON.parse(finished.stdout).chain.payload.prompt;
+  assert.match(prompt, /继续总控验收：CoreWindow 回填/);
+  assert.match(prompt, /codex-control-workspace\/\.workspace-active\/workspace\/index\.md/);
+  assert.match(prompt, /codex-control-workspace\/\.workspace-active\/workspace\/current\/workspace-current-status\.md/);
+  assert.match(prompt, /codex-control-workspace\/skills\/dev\/visible-automation-dispatch-controller\/SKILL\.md/);
+  assert.match(prompt, /dispatchGroup：installed-return/);
+  assert.match(prompt, /group-status/);
+  assert.match(prompt, /controller-tick/);
+  assert.match(prompt, /resume-plan/);
+  assert.doesNotMatch(prompt, /cd codex-control-workspace && node scripts\/visible-dispatch\.mjs group-status/);
+  assert.doesNotMatch(prompt, /cd codex-control-workspace && node scripts\/visible-dispatch\.mjs controller-tick/);
+  assert.match(
+    JSON.parse(finished.stdout).chain.recordReturnCommand,
+    /cd \.\.\/codex-control-workspace && node scripts\/visible-dispatch\.mjs record-return --group installed-return/,
+  );
+  assert.doesNotMatch(prompt, /先读取 AGENTS\.md、\.workspace-active/);
+  assert.doesNotMatch(prompt, /Continue Visible Automation Dispatch controller return/);
 });
 
 test("record-return rejects a second active controller return for the same group", () => {

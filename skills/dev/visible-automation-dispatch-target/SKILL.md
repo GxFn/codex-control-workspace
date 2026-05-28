@@ -7,6 +7,27 @@ description: Use when an ControlWorkspace target Codex window receives a Visible
 
 Use only inside a VAD target heartbeat. Workspace `AGENTS.md`, the current control plan, and the target repository `AGENTS.md` remain higher authority.
 
+## Lightweight Target Prompt Contract
+
+Target heartbeats are lightweight wakeup envelopes. The prompt should carry
+only:
+
+- `currentWindow`
+- `taskId`
+- `controlDoc`
+- rule names: `用完即弃`, target-skill claim / finish, local role guard,
+  and finish-JSON next-hop permission
+
+Do not expect the heartbeat prompt to repeat full claim / finish / record-stop
+commands. Derive those commands from `currentWindow`, `taskId`, `controlDoc`,
+and this skill. If the values are missing or conflict with the local claim
+result, stop and report the mismatch instead of trying another window name or
+handwriting an older prompt.
+
+When VAD commands return JSON, read `scriptComplete` and `agentNext` as the
+command-exit cue. `agentNext` says whether to claim, finish, create an allowed
+next heartbeat, wait, or stop; it does not expand this window's authority.
+
 ## Disposable Wakeup Rule
 
 The heartbeat is only a one-time wakeup envelope. If the current heartbeat
@@ -75,7 +96,10 @@ After creating any heartbeat with `codex_app.automation_update`, run the matchin
 Use the finish JSON payload as-is; do not handwrite or preserve an older
 controller-return prompt. The controller-return payload should look like the
 manual total-control prompt plus a short automation supplement, not the old
-`VAD controller-return heartbeat` block.
+`VAD controller-return heartbeat` block. Its automation supplement should carry
+dynamic values and rule names only; command details belong to the controller
+skill. Its first line should be task-oriented, for example
+`继续总控验收：<window> 回填。`, not the automation mechanism name.
 
 ## Stop Conditions
 
