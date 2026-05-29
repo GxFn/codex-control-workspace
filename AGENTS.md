@@ -154,7 +154,7 @@
 - macOS 防睡眠只属于 delivery support。若自动化需要无人值守但防睡眠启动或停止失败，必须报告为自动化就绪风险，不得假装可靠。
 - heartbeat 提示词必须是轻量唤醒信封，只放动态变量、规则名和对应 skill 指向；首行必须是任务语义，例如“继续当前窗口任务”或“继续总控验收”，不得以旧机制名开头抢占 UI 第一视线；不得把完整命令手册复制进提示词。
 - 目标窗口只能执行 dispatch packet 指定给自己窗口的任务，并返回 `TargetResultEnvelope`；不得代领、代验、代写其它窗口结果，也不得从 result envelope 推导自己获得下一窗口或总控职责。
-- 子窗口默认不创建下一跳 heartbeat。多窗口 fan-out、最后一个窗口回跳、补证、重派或进入下一阶段，都由总控在 review 后决定；特殊 courier 例外必须在当前计划和 delivery envelope 中同时显式授权。
+- 子窗口默认不创建目标窗口下一跳 heartbeat。多窗口 fan-out、补证、重派或进入下一阶段，都由总控在 review 后决定；但当 delivery envelope 的 `returnRoute=controller` 且 `review-results` 显示本组结果已齐件或阻塞时，目标窗口只允许用 `build-controller-return` 创建一次总控回跳，这不是目标窗口下一跳。
 - `TestWindow` 下一跳默认由总控调起；非 `TestWindow` 窗口不得创建、处理或验证 `TestWindow` heartbeat，除非当前计划和 delivery envelope 同时显式授权该例外。
 - thread id 必须是真实 Codex thread id，只能保存在 `.workspace-local/` 下的本地运行态；不得把 thread id 写入 tracked 文档、GitHub、提示词或回填正文。严禁使用 `current-codex-thread`、`current thread`、`<thread id>`、`unknown`、说明文字或任何占位符登记窗口。
 - 旧 `claim / finish / chain-next / start-plan / resume-plan` 路线已退场；新的自动化闭环只能使用 `codex-automation-loop.mjs` 的 dispatch packet / delivery envelope / target result envelope 协议。

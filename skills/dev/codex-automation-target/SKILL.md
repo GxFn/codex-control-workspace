@@ -21,7 +21,7 @@ Target wakeups should be task-first and compact:
 - taskId: <taskId>
 - controlPlan: <path>
 - dispatchGroup: <group>
-- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建下一跳。
+- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；结果齐件且 returnRoute=controller 时只创建总控回跳。
 ```
 
 Do not require the prompt to repeat command manuals. Derive commands from the
@@ -62,12 +62,34 @@ node scripts/codex-automation-loop.mjs submit-result --target-window <currentWin
    - Use `--status needs-review` when work is partial or the total-control
      boundary needs a decision.
 
+5. **Return to controller when ready**
+   - Do not create another target-window hop.
+   - If the delivery return route is `controller`, run:
+
+```text
+node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --json
+```
+
+   - If the decision is `wait`, stop; another target has not reported yet.
+   - If the decision is `blocked` or `needs-controller-review`, build only a
+     controller-return envelope:
+
+```text
+node scripts/codex-automation-loop.mjs build-controller-return --group <dispatchGroup> --last-completed-target <currentWindow> --last-task-id <taskId> --control-plan <controlPlan> --require-thread --include-thread-id --write --json
+```
+
+   - Create the Codex heartbeat from the returned `codexAutomation` payload.
+     This is the allowed total-control return, not a next target hop.
+
 ## Boundaries
 
 - A `TargetResultEnvelope` is a report, not acceptance.
-- Target windows do not create next-hop heartbeats by default.
+- Target windows do not create target-window next-hop heartbeats by default.
+  Controller return is allowed only through `build-controller-return` after
+  `review-results` says the group is ready for total-control review.
 - `TestWindow` is total-control-owned unless the current plan and delivery
   envelope explicitly authorize an exception.
 - Raw thread ids stay only in local runtime files, never in tracked docs,
-  prompts, GitHub, or result text.
+  prompts, GitHub, or result text. `--include-thread-id` is allowed only for
+  the immediate local `automation_update` call that creates controller-return.
 - `claim / finish / chain-next` commands are not part of this flow.

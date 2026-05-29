@@ -25,8 +25,9 @@ Codex automation closed-loop contract manager
 Usage:
   node scripts/codex-automation-loop.mjs status [--json]
   node scripts/codex-automation-loop.mjs register-thread --window <name> --thread-id <id> [--role target|controller] [--cwd <path>] --write [--json]
-  node scripts/codex-automation-loop.mjs create-dispatch --target-window <name> --task-id <id> --control-plan <path> --objective <text> (--prompt <text>|--prompt-file <path>) [--group <id>] [--context-policy assumed-current|refresh-if-missing|force-refresh] [--scope <text>...] [--forbidden <text>...] [--evidence <text>...] [--write] [--json]
+  node scripts/codex-automation-loop.mjs create-dispatch --target-window <name> --task-id <id> --control-plan <path> --objective <text> [--prompt <text>|--prompt-file <path>] [--group <id>] [--context-policy assumed-current|refresh-if-missing|force-refresh] [--scope <text>...] [--forbidden <text>...] [--evidence <text>...] [--write] [--json]
   node scripts/codex-automation-loop.mjs build-delivery --packet-file <path> [--delivery-id <id>] [--return-route controller|none] [--no-keep-live] [--stagger-seconds <n>] [--require-thread] [--include-thread-id] [--write] [--json]
+  node scripts/codex-automation-loop.mjs build-controller-return --group <id> --last-completed-target <window> --last-task-id <taskId> --control-plan <path> [--controller-window <name>] [--require-thread] [--include-thread-id] [--write] [--json]
   node scripts/codex-automation-loop.mjs submit-result --target-window <name> --task-id <id> --status completed|blocked|needs-review [--group <id>] [--changed-repo <repo>...] [--commit <hash>...] [--evidence-ref <ref>...] [--verification <text>...] [--risk <text>...] [--next-suggestion <text>] [--write] [--json]
   node scripts/codex-automation-loop.mjs review-results (--group <id>|--task-id <id>) [--json]
   node scripts/codex-automation-loop.mjs stop-loop --reason <text> --write [--json]
@@ -102,6 +103,7 @@ function inferAgentNext(payload) {
   if (payload.command === "create-dispatch") return "Build a delivery envelope from the dispatch packet or queue it for the delivery adapter.";
   if (payload.command === "register-thread") return "Build delivery envelopes for registered target windows when total control decides to dispatch.";
   if (payload.command === "build-delivery") return payload.threadReady ? "Create the Codex heartbeat from the delivery envelope." : "Register the target thread before creating the Codex heartbeat.";
+  if (payload.command === "build-controller-return") return payload.threadReady ? "Create the controller-return heartbeat from the return envelope." : "Register the controller thread before enabling unattended return.";
   if (payload.command === "submit-result") return "Wake total control or run review-results; the result is not an acceptance verdict.";
   if (payload.command === "review-results") return payload.decision === "wait" ? "Wait for missing target result envelopes." : "Total control must pull raw evidence and make the verdict.";
   if (payload.command === "stop-loop") return "Closed-loop delivery is stopped; do not create new deliveries.";
@@ -221,6 +223,56 @@ function validateThreadId(value) {
   return threadId;
 }
 
+function readWorkspaceConfig() {
+  for (const candidate of [
+    path.join(workspaceRoot, ".workspace-local/workspace.config.json"),
+    path.join(workspaceRoot, "workspace.config.json"),
+  ]) {
+    if (existsSync(candidate)) return readJson(candidate, "workspace config");
+  }
+  return {};
+}
+
+function formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup }) {
+  return [
+    `继续当前窗口任务：${targetWindow} / ${taskId}。`,
+    "",
+    "变量：",
+    `- currentWindow: ${targetWindow}`,
+    `- taskId: ${taskId}`,
+    `- controlPlan: ${controlPlan}`,
+    ...(dispatchGroup ? [`- dispatchGroup: ${dispatchGroup}`] : []),
+    "- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；结果齐件且 returnRoute=controller 时只创建总控回跳。",
+    "- skill: ../codex-control-workspace/skills/dev/codex-automation-target/SKILL.md",
+  ].join("\n");
+}
+
+function formatControllerReturnPrompt({ dispatchGroup, lastCompletedTarget, lastTaskId, controlPlan }) {
+  return [
+    `继续总控验收：${lastCompletedTarget} 回填。`,
+    "",
+    "变量：",
+    `- dispatchGroup: ${dispatchGroup}`,
+    `- lastCompletedTarget: ${lastCompletedTarget}`,
+    `- lastTaskId: ${lastTaskId}`,
+    `- controlPlan: ${controlPlan}`,
+    "- rules: 用完即弃；review-results；证据通过且目标未完成时创建下一批 dispatch；仅异常诊断。",
+    "- skill: codex-control-workspace/skills/dev/codex-automation-controller/SKILL.md",
+  ].join("\n");
+}
+
+function readDispatchPrompt({ promptArg, promptFileArg, targetWindow, taskId, controlPlan, dispatchGroup }) {
+  if (promptFileArg) return readFileSync(resolveInputPath(promptFileArg, "--prompt-file"), "utf8").trim();
+  if (!promptArg) return formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup });
+
+  const prompt = promptArg.trim();
+  if (!prompt) return formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup });
+  if (prompt.startsWith("继续当前窗口任务：") && !prompt.includes("\n变量：")) {
+    return formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup });
+  }
+  return prompt;
+}
+
 function commandRegisterThread() {
   if (!write) fail("register-thread requires --write.");
   const windowName = requireValue("--window");
@@ -312,11 +364,10 @@ function commandCreateDispatch() {
   const objective = requireValue("--objective");
   const promptArg = getValue("--prompt", "");
   const promptFileArg = getValue("--prompt-file", "");
-  if (!promptArg && !promptFileArg) fail("Either --prompt or --prompt-file is required.");
-  const prompt = promptFileArg ? readFileSync(resolveInputPath(promptFileArg, "--prompt-file"), "utf8").trim() : promptArg.trim();
+  const dispatchGroup = getValue("--group", "");
+  const prompt = readDispatchPrompt({ promptArg, promptFileArg, targetWindow, taskId, controlPlan, dispatchGroup });
   if (!prompt) fail("Prompt cannot be empty.");
 
-  const dispatchGroup = getValue("--group", "");
   const id = [dispatchGroup, targetWindow, taskId].filter(Boolean).map(slug).join("__");
   const packet = {
     kind: "ControllerDispatchPacket",
@@ -428,6 +479,76 @@ function commandBuildDelivery() {
       `${write ? "Created" : "Would create"} delivery envelope ${deliveryId}.`,
       `Target: ${envelope.targetWindow}`,
       `Return route: ${envelope.returnRoute}`,
+      `Thread: ${registration ? "registered" : "missing"}`,
+    ],
+  );
+}
+
+function commandBuildControllerReturn() {
+  const dispatchGroup = requireValue("--group");
+  const lastCompletedTarget = requireValue("--last-completed-target");
+  const lastTaskId = requireValue("--last-task-id");
+  const controlPlan = requireValue("--control-plan");
+  const config = readWorkspaceConfig();
+  const controllerWindow = getValue("--controller-window", config.controlWindow || config.workspaceName || "ControlWorkspace");
+  const registration = loadThreadRegistration(controllerWindow);
+  if (hasFlag("--require-thread") && !registration) fail(`No registered controller thread for window: ${controllerWindow}`);
+
+  const prompt = formatControllerReturnPrompt({ dispatchGroup, lastCompletedTarget, lastTaskId, controlPlan });
+  const envelope = {
+    kind: "ControllerReturnEnvelope",
+    version,
+    deliveryId: `controller-return-${slug(dispatchGroup)}__${slug(lastCompletedTarget)}__${slug(lastTaskId)}`,
+    dispatchGroup,
+    lastCompletedTarget,
+    lastTaskId,
+    controlPlan,
+    prompt,
+    oneShot: true,
+    targetThread: registration
+      ? {
+          windowName: registration.windowName,
+          role: registration.role,
+          threadId: registration.threadId,
+          cwd: registration.cwd,
+        }
+      : undefined,
+    schedule: {
+      kind: "heartbeat",
+      rrule: "FREQ=MINUTELY;INTERVAL=1",
+    },
+    createdAt: nowIso(),
+  };
+  if (registration) {
+    envelope.codexAutomation = {
+      kind: "heartbeat",
+      destination: "thread",
+      targetThreadId: registration.threadId,
+      name: `Codex automation ${controllerWindow} return`,
+      prompt,
+      rrule: envelope.schedule.rrule,
+      status: "ACTIVE",
+    };
+  }
+
+  const returnFile = deliveryFileFor(envelope.deliveryId);
+  if (write) {
+    ensureStateDirs();
+    atomicWriteJson(returnFile, envelope);
+  }
+  output(
+    {
+      ok: true,
+      command: "build-controller-return",
+      wrote: write,
+      envelope: hasFlag("--include-thread-id") ? envelope : redactDeliveryEnvelope(envelope),
+      returnFile: write ? path.relative(workspaceRoot, returnFile) : "",
+      threadReady: Boolean(registration),
+      threadIdRedacted: Boolean(registration) && !hasFlag("--include-thread-id"),
+    },
+    [
+      `${write ? "Created" : "Would create"} controller-return envelope ${envelope.deliveryId}.`,
+      `Controller: ${controllerWindow}`,
       `Thread: ${registration ? "registered" : "missing"}`,
     ],
   );
@@ -562,6 +683,9 @@ try {
       break;
     case "build-delivery":
       commandBuildDelivery();
+      break;
+    case "build-controller-return":
+      commandBuildControllerReturn();
       break;
     case "submit-result":
       commandSubmitResult();

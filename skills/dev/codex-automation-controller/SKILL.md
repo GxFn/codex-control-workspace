@@ -71,10 +71,12 @@ node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --
 node scripts/codex-automation-loop.mjs register-thread --window <window> --thread-id <realThreadId> --write --json
 ```
 
-   - For each target, create a dispatch packet:
+   - For each target, create a dispatch packet. Omit `--prompt` for the default
+     compact target prompt; use `--prompt-file` only when the current plan needs
+     a custom wakeup shape.
 
 ```text
-node scripts/codex-automation-loop.mjs create-dispatch --target-window <window> --task-id <taskId> --group <dispatchGroup> --control-plan <path> --objective "<objective>" --prompt-file <promptFile> --evidence "<required evidence>" --write --json
+node scripts/codex-automation-loop.mjs create-dispatch --target-window <window> --task-id <taskId> --group <dispatchGroup> --control-plan <path> --objective "<objective>" --evidence "<required evidence>" --write --json
 ```
 
    - Then create a delivery envelope:
@@ -87,6 +89,10 @@ node scripts/codex-automation-loop.mjs build-delivery --packet-file <packetFile>
      from the delivery envelope. The script itself does not call Codex
      automation APIs. Delivery command output redacts thread ids by default;
      raw ids stay in ignored local runtime files.
+   - For unattended return, register the controller thread once with role
+     `controller`. Target windows may only create a controller-return heartbeat
+     through `build-controller-return` after `review-results` says the group is
+     ready; they still must not create another target-window hop.
 
 4. **Stop**
    - Stop only for explicit user stop, hard gate, final archive, or no useful

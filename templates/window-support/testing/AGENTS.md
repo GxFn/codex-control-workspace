@@ -9,7 +9,7 @@
 - 如果本窗口通过 ControlWorkspace 的 automation heartbeat 唤醒，先读取 workspace `AGENTS.md`、当前总控文档、`skills/dev/codex-automation-target/SKILL.md` 和本文件。
 - 只执行 dispatch packet 指定给 `TestWindow` 的任务，并返回 `TargetResultEnvelope`；不得代领、处理、验证或总结其它窗口任务。
 - 自动化 smoke 中的 `TestWindow` 可以只是非测试型可见窗口目标；除非当前总控文档或测试单明确要求真实测试，否则不得运行真实项目测试、cold-start、Dashboard 手动观察或回归验证。
-- 子窗口默认不创建下一跳 heartbeat；回跳、补证、重派或下一阶段都由总控 review 后决定。
+- 子窗口默认不创建目标窗口下一跳 heartbeat；补证、重派或下一阶段都由总控 review 后决定。若 delivery `returnRoute=controller` 且 `review-results` 显示本组结果已齐件或阻塞，只允许通过 `build-controller-return` 创建一次总控回跳。
 
 ## 窗口定位
 

@@ -305,10 +305,11 @@ Codex Automation Closed Loop contracts:
 ```bash
 node scripts/workspace-control.mjs loop status --json
 node scripts/workspace-control.mjs loop register-thread --window <window> --thread-id <realThreadId> --write --json
-node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --control-plan <plan> --objective "<objective>" --prompt-file <promptFile> --write --json
+node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --control-plan <plan> --objective "<objective>" --write --json
 node scripts/workspace-control.mjs loop build-delivery --packet-file <packetFile> --require-thread --write --json
 node scripts/workspace-control.mjs loop submit-result --target-window <window> --task-id <taskId> --status completed --evidence-ref <ref> --write --json
 node scripts/workspace-control.mjs loop review-results --group <group> --json
+node scripts/workspace-control.mjs loop build-controller-return --group <group> --last-completed-target <window> --last-task-id <taskId> --control-plan <plan> --require-thread --include-thread-id --write --json
 node scripts/workspace-control.mjs loop stop-loop --reason "manual stop" --write --json
 ```
 
