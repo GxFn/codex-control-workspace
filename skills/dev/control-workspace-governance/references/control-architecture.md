@@ -1,7 +1,7 @@
 # Workspace Control Architecture
 
 Use this reference when restructuring `AGENTS.md`, workspace skills, templates,
-scripts, current plans, or Visible Automation Dispatch automation surfaces.
+scripts, current plans, or automation surfaces.
 
 ## Layer Map
 
@@ -10,10 +10,10 @@ scripts, current plans, or Visible Automation Dispatch automation surfaces.
 | `AGENTS.md` | Resident hard rules, stop cards, total-control identity, repository boundaries, confirmation gates, testing / acceptance bottom lines, and pointers to lower layers. | Long command sequences, examples, large templates, script troubleshooting, current wave facts. |
 | Current control plan | The active user goal, completion definition, current evidence, task packages, send/no-send table, TODO rolling, test judgment, and automation mode chosen for this goal. | Permanent rules, old historical backfill, product implementation details. |
 | Workspace skill `control-workspace-governance` | Procedures that are needed only for a matching workflow: TODO, dispatch, testing, script pipeline, ledger moves, and this architecture map. | Hard anti-failure rules that were added because total control repeatedly made mistakes. |
-| VAD controller / target skills | Unattended heartbeat operating steps and role guards for controller-return or target-window heartbeats. | User goals, acceptance verdicts, raw thread ids, product implementation permission. |
+| Codex automation controller / target skills | Unattended heartbeat operating steps, dispatch/result envelope handling, and role guards for controller-return or target-window wakeups. | User goals, acceptance verdicts, raw thread ids, product implementation permission. |
 | Templates | Reusable skeletons with required sections and script-readable anchors. | Current statuses, one-off decisions, long playbooks, runtime state. |
-| Scripts | Mechanical sync, validation, import, archive, status, install-scope management, runtime, and VAD local-state operations with explicit write/apply gates. | Total-control judgment, evidence acceptance, TODO priority decisions, product code changes. |
-| `.workspace-local/visible-dispatch/` | Local-only VAD mode, queues, automation run metadata, and raw thread ids. | Tracked docs, GitHub commits, human-facing status. |
+| Scripts | Mechanical sync, validation, import, archive, status, install-scope management, runtime, and closed-loop contract operations with explicit write/apply gates. | Total-control judgment, evidence acceptance, TODO priority decisions, product code changes. |
+| `.workspace-local/codex-automation-loop/` | Local-only dispatch packets, delivery envelopes, target result envelopes, stop markers, and delivery support state. | Tracked docs, GitHub commits, human-facing status, acceptance verdicts. |
 
 ## Resident Rule Test
 
@@ -73,9 +73,9 @@ repositories, or turn a failed gate into a successful status.
 
 | Class | Use When | Mechanism | Stop Condition |
 | --- | --- | --- | --- |
-| Controller self heartbeat | The current task is owned by `ControlWorkspace` itself. | Codex heartbeat attached to the current thread; no VAD target queue. | User stop, plan hard gate, or no useful next unit. |
-| VAD target fan-out | The current plan has child-window tasks and verified thread registrations. | `visible-dispatch enqueue/arm-batch` plus Codex heartbeat creation for target windows. | Mode disabled, preflight failure, evidence gate, or group completion. |
-| VAD controller return | The final target in a dispatch group has finished and total control must review. | Controller-return heartbeat plus `group-status` / `controller-tick`. | Acceptance decision, next-wave dispatch, or hard stop gate. |
+| Controller self heartbeat | The current task is owned by `ControlWorkspace` itself. | Codex heartbeat attached to the current thread; no target dispatch packet. | User stop, plan hard gate, or no useful next unit. |
+| Closed-loop target fan-out | The current plan has child-window tasks and verified thread registrations. | Total control creates dispatch packets and delivery envelopes; delivery adapter creates Codex heartbeats. | Delivery failure, evidence gate, or group ready for controller review. |
+| Closed-loop controller return | Target result envelopes for a dispatch group are ready or a target reports blocked. | Controller-return heartbeat plus `review-results`; total control then pulls raw evidence. | Acceptance decision, next-wave dispatch, hard stop gate, or missing evidence. |
 | Manual discussion | User is designing, asking, or redirecting. | Normal chat. | Do not treat as unattended automation. |
 
 Automation never replaces total-control judgment. It only wakes the right thread

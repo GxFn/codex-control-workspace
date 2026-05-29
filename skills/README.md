@@ -26,22 +26,18 @@ Current drafts:
 - `dev/control-workspace-governance/`: trial extraction for bulky
   ControlWorkspace control-center details. It currently holds TODO / Backlog,
   window dispatch, testing / validation, workspace ledger / document-surface,
-  workspace script pipeline, VAD operation, phased migration, and workspace
-  control architecture references that used to live inline in `AGENTS.md` or
-  ad hoc conversation memory.
+  workspace script pipeline, Codex Automation Closed Loop operation, phased
+  migration, and workspace control architecture references that used to live
+  inline in `AGENTS.md` or ad hoc conversation memory.
   `AGENTS.md` remains the hard boundary source and points to this skill only
   when those detailed workflows are needed. Anti-failure hard rules must stay
   in `AGENTS.md`, not only here.
-- `dev/visible-automation-dispatch-target/`: target-window skill for Visible
-  Automation Dispatch heartbeat tasks. It keeps unattended claim / finish /
-  next-heartbeat courier rules, target-window role guards, `TestWindow`
-  boundaries, and local thread-id handling out of long generated prompts and
-  child-repository `AGENTS.md` files.
-- `dev/visible-automation-dispatch-controller/`: total-control skill for
-  Visible Automation Dispatch controller-return heartbeats. It keeps
-  unattended acceptance, self-test / real-test judgment, next-wave decisions,
-  and anti-small-task-drift rules close to the automation controller without
-  moving hard boundaries out of `AGENTS.md`.
+- `dev/codex-automation-controller/`: total-control skill for creating
+  dispatch packets, building delivery envelopes, reviewing result envelopes,
+  pulling raw evidence, and deciding next wave / stop.
+- `dev/codex-automation-target/`: target-window skill for one-shot delivery
+  wakeups, assigned-window execution, and `TargetResultEnvelope` reporting
+  without cross-window claim / finish state.
 - `dev/progressive-chain-validation/`: workspace bridge into the external PCV
   repository. It has a lightweight `SKILL.md` for ControlWorkspace routing, but
   canonical PCV method instructions, references, templates, and source changes remain

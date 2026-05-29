@@ -92,8 +92,8 @@ Use this reference when creating, moving, syncing, or archiving ControlWorkspace
 - Use lowercase kebab-case filenames.
 - Use execution date `YYYY-MM-DD` for dated control docs.
 - Long-term policies and contracts can omit dates when they are stable entrypoints.
-- Do not write user machine absolute paths, API keys, tokens, or raw VAD thread ids into tracked documents.
-- Raw VAD thread ids belong only under ignored `.workspace-local/visible-dispatch/`.
+- Do not write user machine absolute paths, API keys, tokens, or raw Codex thread ids into tracked documents.
+- Raw automation thread ids belong only under ignored `.workspace-local/` runtime state.
 
 ## Default Workspace Control Plan Fields
 

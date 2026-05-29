@@ -86,6 +86,7 @@ if (withScriptTests) {
     command: "node",
     args: [
       "--test",
+      "scripts/codex-automation-loop.test.mjs",
       "scripts/collect-repo-status.test.mjs",
       "scripts/check-decision-preflight.test.mjs",
       "scripts/check-dispatch-coverage.test.mjs",
@@ -93,7 +94,6 @@ if (withScriptTests) {
       "scripts/check-test-boundary.test.mjs",
       "scripts/control-workspace-install.test.mjs",
       "scripts/sync-current-plan.test.mjs",
-      "scripts/visible-dispatch.test.mjs",
       "scripts/workspace-control.test.mjs",
     ],
   });

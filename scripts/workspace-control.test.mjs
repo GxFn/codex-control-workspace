@@ -38,10 +38,10 @@ test("--print design preserves focused handoff validation arguments", () => {
   assert.match(result.stdout, /node scripts\/import-design-handoffs\.mjs --json --id PCVM-2026-05-25/);
 });
 
-test("--print vad status maps to visible-dispatch status", () => {
-  const result = run(["--print", "vad", "status", "--json"]);
+test("--print loop maps to codex automation closed-loop script", () => {
+  const result = run(["--print", "loop", "status", "--json"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs status --json/);
+  assert.match(result.stdout, /node scripts\/codex-automation-loop\.mjs status --json/);
 });
 
 test("status --json returns a machine-readable aggregate", () => {
@@ -74,67 +74,10 @@ test("--print install write-agents supports explicit unmanaged window refresh", 
   assert.match(result.stdout, /node scripts\/control-workspace-install\.mjs write-agents --all --include-unmanaged --write/);
 });
 
-test("--print vad preflight defaults to current-plan preflight", () => {
-  const result = run(["--print", "vad", "preflight", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs preflight --from-plan --json/);
-});
-
-test("--print vad controller supports compact output", () => {
-  const result = run(["--print", "vad", "controller", "--compact", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs controller-tick --compact --json/);
-});
-
-test("--print vad start-plan maps to first-launch fast path", () => {
-  const result = run(["--print", "vad", "start-plan", "--write", "--group", "g1", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs start-plan --write --group g1 --json/);
-});
-
-test("--print vad resume-plan maps to continuation fast path", () => {
-  const result = run(["--print", "vad", "resume-plan", "--write", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs resume-plan --write --json/);
-});
-
-test("vad start old generic command is not accepted", () => {
-  const result = run(["--print", "vad", "start", "--write", "--json"]);
+test("legacy vad command is not accepted", () => {
+  const result = run(["--print", "vad", "status", "--json"]);
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /Unknown vad subcommand: start/);
-});
-
-test("--print vad audit maps to automation compliance audit", () => {
-  const result = run(["--print", "vad", "audit", "--automation-id", "auto-1", "--window", "Alembic", "--role", "target", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(
-    result.stdout,
-    /node scripts\/visible-dispatch\.mjs audit-automation --automation-id auto-1 --window Alembic --role target --json/,
-  );
-});
-
-test("--print vad post-run-audit maps to visible-dispatch post-run audit", () => {
-  const result = run(["--print", "vad", "post-run-audit", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs post-run-audit --json/);
-});
-
-test("vad stop-plan requires explicit write gate", () => {
-  const result = run(["--print", "vad", "stop-plan"]);
-  assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /vad stop-plan requires --write/);
-});
-
-test("--print vad stop-plan preserves write gate and reason", () => {
-  const result = run(["--print", "vad", "stop-plan", "--write", "--reason", "manual stop", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs stop-plan --write --reason manual stop --json/);
-});
-
-test("--print vad prune forwards current accepted cleanup option", () => {
-  const result = run(["--print", "vad", "prune", "--include-current-accepted", "--write", "--json"]);
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /node scripts\/visible-dispatch\.mjs prune-history --include-current-accepted --write --json/);
+  assert.match(result.stderr, /Unknown workspace-control command: vad/);
 });
 
 test("unknown command fails closed", () => {

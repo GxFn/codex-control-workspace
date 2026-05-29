@@ -30,8 +30,8 @@
 - 如果回填只有文档读取、脚本表面操作或自然语言判断，没有提交 hash、命令输出、runtime JSON、日志摘要、截图、报告路径或可复核文件证据，停止并标为 `待补证` / `待裁决` / `阻塞`。
 - 如果回填与总控已知事实冲突，或同一事项出现“回填 -> 改文档 -> 重派发 -> 再回填”的循环风险，停止自动派发，先做代码事实复核或用户确认。
 - 如果准备派发下游，但当前窗口 / 目标仓库定位、producer / consumer 依赖、上游提交、接口、证据或真实 thread id 未确认，停止。
-- 如果当前 automation 无法证明属于当前总控计划、当前窗口职责、真实 thread id、合法 dispatch group / task、最新用户目标和允许的下一跳策略，停止继续执行；总控有权立即删除该 automation，并用 `record-stop` / 当前计划记录删除原因。
-- 如果 VAD 已开启无人值守目标模式，而下一步仍在用户已确认的最终目标、完成定义和仓库边界内，我准备把“阶段计划生成”“给用户看下一阶段计划”“当前计划已验收”当成默认停点，停止这种停止。正确动作是继续总控验收、补计划、创建下一阶段任务包并派发，直到最终目标完成、出现真实门禁或无可领取 TODO。
+- 如果当前 automation 无法证明属于当前总控计划、当前窗口职责、真实 thread id、合法 dispatch group / task、最新用户目标和允许的下一跳策略，停止继续执行；总控有权立即删除该 automation，并用 `stop-loop` / 当前计划记录删除原因。
+- 如果自动化无人值守目标模式已开启，而下一步仍在用户已确认的最终目标、完成定义和仓库边界内，我准备把“阶段计划生成”“给用户看下一阶段计划”“当前计划已验收”当成默认停点，停止这种停止。正确动作是继续总控验收、补计划、创建下一阶段任务包并派发，直到最终目标完成、出现真实门禁或无可领取 TODO。
 - 如果准备整理、拆分、精简或扩展 `AGENTS.md`，但还没有先说清 `AGENTS.md` 内部地图、下层章节承接、skill / reference 指向、触发条件、旧规则去向和不得下沉的硬规则，停止。
 
 ### 正确顺序
@@ -146,21 +146,20 @@
 - 当前主线进行时，新需求可以先进入 TODO；除非改变当前完成定义或用户明确要求打断，否则不得直接跳过当前主线。
 - TODO 参与派发时要优先组成任务包，把当前阶段可以推进的主线动作，与同一窗口、同一边界、同一验证链路下可以顺手关闭的 TODO 合并派发。
 - 总控允许为了效率派发较大的同窗口任务包；执行窗口可以在自己的窗口 / 仓库职责和当前计划边界内，自行判断是否开启 Codex 子 agent 分担代码调研、实现、测试或文档梳理。子 agent 不能跨窗口代领、不能绕过目标仓库 `AGENTS.md`、不能替代执行窗口最终复核和回填；总控仍只验收该窗口统一提交的原始证据。
-- VAD 自动化模式下，脚本输出的下一跳 payload 只是投递信封，不代表当前窗口获得下一窗口职责。总控验收时若发现窗口把下一跳当成自身任务、跨窗口处理 `TestWindow`、或未按 role guard 执行，必须暂停自动验收并修正脚本 / prompt / AGENTS 规则后再继续。
-- 总控窗口拥有 automation 合规审计和删除权。任何当前 automation 若与当前总控计划、用户最新指令、VAD mode、dispatch group、task、目标窗口、真实 thread id、`TestWindow` 边界或下一跳权限不一致，或本地 `audit-automation` 无法证明其合规，必须删除该 automation，并在本地运行态或当前计划记录删除原因；不得为了“不中断自动化”保留不合规循环。
-- VAD mode enabled 只表示当前总控计划允许无人值守投递 / 回跳，不表示用户在电脑前的普通讨论、Design 需求设计、总控决策讨论或单窗口开发都自动进入无人值守循环。每次仍按最新用户输入和当前窗口职责判断；非 heartbeat / 非当前计划任务不得 claim、续跳或自动关闭。
-- VAD 生命周期命令必须语义明确：`node scripts/visible-dispatch.mjs init --write --json` 只初始化本地运行态；`node scripts/visible-dispatch.mjs start-plan --write --json` 是当前计划首次无人值守启动；`node scripts/visible-dispatch.mjs resume-plan --write --json` 是回跳验收后或人工中断后的正常续跑；`node scripts/visible-dispatch.mjs stop-plan --write --reason "<reason>"` 是关闭后续自动化跳转。不要使用含糊的旧启动 / 重启别名。
-- VAD 正常启动 / 续跑优先走 `start-plan` / `resume-plan` 快路径。它负责开启 mode、按当前计划补入队列并返回 heartbeat payload 或明确的 wait / review / attention 决策；不要把完整 `preflight`、全量 verify、长审计当作每次启动前置。只有快路径返回 `attention` / `blocked`、heartbeat 创建失败、thread 缺失、回填冲突或证据异常时，才进入诊断和中断排查。
-- 在 macOS 上，`start-plan` / `resume-plan` / 低层 `mode --enable --write` 会启动本地防睡眠进程，`stop-plan --write` / 低层 `mode --disable --write` 必须停止该进程并关闭后续跳转。若防睡眠启动或停止失败，必须报告为自动化就绪风险，不得假装无人值守可靠。
-- VAD heartbeat 提示词必须是轻量唤醒信封，只放动态变量、规则名和对应 skill 指向；首行必须是任务语义，例如“继续当前窗口任务”或“继续总控验收”，不得以 `VAD` / `Visible Automation Dispatch` 机制名开头抢占 UI 第一视线；不得把完整命令手册复制进提示词。目标窗口和总控必须按 `currentWindow` / `taskId` / `controlDoc` 或 `dispatchGroup` / `lastCompletedTarget` / `lastTaskId` / `controlPlan` 等变量，从对应 skill 推导命令；变量缺失或冲突时停止并回报。
-- VAD 目标窗口只能 claim / finish 自己窗口名对应的任务；如果 `claim --json` 没有返回本窗口任务，必须停止，不得尝试其它窗口名、不得代领、不得验证其它窗口工作。
-- VAD 下一目标窗口 heartbeat 只在 `finish --chain-next --json` 同时返回 `chain.nextAction === "armNext"`、`chain.handoffPolicy === "target-courier"`、`chain.payload.courierAllowed === true`，且当前计划允许 target-window courier delivery 时才能创建。
-- VAD 回跳总控 heartbeat 只在 `finish --chain-next --json` 同时返回 `chain.nextAction === "returnToController"`、`chain.handoffPolicy === "controller-return"`、`chain.payload.controllerReturnAllowed === true` 时才能创建；这是最后一个子窗口把 terminal dispatch group 交回总控验收的合法投递，不等于子窗口获得总控职责。
-- `finish --chain-next --json` 返回 `controllerArm`、`modeDisabled`、`registerWindow`、`registerController`、`wait`、`review`、无 payload、无 `courierAllowed` 且无 `controllerReturnAllowed` 时，必须停止并回报总控。
-- `TestWindow` 下一跳默认由总控调起；非 `TestWindow` 窗口不得创建、处理或验证 `TestWindow` heartbeat，除非当前计划和 finish JSON 同时显式授权该例外。
-- VAD thread id 必须是真实 Codex thread id，只能保存在 `.workspace-local/visible-dispatch/`；不得把 thread id 写入 tracked 文档、GitHub、提示词或回填正文。严禁使用 `current-codex-thread`、`current thread`、`<thread id>`、`unknown`、说明文字或任何占位符登记窗口。
+- Codex Automation Closed Loop 模式下，脚本只产生 `ControllerDispatchPacket`、`DeliveryEnvelope` 和 `TargetResultEnvelope` 等机械信封，不代表当前窗口获得其它窗口职责，也不代表任务已被总控接受。
+- 总控窗口拥有 automation 合规审计和删除权。任何当前 automation 若无法对应当前用户目标、当前总控计划、合法 dispatch group / task、目标窗口、真实 thread id、`TestWindow` 边界或一次性投递策略，必须删除并记录原因；不得为了“不中断自动化”保留不合规循环。
+- 自动化开启只表示当前总控计划允许无人值守投递 / 回跳，不表示用户在电脑前的普通讨论、Design 需求设计、总控决策讨论或单窗口开发都自动进入无人值守循环。每次仍按最新用户输入和当前窗口职责判断。
+- 新闭环默认入口是 `node scripts/codex-automation-loop.mjs`。常用命令语义：`create-dispatch` 只创建总控分派包；`build-delivery` 只创建投递信封；`submit-result` 只记录子窗口结果信封；`review-results` 只判断是否齐件和是否需要总控拉证据；`stop-loop` 只关闭后续投递意图。任何命令都不能替代总控验收。
+- 正常启动 / 续跑优先走轻量闭环：总控先决定任务包和目标窗口，再生成 dispatch packet / delivery envelope；delivery adapter 只按信封创建 heartbeat；子窗口返回 result envelope；总控再 pull 原始证据裁决。不要把完整 preflight、全量 verify、长审计当作每次启动前置。
+- macOS 防睡眠只属于 delivery support。若自动化需要无人值守但防睡眠启动或停止失败，必须报告为自动化就绪风险，不得假装可靠。
+- heartbeat 提示词必须是轻量唤醒信封，只放动态变量、规则名和对应 skill 指向；首行必须是任务语义，例如“继续当前窗口任务”或“继续总控验收”，不得以旧机制名开头抢占 UI 第一视线；不得把完整命令手册复制进提示词。
+- 目标窗口只能执行 dispatch packet 指定给自己窗口的任务，并返回 `TargetResultEnvelope`；不得代领、代验、代写其它窗口结果，也不得从 result envelope 推导自己获得下一窗口或总控职责。
+- 子窗口默认不创建下一跳 heartbeat。多窗口 fan-out、最后一个窗口回跳、补证、重派或进入下一阶段，都由总控在 review 后决定；特殊 courier 例外必须在当前计划和 delivery envelope 中同时显式授权。
+- `TestWindow` 下一跳默认由总控调起；非 `TestWindow` 窗口不得创建、处理或验证 `TestWindow` heartbeat，除非当前计划和 delivery envelope 同时显式授权该例外。
+- thread id 必须是真实 Codex thread id，只能保存在 `.workspace-local/` 下的本地运行态；不得把 thread id 写入 tracked 文档、GitHub、提示词或回填正文。严禁使用 `current-codex-thread`、`current thread`、`<thread id>`、`unknown`、说明文字或任何占位符登记窗口。
+- 旧 `claim / finish / chain-next / start-plan / resume-plan` 路线已退场；新的自动化闭环只能使用 `codex-automation-loop.mjs` 的 dispatch packet / delivery envelope / target result envelope 协议。
 
-TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/control-workspace-governance/` 与 `skills/dev/visible-automation-dispatch-target/`。
+TODO / Backlog、窗口覆盖、任务包和新闭环命令细节见 `skills/dev/control-workspace-governance/` 与 `skills/dev/codex-automation-target/`。
 
 ## Workspace 治理与文档账本
 
@@ -173,7 +172,7 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/con
 - workspace 可以保管总控通用能力，例如 `scripts/`、`skills/`、`templates/` 下的验证脚本、分派模板、文档模板、Codex skill 草案或跨窗口协作工具。此类能力必须服务于工作区总控、文档治理、验证或协作，不得复制或替代子仓库产品实现。
 - workspace 通用脚本默认应是 repo-neutral、参数化、无密钥、无用户绝对路径、无网络依赖；如果脚本会写入同级子仓库，必须是用户确认后的安装 scope 写入，或有当前总控文档明确授权，并优先让对应子仓库窗口执行。
 - workspace 内的 `skills/` 是可复用 skill 资产或草案的保管位置，不代表自动安装或自动启用；若某个 skill 需要安装到 Codex runtime、插件包或子仓库，必须在文档中明确安装位置、消费方和同步方式。
-- `.workspace-active/workspace/index.md` 是 workspace 级唯一活跃总控入口。当前状态、活跃 TODO、测试交流、Design inbox、VAD 当前计划和正在执行的 workspace 总控计划优先写到 `.workspace-active/workspace/current/`；它是本机当前工作面，默认不提交。完成后再归档或提炼到 `../workspace-ledger/`。
+- `.workspace-active/workspace/index.md` 是 workspace 级唯一活跃总控入口。当前状态、活跃 TODO、测试交流、Design inbox、自动化当前计划和正在执行的 workspace 总控计划优先写到 `.workspace-active/workspace/current/`；它是本机当前工作面，默认不提交。完成后再归档或提炼到 `../workspace-ledger/`。
 - `../workspace-ledger/requirement-designs/` 保存较大需求的原始计划书、需求设计文档和代码实现依赖调研；不要把具体 wave 派发、执行验收或回填堆到这里。
 - Design 活跃草案和 `workspace-signal` / `workspace-handoff` 可以保存在外部 `DesignWindow/docs/current/`，也可以使用内部 `.workspace-active/workspace/current/design-handoff-board.md` 与 `../workspace-ledger/design/`；总控接收后再决定是否转写到 workspace 正式账本。Design 不直接改总控当前状态。
 - `../workspace-ledger/goal-stage-confirmation/` 保存“需求目标 + 分阶段确认”的长期流程；可复用模板统一保存到 `templates/`；具体某次任务的目标阶段确认文档写到 `.workspace-active/workspace/current/` 并从索引挂载。
@@ -203,22 +202,23 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/con
 
 ## 统一窗口分派提示词
 
-当用户需要把下一波任务复制到其它 Codex 窗口时，总控窗口默认只输出一条通用提示词，让各窗口根据当前总控文档自行领取分配给自己的任务。详细发送 / 不发送判断见 `skills/dev/control-workspace-governance/references/window-dispatch.md`。
+当用户需要把下一波任务复制到其它 Codex 窗口时，总控窗口默认只输出一条轻量通用提示词，让各窗口根据当前总控文档自行领取分配给自己的任务。提示词是导航和唤醒信封，不是任务书；目标、范围、禁止事项、验证和回填字段必须写在当前计划、测试单、目标仓库 `AGENTS.md` 或相关 skill 中。详细发送 / 不发送判断见 `skills/dev/control-workspace-governance/references/window-dispatch.md`。
 
 ```text
-先读取 AGENTS.md、.workspace-active/workspace/index.md、.workspace-active/workspace/current/<当前总控文档名>.md，以及你所在窗口/目标仓库的 AGENTS.md。
+继续当前总控任务：<计划 / wave 名>。
 
-先明确声明当前窗口定位和本轮仓库职责。
+先读：AGENTS.md、.workspace-active/workspace/index.md、.workspace-active/workspace/current/<当前总控文档名>.md，以及本窗口/目标仓库 AGENTS.md。
 
-再按照文档领取并完成分配给你所在窗口的任务。
+定位：声明当前窗口和本轮仓库职责。
 
-如果任务包较大，可在当前窗口职责和计划边界内自行判断是否开启 Codex 子 agent 分担工作；最终由当前窗口统一复核和回填。
+领取：按当前计划领取分配给本窗口的任务。
 
-完成后回填：完成范围、提交 hash、验证命令、验证结果、遗留风险和下一步建议。
+完成后按当前计划回填证据、边界、风险和下一步建议。
 ```
 
 - 具体当前总控文档名、执行窗口列表和观察窗口判断，不写入 `AGENTS.md`。这些 wave 级信息必须写在 `.workspace-active/workspace/index.md` 和当前总控文档的“可复制分派提示词 / 分派表”章节中。
 - 输出提示词前必须确认正文同时包含 `AGENTS.md` 和“定位”要求，并区分“发送窗口”和“观察 / 阻塞 / 无任务窗口”。
+- 不要在提示词里重复当前计划已经写清的禁止事项、验证命令、详细回填字段、测试推论边界或自动化命令手册；这些内容由执行窗口读文档和 skill 获取。
 
 ## Skill 分层
 
@@ -232,11 +232,11 @@ TODO / Backlog、窗口覆盖、任务包和 VAD 命令细节见 `skills/dev/con
   - 做测试边界、`TestWindow` 交接、证据解释和验证命令选择时，读 `skills/dev/control-workspace-governance/references/testing-validation.md`；总控默认自测和 `TestWindow` 真实场景边界仍留在 `AGENTS.md`。
   - 做脚本维护、脚本验证、Design handoff 导入、current plan 同步和 runtime 检查时，读 `skills/dev/control-workspace-governance/references/script-pipeline.md`；脚本不得替代总控判断仍留在 `AGENTS.md`。
   - 做 workspace 文档落点、索引、归档、模板字段和 skill 资产账本时，读 `skills/dev/control-workspace-governance/references/workspace-ledgers.md`；workspace 不跟踪子仓库和真实测试项目仍留在 `AGENTS.md`。
-  - 做 VAD mode / registry / queue / group / heartbeat 操作时，读 `skills/dev/control-workspace-governance/references/visible-automation-dispatch.md`；thread id 真实性、next heartbeat 权限和 `TestWindow` 边界仍留在 `AGENTS.md`。
+  - 做 Codex Automation Closed Loop、dispatch packet、delivery envelope、target result envelope、controller review 或自动化投递 / 回跳时，读 `skills/dev/control-workspace-governance/references/codex-automation-loop.md`；总控裁决权、thread id 真实性和 `TestWindow` 边界仍留在 `AGENTS.md`，且不得把旧 `claim / finish / chain-next` 当新闭环核心协议。
   - 做跨仓库迁移、能力抽取、删除清理或发布封口时，读 `skills/dev/control-workspace-governance/references/phased-migration.md`；不得薄实现、空壳迁移或提前删除仍留在 `AGENTS.md`。
   - 做 PCV / PCVM / Progressive Chain Validation、长链路 source-derived plan、cold-start / rescan 节点基线、before/after scorecard 或 metrics 对比时，读 `skills/dev/progressive-chain-validation/SKILL.md`；该 skill 只负责把 workspace 直接链入独立 `progressive-chain-validation` canonical source，不能替代总控停止卡、测试边界或验收裁决。
-- `skills/dev/visible-automation-dispatch-target/`：VAD 目标窗口 claim / finish / record-arm / record-stop 命令细节；role guard、thread id 真实性、next heartbeat 权限和 `TestWindow` 边界必须同时在 `AGENTS.md` 明文常驻。
-- `skills/dev/visible-automation-dispatch-controller/`：VAD controller-return heartbeat 的证据复核、下一波决策和避免小任务漂移的操作步骤；总控事实裁决和验收底线仍以 `AGENTS.md` 为准。
+- `skills/dev/codex-automation-target/`：新闭环目标窗口一次性唤醒、任务执行和 `TargetResultEnvelope` 回填细节；role guard、thread id 真实性和 `TestWindow` 边界必须同时在 `AGENTS.md` 明文常驻。
+- `skills/dev/codex-automation-controller/`：新闭环总控启动 / 回跳 / result review / 下一波决策操作步骤；总控事实裁决和验收底线仍以 `AGENTS.md` 为准。
 - 新增或扩展完整能力时，先判断它是硬边界还是可按需加载的操作细则；硬边界写入 `AGENTS.md`，步骤、模板字段、脚本顺序、示例和排错规则写入 skill reference。
 
 ## 跨仓库接入、删除与兼容清理

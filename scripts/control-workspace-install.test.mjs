@@ -135,8 +135,9 @@ test("write-agents is dry-run by default and writes managed access cards with --
   assert.match(baseAgents, /Active workspace index: `\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/index\.md`/);
   assert.match(baseAgents, /Current plan directory: `\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/current`/);
   assert.match(baseAgents, /Window ledger: `\.\.\/workspace-ledger\/BaseWindow`/);
-  assert.match(baseAgents, /Automation 只是唤醒信封/);
-  assert.match(baseAgents, /VAD heartbeat 提示词只承载动态变量、规则名和 skill 指向/);
+  assert.match(baseAgents, /Automation 只是一次性唤醒 \/ 投递信封/);
+  assert.match(baseAgents, /Heartbeat 提示词只承载动态变量、规则名和 skill 指向/);
+  assert.match(baseAgents, /返回 `TargetResultEnvelope`/);
   assert.doesNotMatch(baseAgents, /回填必须包含完成范围/);
   assert.doesNotMatch(baseAgents, /可以在本窗口 \/ 本仓库边界内使用 Codex 子 agent/);
   assert.doesNotMatch(baseAgents, /完整能力改成薄实现/);

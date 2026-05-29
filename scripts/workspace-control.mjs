@@ -15,6 +15,7 @@ const commandArgs = args.slice(1);
 const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args: rawArgs });
 
 const testScripts = [
+  "scripts/codex-automation-loop.test.mjs",
   "scripts/collect-repo-status.test.mjs",
   "scripts/check-decision-preflight.test.mjs",
   "scripts/check-dispatch-coverage.test.mjs",
@@ -22,7 +23,6 @@ const testScripts = [
   "scripts/check-test-boundary.test.mjs",
   "scripts/control-workspace-install.test.mjs",
   "scripts/sync-current-plan.test.mjs",
-  "scripts/visible-dispatch.test.mjs",
   "scripts/workspace-control.test.mjs",
 ];
 
@@ -42,7 +42,7 @@ Commands:
   runtime     Inspect runtime residue without mutating processes.
   install     Discover sibling repos, configure scope, and write child AGENTS blocks.
   scripts     Check script docs, optionally including script tests.
-  vad         Inspect or operate Visible Automation Dispatch local state.
+  loop        Operate the new Codex Automation Closed Loop contract surface.
   pipeline    Run the fixture governance pipeline.
   help        Show this help.
 
@@ -54,14 +54,12 @@ Common examples:
   node scripts/workspace-control.mjs design --id PCVM-2026-05-25 --json
   node scripts/workspace-control.mjs install status --json
   node scripts/workspace-control.mjs install prompts --window BaseWindow
-  node scripts/workspace-control.mjs vad init --write --json
-  node scripts/workspace-control.mjs vad start-plan --write --json
-  node scripts/workspace-control.mjs vad resume-plan --write --json
-  node scripts/workspace-control.mjs vad stop-plan --write --json
-  node scripts/workspace-control.mjs vad status --json
-  node scripts/workspace-control.mjs vad controller --compact --json
-  node scripts/workspace-control.mjs vad audit --automation-id <id> --json
-  node scripts/workspace-control.mjs vad post-run-audit --json
+  node scripts/workspace-control.mjs loop status --json
+  node scripts/workspace-control.mjs loop register-thread --window BaseWindow --thread-id <realThreadId> --write --json
+  node scripts/workspace-control.mjs loop create-dispatch --target-window BaseWindow --task-id TASK-1 --control-plan .workspace-active/workspace/current/plan.md --objective "Do the task" --prompt-file /tmp/prompt.md --write --json
+  node scripts/workspace-control.mjs loop build-delivery --packet-file <packetFile> --require-thread --write --json
+  node scripts/workspace-control.mjs loop review-results --group <group> --json
+  node scripts/workspace-control.mjs loop stop-loop --reason "manual stop" --write --json
   node scripts/workspace-control.mjs pipeline --json
 
 Safety:
@@ -278,151 +276,10 @@ function buildScripts(options) {
   return steps;
 }
 
-function buildVad(options) {
+function buildLoop(options) {
   const subcommand = options[0] ?? "status";
   const rest = options.slice(1);
-  switch (subcommand) {
-    case "status": {
-      assertKnownOptions(rest, ["--json"]);
-      return [{ label: "visible dispatch status", ...nodeScript("visible-dispatch.mjs", ["status", ...(hasFlag(rest, "--json") ? ["--json"] : [])]) }];
-    }
-    case "init": {
-      assertKnownOptions(rest, ["--write", "--json"]);
-      return [{
-        label: "visible dispatch init",
-        ...nodeScript("visible-dispatch.mjs", [
-          "init",
-          ...(hasFlag(rest, "--write") ? ["--write"] : []),
-          ...(hasFlag(rest, "--json") ? ["--json"] : []),
-        ]),
-      }];
-    }
-    case "start-plan":
-    case "resume-plan": {
-      assertKnownOptions(
-        rest,
-        ["--write", "--json", "--no-stagger", "--no-keep-awake"],
-        ["--plan", "--group", "--return-policy", "--stagger-seconds"],
-      );
-      if (!hasFlag(rest, "--write")) {
-        fail(`vad ${subcommand} requires --write.`);
-      }
-      const out = [subcommand, "--write"];
-      for (const valueFlag of ["--plan", "--group", "--return-policy", "--stagger-seconds"]) {
-        const value = getValue(rest, valueFlag);
-        if (value) {
-          out.push(valueFlag, value);
-        }
-      }
-      for (const flag of ["--no-stagger", "--no-keep-awake", "--json"]) {
-        if (hasFlag(rest, flag)) {
-          out.push(flag);
-        }
-      }
-      return [{ label: `visible dispatch ${subcommand} fast path`, ...nodeScript("visible-dispatch.mjs", out) }];
-    }
-    case "stop-plan": {
-      assertKnownOptions(rest, ["--write", "--json"], ["--reason"]);
-      if (!hasFlag(rest, "--write")) {
-        fail(`vad ${subcommand} requires --write.`);
-      }
-      const out = ["stop-plan", "--write"];
-      const reason = getValue(rest, "--reason");
-      if (reason) {
-        out.push("--reason", reason);
-      }
-      if (hasFlag(rest, "--json")) {
-        out.push("--json");
-      }
-      return [{ label: "visible dispatch stop plan", ...nodeScript("visible-dispatch.mjs", out) }];
-    }
-    case "controller":
-    case "controller-tick": {
-      assertKnownOptions(rest, ["--json", "--compact"]);
-      return [{
-        label: "visible dispatch controller tick",
-        ...nodeScript("visible-dispatch.mjs", [
-          "controller-tick",
-          ...(hasFlag(rest, "--compact") ? ["--compact"] : []),
-          ...(hasFlag(rest, "--json") ? ["--json"] : []),
-        ]),
-      }];
-    }
-    case "post-run-audit":
-    case "post-run": {
-      assertKnownOptions(rest, ["--json"]);
-      return [{ label: "visible dispatch post-run audit", ...nodeScript("visible-dispatch.mjs", ["post-run-audit", ...(hasFlag(rest, "--json") ? ["--json"] : [])]) }];
-    }
-    case "preflight": {
-      assertKnownOptions(rest, ["--json", "--from-plan"], ["--group", "--task", "--window"]);
-      const out = [];
-      const group = getValue(rest, "--group");
-      const task = getValue(rest, "--task");
-      const windowName = getValue(rest, "--window");
-      if (group) {
-        out.push("--group", group);
-      } else if (task) {
-        out.push("--task", task);
-      } else if (windowName) {
-        out.push("--window", windowName);
-      } else {
-        out.push("--from-plan");
-      }
-      if (hasFlag(rest, "--json")) {
-        out.push("--json");
-      }
-      return [{ label: "visible dispatch preflight", ...nodeScript("visible-dispatch.mjs", ["preflight", ...out]) }];
-    }
-    case "audit": {
-      assertKnownOptions(
-        rest,
-        ["--json", "--strict", "--allow-historic", "--allow-alembic-test"],
-        ["--automation-id", "--window", "--group", "--role"],
-      );
-      const automationId = getValue(rest, "--automation-id");
-      if (!automationId) {
-        fail("vad audit requires --automation-id <id>.");
-      }
-      const out = ["audit-automation", "--automation-id", automationId];
-      for (const valueFlag of ["--window", "--group", "--role"]) {
-        const value = getValue(rest, valueFlag);
-        if (value) {
-          out.push(valueFlag, value);
-        }
-      }
-      for (const flag of ["--allow-historic", "--allow-alembic-test", "--strict", "--json"]) {
-        if (hasFlag(rest, flag)) {
-          out.push(flag);
-        }
-      }
-      return [{ label: "visible dispatch automation audit", ...nodeScript("visible-dispatch.mjs", out) }];
-    }
-    case "group": {
-      assertKnownOptions(rest, ["--json"], ["--group"]);
-      const group = getValue(rest, "--group");
-      if (!group) {
-        fail("vad group requires --group <dispatchGroupId>.");
-      }
-      return [{ label: "visible dispatch group status", ...nodeScript("visible-dispatch.mjs", ["group-status", "--group", group, ...(hasFlag(rest, "--json") ? ["--json"] : [])]) }];
-    }
-    case "prune": {
-      assertKnownOptions(rest, ["--write", "--json", "--include-current-accepted"]);
-      if (!hasFlag(rest, "--write")) {
-        fail("vad prune requires --write.");
-      }
-      return [{
-        label: "visible dispatch prune history",
-        ...nodeScript("visible-dispatch.mjs", [
-          "prune-history",
-          ...(hasFlag(rest, "--include-current-accepted") ? ["--include-current-accepted"] : []),
-          "--write",
-          ...(hasFlag(rest, "--json") ? ["--json"] : []),
-        ]),
-      }];
-    }
-    default:
-      fail(`Unknown vad subcommand: ${subcommand}. Expected status, init, start-plan, resume-plan, stop-plan, controller, preflight, audit, group, post-run-audit, or prune.`);
-  }
+  return [{ label: "codex automation closed loop", ...nodeScript("codex-automation-loop.mjs", [subcommand, ...rest]) }];
 }
 
 function buildPipeline(options) {
@@ -459,8 +316,8 @@ function buildSteps() {
       return buildInstall(commandArgs);
     case "scripts":
       return buildScripts(commandArgs);
-    case "vad":
-      return buildVad(commandArgs);
+    case "loop":
+      return buildLoop(commandArgs);
     case "pipeline":
       return buildPipeline(commandArgs);
     default:

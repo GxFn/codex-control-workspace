@@ -59,8 +59,10 @@ ${extraRow ? `${extraRow}\n` : ""}| \`Alembic\`<br>待启动 | 执行任务。 |
 发送给：\`Alembic\`
 
 \`\`\`text
-先读取 AGENTS.md、docs/workspace/index.md、docs/workspace/current/example-plan.md，以及你所在窗口/目标仓库的 AGENTS.md。
-先明确声明当前窗口定位和本轮仓库职责。
+继续当前总控任务：example plan。
+先读：AGENTS.md、docs/workspace/index.md、docs/workspace/current/example-plan.md，以及本窗口/目标仓库 AGENTS.md。
+定位：声明当前窗口和本轮仓库职责。
+领取：按当前计划领取分配给本窗口的任务。
 \`\`\`
 `,
   );
@@ -101,14 +103,14 @@ test("send-eligible nonstandard coverage row fails closed", () => {
   assert.match(`${result.stdout}\n${result.stderr}`, /unexpected send-eligible dispatch window: custom-worker/);
 });
 
-test("armed Alembic window remains send-covered after automation creation", () => {
+test("delivered Alembic window remains send-covered after automation creation", () => {
   const root = createFixture("");
   writeFile(
     path.join(root, "docs/workspace/current/example-plan.md"),
     `
 # Example Plan
 
-状态：执行中（已 arm）
+状态：执行中（已投递）
 发送给：\`Alembic\`
 
 ## 窗口分派
@@ -117,7 +119,7 @@ test("armed Alembic window remains send-covered after automation creation", () =
 
 | 窗口 / 状态 | 任务 |
 | --- | --- |
-| \`Alembic\`<br>已 arm | 目标 heartbeat 已创建，等待 claim。 |
+| \`Alembic\`<br>已投递 | 目标 heartbeat 已创建，等待 TargetResultEnvelope。 |
 | \`AlembicCore\`<br>观察中 | 当前不发送。 |
 | \`AlembicAgent\`<br>无任务 | 当前不发送。 |
 | \`AlembicDashboard\`<br>无任务 | 当前不发送。 |
@@ -130,8 +132,10 @@ test("armed Alembic window remains send-covered after automation creation", () =
 发送给：\`Alembic\`
 
 \`\`\`text
-先读取 AGENTS.md、docs/workspace/index.md、docs/workspace/current/example-plan.md，以及你所在窗口/目标仓库的 AGENTS.md。
-先明确声明当前窗口定位和本轮仓库职责。
+继续当前总控任务：example plan。
+先读：AGENTS.md、docs/workspace/index.md、docs/workspace/current/example-plan.md，以及本窗口/目标仓库 AGENTS.md。
+定位：声明当前窗口和本轮仓库职责。
+领取：按当前计划领取分配给本窗口的任务。
 \`\`\`
 `,
   );
@@ -171,8 +175,10 @@ test("overlong dispatch prompt fails closed unless explicitly allowed", () => {
 发送给：\`Alembic\`
 
 \`\`\`text
-先读取 AGENTS.md、docs/workspace/index.md、docs/workspace/current/example-plan.md，以及你所在窗口/目标仓库的 AGENTS.md。
-先明确声明当前窗口定位和本轮仓库职责。
+继续当前总控任务：example plan。
+先读：AGENTS.md、docs/workspace/index.md、docs/workspace/current/example-plan.md，以及本窗口/目标仓库 AGENTS.md。
+定位：声明当前窗口和本轮仓库职责。
+领取：按当前计划领取分配给本窗口的任务。
 ${"重复任务细节会让提示词膨胀，应保留在任务包正文里。\n".repeat(60)}
 \`\`\`
 `,

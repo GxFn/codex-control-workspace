@@ -18,10 +18,10 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
   `node scripts/workspace-control.mjs verify --dispatch`
   `node scripts/workspace-control.mjs sync --write --verify --dispatch`
   `node scripts/workspace-control.mjs scripts --tests`
-  `node scripts/workspace-control.mjs vad status --json`
-  `node scripts/workspace-control.mjs vad controller --json`
-  `node scripts/workspace-control.mjs vad preflight --json`
-  `node scripts/workspace-control.mjs vad audit --automation-id <automationId> --json`
+  `node scripts/workspace-control.mjs loop status --json`
+  `node scripts/workspace-control.mjs loop create-dispatch --write --json`
+  `node scripts/workspace-control.mjs loop build-delivery --write --json`
+  `node scripts/workspace-control.mjs loop review-results --json`
 - General pre-acceptance:
   `node scripts/verify-control-center.mjs`
 - Dispatch plans with TODO and task packages:
@@ -52,7 +52,7 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
 | Validate current docs stay under `.workspace-active/workspace/current/` | `check-workspace-current-layout.mjs` | Read-only layout guard. |
 | Validate send list and prompt hard rules | `check-dispatch-coverage.mjs` | Mechanical guard only; total control still decides producer / consumer order. |
 | Validate decision preflight before doc/state changes | `check-decision-preflight.mjs` | Fails when the current plan lacks trigger, demand / test-result interpretation, checked evidence, verify / replan / confirm decision, allowed updates, and forbidden conclusions. |
-| Validate test-start boundary judgment | `check-test-boundary.mjs` | Fails when `TestWindow` is send-eligible for verification without self-test exclusion, real-scenario dependency, test question, boundary, inference limit, and stop-condition fields. Explicit non-test thread-registry or Visible Automation Dispatch smoke rows are allowed only when the current plan says no test handoff / no real-project validation and local-only runtime evidence. |
+| Validate test-start boundary judgment | `check-test-boundary.mjs` | Fails when `TestWindow` is send-eligible for verification without self-test exclusion, real-scenario dependency, test question, boundary, inference limit, and stop-condition fields. Explicit non-test thread-registry or Codex Automation Closed Loop smoke rows are allowed only when the current plan says no test handoff / no real-project validation and local-only runtime evidence. |
 | Validate TODO scheduling sections | `check-todo-board.mjs --require` | Use when TODO / Backlog affects dispatch or wave order. |
 | Validate task-package completeness | `check-task-packages.mjs --require` | Use when bundling mainline work with TODOs. |
 | Sync current plan into repeated status/index surfaces | `sync-current-plan.mjs --check` / `--write` | Does not decide readiness, TODOs, Design status, or window acceptance. |
@@ -60,7 +60,7 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
 | Archive completed control docs and shrink historical indexes | `archive-workspace-docs.mjs`, `compact-workspace-index.mjs`, `archive-global-todo-board.mjs`, `generate-archive-topic-summaries.mjs` | Dry-run first; apply only after current status no longer points at the archived item. |
 | Prove the governance scripts work as a chain | `run-workspace-pipeline-e2e.mjs` | Uses a temporary fixture workspace and runs write/apply modes without touching product repositories. |
 | Keep script catalog and tests from drifting | `check-script-docs.mjs` | Runs inside `verify-control-center`; add tests to `--with-script-tests`. |
-| Manage Visible Automation Dispatch local mode / registry / queue / claim / finish / acceptance state | `visible-dispatch.mjs`, `workspace-control.mjs vad ...` | Runtime files stay under ignored `.workspace-local/visible-dispatch/`; the scripts print payloads and audit local automation compliance but never call Codex automation APIs, accept evidence, select TODOs, or write product repositories. Read [visible-automation-dispatch.md](visible-automation-dispatch.md) for the full operating map. |
+| Manage Codex Automation Closed Loop contracts | `codex-automation-loop.mjs`, `workspace-control.mjs loop ...` | Runtime files stay under ignored `.workspace-local/codex-automation-loop/`; the script creates dispatch packets, delivery envelopes, target result envelopes, group readiness summaries, and stop markers. It never calls Codex automation APIs, parses current plans, accepts evidence, selects TODOs, or writes product repositories. Read [codex-automation-loop.md](codex-automation-loop.md) for the full operating map. |
 
 ## When To Extract A New Script
 

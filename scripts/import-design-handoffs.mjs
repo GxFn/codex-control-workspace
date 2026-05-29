@@ -17,6 +17,8 @@ const allowedStatuses = new Set([
   "needs-design",
   "paused",
   "archived",
+  "research",
+  "absorbed-by-codex-loop",
 ]);
 const requiredColumns = [
   "ID",
@@ -194,7 +196,7 @@ function validateEntry(entry, seenIds) {
     if (!firstLink(entry["需求设计"])) {
       issues.push(`${id}: ready entry must link a requirement design.`);
     }
-    if (!/用户已确认|已确认|yes|confirmed/i.test(entry["用户确认"])) {
+    if (!/用户(?:已)?确认|已确认|yes|confirmed/i.test(entry["用户确认"])) {
       issues.push(`${id}: ready entry must record user confirmation.`);
     }
     for (const column of ["当前主线关系", "建议 TODO", "优先级", "下一步"]) {

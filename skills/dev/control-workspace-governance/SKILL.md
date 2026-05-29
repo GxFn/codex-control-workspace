@@ -25,8 +25,8 @@ This skill may guide workspace documentation, TODO intake, dispatch planning, an
 - Read [references/testing-validation.md](references/testing-validation.md) when deciding whether total control should self-test, whether `TestWindow` is justified, how to write a test handoff, how to interpret test evidence, or which validation command applies.
 - Read [references/script-pipeline.md](references/script-pipeline.md) when auditing workspace scripts, choosing validation commands, syncing repeated control-plan surfaces, refreshing Design handoff intake, or maintaining script tests / documentation.
 - Read [references/workspace-ledgers.md](references/workspace-ledgers.md) when creating, moving, syncing, archiving, or validating workspace control documents, status mirrors, indexes, templates, Design handoff ledgers, test exchange entries, workspace skill assets, or `AGENTS.md` map / skill-pointer layering.
-- Read [references/control-architecture.md](references/control-architecture.md) when restructuring `AGENTS.md`, skills, references, templates, scripts, current plans, or VAD automation surfaces as one consistent control system.
-- Read [references/visible-automation-dispatch.md](references/visible-automation-dispatch.md) when total control starts, stops, inspects, debugs, or classifies VAD mode / registry / queue / group / heartbeat operations.
+- Read [references/control-architecture.md](references/control-architecture.md) when restructuring `AGENTS.md`, skills, references, templates, scripts, current plans, or automation surfaces as one consistent control system.
+- Read [references/codex-automation-loop.md](references/codex-automation-loop.md) when total control starts, stops, designs, debugs, or validates the new Codex Automation Closed Loop packet / envelope / result workflow.
 - Read [references/phased-migration.md](references/phased-migration.md) when a task moves, extracts, deletes, or rehomes behavior across BaseWindow repositories.
 
 ## Non-Negotiables
@@ -35,7 +35,7 @@ This skill may guide workspace documentation, TODO intake, dispatch planning, an
 - `DesignWindow` signal / handoff is input to total control, not an execution plan.
 - Total control self-tests by default; `TestWindow` is only for real project verification, cold-start, repro, smoke, regression, runtime / Dashboard observation, and cross-repo environment evidence.
 - A TODO or task package must serve the user goal and current completion definition; it must not become a reason to create empty work.
-- Dispatch prompts must keep the `AGENTS.md` read requirement and current-window / target-repository positioning declaration.
+- Dispatch prompts must stay lightweight: keep the `AGENTS.md` read requirement, current-window / target-repository positioning declaration, task identity, and evidence return pointer; detailed scope, exclusions, validation commands, sub-agent guidance, and automation command semantics belong in the current plan, task package, test exchange, or Codex Automation Closed Loop skills.
 - Workspace owns the only control state machine. PCV node state, scorecard readiness, and observability gaps are recorded inside Workspace plans as canonical Workspace status plus PCV evidence labels, not as a second state authority.
 - Hard anti-failure rules belong in `AGENTS.md`, not only in this skill. This skill may add command details and templates, but it must not hide or weaken those rules.
 - Before changing `AGENTS.md` or moving content into references, prepare an old-rule migration check: keep / downshift / rewrite / discard, and state which `AGENTS.md` section or reference now owns each rule.

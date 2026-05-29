@@ -135,21 +135,21 @@ test("passes AlembicTest non-test thread registry tasks without a test card", ()
   assert.equal(parsed.activeTestCount, 0);
 });
 
-test("passes AlembicTest non-test VAD smoke tasks without a test card", () => {
+test("passes AlembicTest non-test automation smoke tasks without a test card", () => {
   const root = makeFixture({
     alembicTestStatus: "待启动",
-    alembicTestTask: "非测试型 Visible Automation Dispatch smoke：claim / finish-chain / 回填本窗口自动化日志，不运行真实项目测试。",
+    alembicTestTask: "非测试型 Codex Automation Closed Loop smoke：回填 TargetResultEnvelope 和本窗口自动化日志，不运行真实项目测试。",
     testStatus: "已完成",
     planExtra: `
 
 ## 目标判断
 
-- 用户目标：Visible Automation Dispatch 真实 heartbeat smoke。
+- 用户目标：Codex Automation Closed Loop 真实 heartbeat smoke。
 - 不纳入本轮事项：不运行真实项目测试，不创建 AlembicTest 测试单。
 
 ## 测试交接
 
-- 是否需要 \`AlembicTest\`：否；本轮 AlembicTest 只作为非测试型 VAD 可见窗口参与 heartbeat smoke。
+- 是否需要 \`AlembicTest\`：否；本轮 AlembicTest 只作为非测试型自动化可见窗口参与 heartbeat smoke。
 `,
   });
   const result = run(root);

@@ -10,7 +10,7 @@ A local-first command center that keeps multi-repository Codex work moving throu
 
 ---
 
-- [Why](#why) · [Install Shape](#install-shape) · [Getting Started](#getting-started) · [How It Works](#how-it-works) · [Visible Automation Dispatch](#visible-automation-dispatch) · [Daily Use](#daily-use) · [Repository Layout](#repository-layout) · [Design Philosophy](#design-philosophy)
+- [Why](#why) · [Install Shape](#install-shape) · [Getting Started](#getting-started) · [How It Works](#how-it-works) · [Codex Automation Closed Loop](#codex-automation-closed-loop) · [Daily Use](#daily-use) · [Repository Layout](#repository-layout) · [Design Philosophy](#design-philosophy)
 
 ## Why
 
@@ -124,30 +124,30 @@ Each child repository keeps its own `AGENTS.md`. The control installer adds a co
 - where the control workspace is;
 - which window name it owns;
 - where the current plan and ledger are;
-- how to claim / finish a VAD task;
+- how to execute an assigned dispatch packet and return a result envelope;
 - when to stop and report back.
 
 The child still owns its repository. It can inspect code, implement changes, run tests, and even use Codex sub-agents inside its own boundary. Total control accepts only the unified evidence it returns.
 
-## Visible Automation Dispatch
+## Codex Automation Closed Loop
 
-Visible Automation Dispatch (VAD) lets the controller wake real Codex windows with heartbeat automations while keeping every step visible.
+Codex Automation Closed Loop lets the controller wake real Codex windows with heartbeat automations while keeping planning and acceptance in total control.
 
-The script layer manages local state:
+The script layer manages explicit packets and envelopes:
 
 ```sh
-node scripts/visible-dispatch.mjs mode --enable --write
-node scripts/visible-dispatch.mjs preflight --from-plan --json
-node scripts/visible-dispatch.mjs enqueue --from-plan --group <group> --return-policy controller-last --write
-node scripts/visible-dispatch.mjs arm-batch --group <group> --json
-node scripts/visible-dispatch.mjs post-run-audit --json
+node scripts/workspace-control.mjs loop register-thread --window <window> --thread-id <realThreadId> --write --json
+node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --control-plan <plan> --objective "<objective>" --prompt-file <promptFile> --write --json
+node scripts/workspace-control.mjs loop build-delivery --packet-file <packetFile> --require-thread --write --json
+node scripts/workspace-control.mjs loop submit-result --target-window <window> --task-id <taskId> --status completed --evidence-ref <ref> --write --json
+node scripts/workspace-control.mjs loop review-results --group <group> --json
 ```
 
-The script does not call Codex automation APIs by itself. It prepares payloads. A Codex controller window creates the heartbeat, records the returned automation id, then waits for child windows to claim, finish, and backfill.
+The script does not call Codex automation APIs by itself. It prepares delivery envelopes. A Codex controller window or delivery adapter creates the heartbeat from the envelope, then the target window reports a `TargetResultEnvelope`.
 
-VAD is designed for long unattended runs that remain interruptible. If a developer is present, their manual correction, code edit, or scope decision takes priority over the next automated hop. If the Mac is left alone, a dispatch group can return to total control after the last child window finishes; total control then reviews the raw evidence, accepts, blocks, requests more evidence, self-tests, creates the next wave, or dispatches a new group. The loop continues only while the current plan, repository boundaries, real thread ids, and evidence gates remain valid.
+The loop is designed for long unattended runs that remain interruptible. If a developer is present, their manual correction, code edit, or scope decision takes priority over the next automated hop. If the Mac is left alone, total control can review result envelopes, pull raw evidence, accept or reject it, create the next task package, and dispatch again until the user goal is done, a hard gate appears, or there is no eligible TODO left.
 
-On macOS, VAD can keep the machine awake while unattended mode is enabled. The current implementation uses a local watcher that owns `caffeinate`, so `mode --disable` closes automation and releases the keep-awake process through a local stop marker instead of relying on fragile cross-command `kill`.
+On macOS, keep-awake is delivery support, not task logic. If an installation enables it, failure to start or stop keep-awake is reported as an automation readiness risk rather than hidden behind task status.
 
 ## Daily Use
 
@@ -155,13 +155,13 @@ Start with the active control surface:
 
 ```sh
 node scripts/workspace-control.mjs status
-node scripts/visible-dispatch.mjs status --json
+node scripts/workspace-control.mjs loop status --json
 node scripts/verify-control-center.mjs --require-task-packages --with-script-tests
 ```
 
 For ordinary manual dispatch, the controller writes one prompt for all windows: read the parent `AGENTS.md`, read the current plan, read your own repository `AGENTS.md`, declare your window identity, do only the task assigned to your window, and backfill evidence.
 
-For unattended work, turn on VAD only when the current plan explicitly allows it. Turning it on does not make every conversation automatic; it only authorizes the current plan's target fan-out and finish-chain behavior. Manual developer input always outranks the next automated dispatch.
+For unattended work, use Codex Automation Closed Loop only when the current plan explicitly allows it. Turning it on does not make every conversation automatic; it only authorizes the current plan's target fan-out, result review, and next-wave decisions. Manual developer input always outranks the next automated dispatch.
 
 ## Repository Layout
 
@@ -170,9 +170,9 @@ For unattended work, turn on VAD only when the current plan explicitly allows it
 | `AGENTS.md` | Source total-control instructions, unpacked to the parent workspace root. |
 | `workspace.config.json` | Generic window names, repository paths, role labels, and script defaults. |
 | `.workspace-active/` | Ignored current control surface: current plans, TODOs, test exchange, design inbox. |
-| `.workspace-local/` | Ignored local runtime: thread ids, VAD queue/state, local config override. |
+| `.workspace-local/` | Ignored local runtime: thread ids, automation loop state, local config override. |
 | `../workspace-ledger/` | Project-specific long-term records outside the generic repository. |
-| `scripts/` | Installation, validation, ledger, VAD, and control helper scripts. |
+| `scripts/` | Installation, validation, ledger, automation, and control helper scripts. |
 | `skills/` | Operational manuals for total control, target windows, testing, ledgers, and automation. |
 | `templates/` | Minimal skeletons for plans, task packages, design handoff, tests, and confirmations. |
 

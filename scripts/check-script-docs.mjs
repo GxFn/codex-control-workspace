@@ -46,12 +46,7 @@ function referencedScriptNames(content) {
   return names;
 }
 
-const allowedProcessExitLines = new Map([
-  // The keep-awake worker is an explicit long-lived child process. It exits
-  // only after stopping its own child process, so direct process.exit is scoped
-  // to that worker path rather than normal automation CLI output.
-  ["visible-dispatch.mjs", [/process\.exit\(code\)/]],
-]);
+const allowedProcessExitLines = new Map();
 
 function processExitIssues(scriptName, content) {
   const allowed = allowedProcessExitLines.get(scriptName) ?? [];

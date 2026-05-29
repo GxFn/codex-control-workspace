@@ -20,11 +20,10 @@ Node CLI exit policy:
 
 - Prefer setting `process.exitCode` and letting the event loop drain instead
   of calling `process.exit()` after printing important stdout / stderr.
-- Reserve direct `process.exit()` for explicit worker processes after cleanup,
-  or legacy scripts that do not emit automation-critical output.
-- `check-script-docs.mjs` enforces this policy. Direct `process.exit()` is
-  currently allowed only for the `visible-dispatch.mjs` keep-awake worker exit
-  path after it stops its owned child process.
+- Reserve direct `process.exit()` for explicit worker processes after cleanup.
+- `check-script-docs.mjs` enforces this policy. Normal CLI scripts must use
+  `process.exitCode` and controlled returns so Codex can continue after output
+  has flushed.
 - Long-running background helpers must avoid holding the short-lived CLI open:
   spawn them with ignored stdio, detach only when they intentionally outlive
   the command, call `unref()`, and provide a local stop marker or equivalent
@@ -86,9 +85,19 @@ Current scripts:
 
 - `workspace-control.mjs`: command-style aggregator for common control-center
   workflows. It maps friendly subcommands such as `status`, `verify`,
-  `sync`, `dispatch`, `design`, `runtime`, `install`, `scripts`, `vad`, and `pipeline`
+  `sync`, `dispatch`, `design`, `runtime`, `install`, `scripts`, `loop`, and
+  `pipeline`
   onto the existing workspace scripts without replacing their dry-run / write
   gates. Use `--print` to inspect the exact commands before running them.
+- `codex-automation-loop.mjs`: new CodexAutomationClosedLoop contract
+  surface. It creates explicit controller dispatch packets, turns a packet
+  into a delivery envelope, records target result envelopes, reviews whether a
+  dispatch group is ready for total-control evidence pull, stores local thread
+  registrations under `.workspace-local/codex-automation-loop/`, and writes an
+  explicit stop marker. It does not parse current plans, decide sendable
+  windows, claim target work, create Codex automations, or accept evidence.
+  Total control owns planning and review, delivery adapters consume envelopes,
+  and target windows return result envelopes.
 - `control-workspace-install.mjs`: sibling-directory installation helper for
   GitHub-distributed control workspaces. It discovers repositories next to the
   control repo, writes user-confirmed `workspace.config.json` repository scope,
@@ -103,7 +112,7 @@ Current scripts:
   operation policy, test handoff template, and external alignment notes where
   applicable. `write-agents` refreshes the managed child access-card block with
   the parent `AGENTS.md`, active workspace index/status, current plan directory,
-  window ledger, and VAD claim/finish boundary; it intentionally avoids
+  window ledger, and automation execution boundary; it intentionally avoids
   repeating each repository's own stop card. By default
   it writes only `managedAgents` repositories, while `--include-unmanaged`
   can explicitly include Design/Test windows and still skips the protected real
@@ -115,45 +124,6 @@ Current scripts:
   `CODEX_CONTROL_WORKSPACE_CONFIG` is provided. Use the ignored local config for
   one installation's concrete window names without committing project-specific
   scope to the generic repository.
-- `visible-dispatch.mjs`: local state manager for Visible Automation Dispatch.
-  It stores mode, window registry, queue, groups, and automation-run metadata
-  under ignored `.workspace-local/visible-dispatch/`; prints heartbeat payloads
-  for Codex automation tools using a manual-prompt-like target message plus a
-  short automation supplement; exposes `init`, `start-plan --write --json`,
-  `resume-plan --write --json`, and `stop-plan --write --json` as the named
-  automation lifecycle commands. `init` prepares local runtime files without
-  dispatching, `start-plan` is the first launch for a current plan,
-  `resume-plan` is the normal continuation after a controller return or manual
-  interruption, and `stop-plan` closes future finish-chain jumps and
-  keep-awake. The launch / resume fast paths enable mode, enqueue the current
-  plan only when needed, and return either heartbeat payloads or a clear wait /
-  review / attention decision; adds a small default `arm-batch` create-time
-  stagger so multiple heartbeat automations are not all created in the same
-  moment, with `--stagger-seconds` / `--no-stagger` reserved for explicit
-  scheduling tests; and exposes mode, preflight, enqueue, arm, arm-batch,
-  claim, finish, accept, block, record-stop, record-return, cleanup, prune, and
-  controller classification commands, plus `audit-automation` for local
-  compliance checks when a normal chain reports attention, stale state, or
-  off-plan Codex automations. Target and controller heartbeat automations are disposable
-  wakeups: after receipt, the Codex window deletes the app automation and uses
-  `record-stop` locally so the same heartbeat cannot interrupt later. Target
-  wakeups are consumed before claim / finish, not cleaned up at the end. The
-  controller-return prompt is generated as the same manual-prompt-like
-  total-control workflow plus a short automation supplement; prompt first lines
-  are task-oriented (`继续当前窗口任务` / `继续总控验收`) so the Codex UI shows the
-  real work before the automation mechanism. Target windows should use the
-  printed payload verbatim instead of hand-writing old return prompts.
-  `controller-tick --compact` gives a short machine-readable status
-  for total-control returns; `post-run-audit` verifies that an ended run is
-  really disabled, has no live local automation runs, no send-eligible windows,
-  no non-terminal dispatch tasks, and no stale current-status automation text.
-  `prune-history --include-current-accepted` is available after acceptance /
-  archive review to clean accepted current-plan runtime noise explicitly. The
-  script never calls Codex automation APIs, accepts evidence, selects TODOs, or
-  writes product repositories. Use
-  `skills/dev/control-workspace-governance/references/visible-automation-dispatch.md`
-  for the operating map and `skills/dev/visible-automation-dispatch-*` for
-  heartbeat role rules.
 - `collect-repo-status.mjs`: summarizes branch, HEAD, dirty state,
   upstream, ahead / behind counts, untracked files, and latest commit for each
   workspace child repository.
@@ -167,7 +137,7 @@ Current scripts:
   root-level short-term paths.
 - `check-dispatch-coverage.mjs`: verifies that the current control plan covers
   every expected window, that the declared copyable prompt send list matches
-  task statuses (`待启动`, `执行中`, or `已 arm`), and that sendable prompts
+  task statuses (`待启动`, `执行中`, or `已投递`), and that sendable prompts
   require reading `AGENTS.md` plus an explicit window / repository positioning
   statement. It also fails overlong copyable prompts so task details stay in
   task packages and window rules. Nonstandard extra windows are allowed when
@@ -182,7 +152,7 @@ Current scripts:
   total control cannot self-test, the real scenario dependency, the exact
   question under test, object / window / thread / project boundaries, success /
   failure inference limits, and stop / no-start conditions. Explicit non-test
-  thread-registry or Visible Automation Dispatch smoke rows are allowed only
+  thread-registry or Codex Automation Closed Loop smoke rows are allowed only
   when the current plan says no test handoff, no real-project validation, and
   local-only runtime evidence.
 - `check-todo-board.mjs`: verifies that plans using the TODO submode contain a
@@ -291,7 +261,7 @@ Workspace script tests:
 
 ```bash
 node scripts/check-script-docs.mjs
-node --test scripts/collect-repo-status.test.mjs scripts/check-decision-preflight.test.mjs scripts/check-dispatch-coverage.test.mjs scripts/check-script-docs.test.mjs scripts/check-test-boundary.test.mjs scripts/control-workspace-install.test.mjs scripts/sync-current-plan.test.mjs scripts/visible-dispatch.test.mjs scripts/workspace-control.test.mjs
+node --test scripts/codex-automation-loop.test.mjs scripts/collect-repo-status.test.mjs scripts/check-decision-preflight.test.mjs scripts/check-dispatch-coverage.test.mjs scripts/check-script-docs.test.mjs scripts/check-test-boundary.test.mjs scripts/control-workspace-install.test.mjs scripts/sync-current-plan.test.mjs scripts/workspace-control.test.mjs
 node scripts/workspace-control.mjs scripts --tests
 node scripts/verify-control-center.mjs --with-script-tests
 ```
@@ -330,17 +300,16 @@ node scripts/check-runtime-residue.mjs
 node scripts/verify-control-center.mjs --with-runtime
 ```
 
-Visible Automation Dispatch local state:
+Codex Automation Closed Loop contracts:
 
 ```bash
-node scripts/workspace-control.mjs vad init --write --json
-node scripts/workspace-control.mjs vad start-plan --write --json
-node scripts/workspace-control.mjs vad resume-plan --write --json
-node scripts/workspace-control.mjs vad status --json
-node scripts/workspace-control.mjs vad controller --compact --json
-node scripts/workspace-control.mjs vad audit --automation-id <automationId> --json
-node scripts/workspace-control.mjs vad post-run-audit --json
-node scripts/workspace-control.mjs vad stop-plan --write --reason "manual stop"
+node scripts/workspace-control.mjs loop status --json
+node scripts/workspace-control.mjs loop register-thread --window <window> --thread-id <realThreadId> --write --json
+node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --control-plan <plan> --objective "<objective>" --prompt-file <promptFile> --write --json
+node scripts/workspace-control.mjs loop build-delivery --packet-file <packetFile> --require-thread --write --json
+node scripts/workspace-control.mjs loop submit-result --target-window <window> --task-id <taskId> --status completed --evidence-ref <ref> --write --json
+node scripts/workspace-control.mjs loop review-results --group <group> --json
+node scripts/workspace-control.mjs loop stop-loop --reason "manual stop" --write --json
 ```
 
 Design handoff inbox refresh:

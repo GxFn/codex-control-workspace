@@ -98,12 +98,12 @@ function parseDispatchRows(planContent) {
 function isNonTestTargetTask(row, planContent) {
   const planSignals = `${row.task}\n${sectionContent(planContent, "目标判断")}\n${sectionContent(planContent, "窗口分派")}\n${sectionContent(planContent, "可复制提示词")}\n${sectionContent(planContent, "测试交接")}`;
   const isThreadRegistry = /thread id|线程/.test(row.task) && /登记|回填|收集|registry/i.test(row.task);
-  const isVadSmoke =
-    /Visible Automation Dispatch|visible dispatch|VAD|自动化|heartbeat|finish-chain|claim|smoke|冒烟/i.test(
+  const isAutomationSmoke =
+    /Codex Automation Closed Loop|codex automation|自动化|heartbeat|delivery envelope|TargetResultEnvelope|smoke|冒烟/i.test(
       planSignals,
-    ) && /smoke|冒烟|heartbeat|自动化|可见窗口|finish-chain|claim|回填/i.test(row.task);
+    ) && /smoke|冒烟|heartbeat|自动化|可见窗口|TargetResultEnvelope|回填/i.test(row.task);
   const excludesTesting = /非测试型|不做测试交接|不运行真实项目测试|不运行.*测试/.test(planSignals);
-  return (isThreadRegistry || isVadSmoke) && excludesTesting;
+  return (isThreadRegistry || isAutomationSmoke) && excludesTesting;
 }
 
 function testBlocks(content) {

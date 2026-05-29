@@ -39,7 +39,7 @@ Use this bridge when:
 - The task needs before/after scorecards, useful-unit metrics, stage loss, trace/artifact/source-ref linkage, or a `blocked-by-observability-gap` decision.
 - The workspace is deciding whether to run a broad smoke, split a node, add observability, or stop at a current-node boundary.
 
-Do not use PCV as a generic replacement for normal workspace validation, TODO bookkeeping, VAD automation, or final acceptance. PCV is a chain-planning and node-validation tool; total-control judgment remains in workspace `AGENTS.md`.
+Do not use PCV as a generic replacement for normal workspace validation, TODO bookkeeping, Codex Automation Closed Loop delivery, or final acceptance. PCV is a chain-planning and node-validation tool; total-control judgment remains in workspace `AGENTS.md`.
 
 Workspace owns the state machine. PCV node state must be recorded inside the Workspace plan as canonical Workspace status plus PCV evidence labels; do not create a separate PCV status authority in ControlWorkspace.
 
@@ -82,7 +82,7 @@ The overlay is a coverage oracle, not proof. If Alembic source boundaries disagr
 
 ## Boundaries
 
-- Hard anti-failure rules, repository boundaries, AlembicTest usage limits, VAD automation limits, and acceptance rules stay in workspace `AGENTS.md`.
+- Hard anti-failure rules, repository boundaries, AlembicTest usage limits, Codex automation limits, and acceptance rules stay in workspace `AGENTS.md`.
 - PCV is not a default dispatch window. Treat it as a skill source unless a control plan explicitly assigns work to the independent PCV repository.
 - Do not copy canonical PCV references into ControlWorkspace to make local edits easier. Patch the PCV repo when PCV itself needs changes.
 - Do not run full cold-start / rescan just to fill a PCV plan. If the current node cannot be isolated, first add or request observability / dry-run / no-delivery support.

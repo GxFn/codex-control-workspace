@@ -4,12 +4,12 @@
 
 **重要**：本目录不是产品源码仓库，也不是用户真实业务项目。它只保留测试单、测试策略、验证证据链接、复现说明和必要的测试辅助资产。
 
-## Visible Automation Dispatch
+## Codex Automation Closed Loop
 
-- 如果本窗口通过 ControlWorkspace 的 Visible Automation Dispatch heartbeat 唤醒，先读取 workspace `AGENTS.md`、当前总控文档、`skills/dev/visible-automation-dispatch-target/SKILL.md` 和本文件。
-- 只允许 claim / finish `TestWindow` 目标任务；不得代领、处理、验证或总结其它窗口任务。
-- VAD smoke 中的 `TestWindow` 可以只是非测试型可见窗口目标；除非当前总控文档或测试单明确要求真实测试，否则不得运行真实项目测试、cold-start、Dashboard 手动观察或回归验证。
-- 下一跳 heartbeat 只是投递信封；只有 finish JSON 明确 `handoffPolicy=target-courier` 且 `courierAllowed=true` 时，才可按 payload 创建下一条 automation 并 record-arm。不得 claim / finish 下一窗口任务。
+- 如果本窗口通过 ControlWorkspace 的 automation heartbeat 唤醒，先读取 workspace `AGENTS.md`、当前总控文档、`skills/dev/codex-automation-target/SKILL.md` 和本文件。
+- 只执行 dispatch packet 指定给 `TestWindow` 的任务，并返回 `TargetResultEnvelope`；不得代领、处理、验证或总结其它窗口任务。
+- 自动化 smoke 中的 `TestWindow` 可以只是非测试型可见窗口目标；除非当前总控文档或测试单明确要求真实测试，否则不得运行真实项目测试、cold-start、Dashboard 手动观察或回归验证。
+- 子窗口默认不创建下一跳 heartbeat；回跳、补证、重派或下一阶段都由总控 review 后决定。
 
 ## 窗口定位
 

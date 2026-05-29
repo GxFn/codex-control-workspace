@@ -11,13 +11,15 @@ Current development skills:
 
 - `control-workspace-governance/`: total-control procedures and references for
   TODO, dispatch, testing, workspace ledger / document-surface, script pipeline,
-  VAD operation, phased migration, and control architecture work. Hard
+  automation operation, phased migration, and control architecture work. Hard
   anti-failure rules remain in workspace `AGENTS.md`.
-- `visible-automation-dispatch-target/`: target-window rules for real VAD
-  heartbeat claim / finish / courier handoff, with strict role boundaries.
-- `visible-automation-dispatch-controller/`: total-control rules for VAD
-  controller-return heartbeats, unattended acceptance / retest / next-wave
-  decisions, and avoiding small-task drift while pursuing the approved goal.
+- `codex-automation-controller/`: total-control rules for the new
+  CodexAutomationClosedLoop controller side: create dispatch packets, build
+  delivery envelopes, review result envelopes, pull raw evidence, and decide
+  next wave / stop.
+- `codex-automation-target/`: target-window rules for the new
+  CodexAutomationClosedLoop target side: consume one-shot wakeups, execute only
+  the assigned dispatch packet, and return `TargetResultEnvelope`.
 - `progressive-chain-validation/`: workspace bridge into the external PCV
   repository. It provides a lightweight ControlWorkspace `SKILL.md` while
   keeping canonical PCV method content in the independent source checkout.

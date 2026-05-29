@@ -173,13 +173,15 @@ git log --oneline -8
 发送给：无
 
 ```text
-先读取 AGENTS.md、.workspace-active/workspace/index.md、.workspace-active/workspace/current/<当前总控文档名>.md，以及你所在窗口/目标仓库的 AGENTS.md。
+继续当前总控任务：<计划 / wave 名>。
 
-先明确声明当前窗口定位和本轮仓库职责。
+先读：AGENTS.md、.workspace-active/workspace/index.md、.workspace-active/workspace/current/<当前总控文档名>.md，以及本窗口/目标仓库 AGENTS.md。
 
-再按照文档领取并完成分配给你所在窗口的任务。
+定位：声明当前窗口和本轮仓库职责。
 
-完成后回填：完成范围、提交 hash、验证命令、验证结果、遗留风险和下一步建议。
+领取：按当前计划领取分配给本窗口的任务。
+
+完成后按当前计划回填证据、边界、风险和下一步建议。
 ```
 
 ## 测试交接

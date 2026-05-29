@@ -39,7 +39,7 @@ Keep active dispatch rows in the current plan. This index should remain small.
 
 - `待启动`: ready to dispatch.
 - `执行中`: currently being handled by the named window.
-- `已 arm`: heartbeat payload has been armed.
+- `已投递`: delivery envelope has been delivered and target result is pending.
 - `待验收`: waiting for total-control review.
 - `阻塞`: blocked by evidence, thread id, dependency, or user confirmation.
 - `观察中`: visible but not currently sendable.
