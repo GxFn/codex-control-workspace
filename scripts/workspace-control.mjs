@@ -22,6 +22,7 @@ const testScripts = [
   "scripts/check-script-docs.test.mjs",
   "scripts/check-test-boundary.test.mjs",
   "scripts/control-workspace-install.test.mjs",
+  "scripts/import-design-handoffs.test.mjs",
   "scripts/sync-current-plan.test.mjs",
   "scripts/workspace-control.test.mjs",
 ];
@@ -53,19 +54,15 @@ Common examples:
   node scripts/workspace-control.mjs sync --write --verify --dispatch
   node scripts/workspace-control.mjs design --id PCVM-2026-05-25 --json
   node scripts/workspace-control.mjs install status --json
-  node scripts/workspace-control.mjs install prompts --window BaseWindow
   node scripts/workspace-control.mjs loop status --json
-  node scripts/workspace-control.mjs loop register-thread --window BaseWindow --thread-id <realThreadId> --write --json
-  node scripts/workspace-control.mjs loop create-dispatch --target-window BaseWindow --task-id TASK-1 --control-plan .workspace-active/workspace/current/plan.md --objective "Do the task" --prompt-file /tmp/prompt.md --write --json
-  node scripts/workspace-control.mjs loop build-delivery --packet-file <packetFile> --require-thread --write --json
-  node scripts/workspace-control.mjs loop review-results --group <group> --json
-  node scripts/workspace-control.mjs loop stop-loop --reason "manual stop" --write --json
   node scripts/workspace-control.mjs pipeline --json
 
 Safety:
   This script only orchestrates existing workspace scripts. Write-capable flows
   still require explicit flags such as --write or --apply on the underlying
-  script. Use --print to inspect the exact commands before running them.
+  script. Use --print to inspect the exact commands before running them. See
+  skills/dev/control-workspace-governance/references/script-pipeline.md for
+  the full command catalog.
 `.trim();
 
 class CliExit extends Error {}

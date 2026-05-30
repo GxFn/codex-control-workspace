@@ -117,8 +117,11 @@ Current scripts:
   it writes only `managedAgents` repositories, while `--include-unmanaged`
   can explicitly include Design/Test windows and still skips the protected real
   project unless `--include-real-project` is passed. It defaults to dry-run and
-  refuses to write outside the configured parent workspace. Use `discover`, `status`, `configure`,
-  `sync-root-agents`, `prompts`, `write-agents`, and `sync-templates`.
+  refuses to write outside the configured parent workspace. `access-profiles`
+  prints a read-only ChildWindowAccessProfile view that compares
+  `workspace.config.json` with each child AGENTS managed block. Use
+  `discover`, `status`, `configure`, `sync-root-agents`, `prompts`,
+  `write-agents`, `access-profiles`, and `sync-templates`.
   Runtime scripts read `.workspace-local/workspace.config.json` first when it
   exists, then tracked `workspace.config.json`, unless `--config` or
   `CODEX_CONTROL_WORKSPACE_CONFIG` is provided. Use the ignored local config for
@@ -213,20 +216,19 @@ Current scripts:
 - `archive-global-todo-board.mjs`: dry-run by default; moves completed global
   TODO rows and old sync records from `.workspace-active/workspace/current/global-todo-board.md` to
   `../workspace-ledger/workspace/archive/YYYY-MM/global-todo/`, keeping the active board small.
+- `import-design-handoffs.mjs`: imports the configured `DesignWindow` handoff
+  board into the active Design inbox and validates ready rows. It supports the
+  forward-compatible enum columns `用户确认状态`, `主线关系状态`, and `优先级枚举`
+  while keeping old boards that only have `用户确认`, `当前主线关系`, and `优先级`
+  readable. If enum values conflict with prose, the script fails closed so
+  total control can review the handoff instead of silently accepting it. Use
+  `--id <Design Key>` to focus validation on one Design entry and verify its
+  linked docs expose the same `Design Key` metadata.
 - `generate-archive-topic-summaries.mjs`: dry-run by default; creates or
   refreshes `index.md` summary files for the archive root, month folders, and
   every `../workspace-ledger/workspace/archive/YYYY-MM/<topic>/` folder, preserving historical
   body files as evidence snapshots while giving each archive folder a readable
   map.
-- `import-design-handoffs.mjs`: reads the configured Design handoff board
-  (`.workspace-active/workspace/current/design-handoff-board.md` internally, or an
-  external `DesignWindow/docs/current/workspace-handoff-board.md`), validates ready
-  handoff rows, and with `--write` refreshes
-  `.workspace-active/workspace/current/design-handoff-inbox.md`. It does not update global
-  TODOs, current plans, or dispatch windows; the control window still decides
-  whether and when to accept each Design handoff. Use `--id <Design Key>` to
-  focus validation on one Design entry and verify its linked docs expose the
-  same `Design Key` metadata.
 - `run-workspace-pipeline-e2e.mjs`: creates a temporary fixture workspace and
   runs the complete governance-script chain from Design handoff intake through
   current-plan sync, dispatch / TODO / task-package verification, simulated
@@ -234,121 +236,40 @@ Current scripts:
   post-archive verification. It never writes product repositories. Use `--keep`
   to retain the fixture on success and `--json` for machine output.
 
-Suggested pre-acceptance sequence:
-
-```bash
-node scripts/workspace-control.mjs verify
-node scripts/verify-control-center.mjs
-```
-
-Dispatch plan with TODO and task packages:
-
-```bash
-node scripts/workspace-control.mjs verify --dispatch
-node scripts/verify-control-center.mjs --require-todo --require-task-packages
-```
-
-Sync current plan metadata into repeated entry documents:
-
-```bash
-node scripts/workspace-control.mjs sync --write --verify --dispatch
-node scripts/sync-current-plan.mjs --check
-node scripts/sync-current-plan.mjs --write
-node scripts/verify-control-center.mjs --require-todo --require-task-packages
-```
-
 Workspace script tests:
 
-```bash
-node scripts/check-script-docs.mjs
-node --test scripts/codex-automation-loop.test.mjs scripts/collect-repo-status.test.mjs scripts/check-decision-preflight.test.mjs scripts/check-dispatch-coverage.test.mjs scripts/check-script-docs.test.mjs scripts/check-test-boundary.test.mjs scripts/control-workspace-install.test.mjs scripts/sync-current-plan.test.mjs scripts/workspace-control.test.mjs
-node scripts/workspace-control.mjs scripts --tests
-node scripts/verify-control-center.mjs --with-script-tests
-```
+Run them through `node scripts/workspace-control.mjs scripts --tests`. The
+current set is `codex-automation-loop.test.mjs`,
+`collect-repo-status.test.mjs`, `check-decision-preflight.test.mjs`,
+`check-dispatch-coverage.test.mjs`, `check-script-docs.test.mjs`,
+`check-test-boundary.test.mjs`, `control-workspace-install.test.mjs`,
+`import-design-handoffs.test.mjs`, `sync-current-plan.test.mjs`, and
+`workspace-control.test.mjs`.
 
-Sibling install / adoption flow:
+## Common Routes
 
-```bash
-node scripts/control-workspace-install.mjs discover --json
-node scripts/control-workspace-install.mjs status --json
-node scripts/workspace-control.mjs status --json
-node scripts/control-workspace-install.mjs configure --repo BaseWindow=../BaseWindow --repo PluginWindow=../PluginWindow --internal-design --internal-test --write
-node scripts/control-workspace-install.mjs sync-templates --all --write
-node scripts/control-workspace-install.mjs prompts
-node scripts/control-workspace-install.mjs write-agents --all --write
-node scripts/control-workspace-install.mjs write-agents --all --include-unmanaged --write
-node scripts/workspace-control.mjs install status --json
-```
+Use `workspace-control.mjs` as the short entrypoint for ordinary work, then
+fall back to the named script only when a narrower check is needed. For the full
+command catalog and selection table, read
+`skills/dev/control-workspace-governance/references/script-pipeline.md`.
 
-TODO scheduling plan check:
+| Need | Command |
+| --- | --- |
+| Current repo / plan / dispatch health | `node scripts/workspace-control.mjs status` |
+| Full control-center verification | `node scripts/workspace-control.mjs verify` |
+| Dispatch plan with TODO and task-package gates | `node scripts/workspace-control.mjs verify --dispatch` |
+| Sync current plan mirrors and verify | `node scripts/workspace-control.mjs sync --write --verify` |
+| Design handoff intake | `node scripts/workspace-control.mjs design --id <DESIGN-KEY> --json` |
+| Script docs plus script tests | `node scripts/workspace-control.mjs scripts --tests` |
+| Runtime residue read-only check | `node scripts/workspace-control.mjs runtime` |
+| Codex Automation Closed Loop contract commands | `node scripts/workspace-control.mjs loop <subcommand> ...` |
+| Sibling install / child AGENTS scope writes | `node scripts/workspace-control.mjs install <subcommand> ...` |
+| Child window access profile view | `node scripts/workspace-control.mjs install access-profiles --json` |
+| Full governance fixture pipeline | `node scripts/workspace-control.mjs pipeline` |
 
-```bash
-node scripts/check-todo-board.mjs --require
-```
-
-Task package dispatch check:
-
-```bash
-node scripts/check-task-packages.mjs --require
-```
-
-Runtime residue check:
-
-```bash
-node scripts/workspace-control.mjs runtime
-node scripts/check-runtime-residue.mjs
-node scripts/verify-control-center.mjs --with-runtime
-```
-
-Codex Automation Closed Loop contracts:
-
-```bash
-node scripts/workspace-control.mjs loop status --json
-node scripts/workspace-control.mjs loop register-thread --window <window> --thread-id <realThreadId> --write --json
-node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --control-plan <plan> --objective "<objective>" --write --json
-node scripts/workspace-control.mjs loop build-delivery --packet-file <packetFile> --require-thread --write --json
-node scripts/workspace-control.mjs loop submit-result --target-window <window> --task-id <taskId> --status completed --evidence-ref <ref> --write --json
-node scripts/workspace-control.mjs loop review-results --group <group> --json
-node scripts/workspace-control.mjs loop build-controller-return --group <group> --last-completed-target <window> --last-task-id <taskId> --control-plan <plan> --require-thread --include-thread-id --write --json
-node scripts/workspace-control.mjs loop stop-loop --reason "manual stop" --write --json
-```
-
-Design handoff inbox refresh:
-
-```bash
-node scripts/workspace-control.mjs design --write
-node scripts/import-design-handoffs.mjs --write
-node scripts/import-design-handoffs.mjs --id ARTIFACT-DRAWER-2026-05-25 --json
-```
-
-Full governance pipeline fixture:
-
-```bash
-node scripts/workspace-control.mjs pipeline
-node scripts/run-workspace-pipeline-e2e.mjs
-node scripts/run-workspace-pipeline-e2e.mjs --keep --json
-```
-
-Archive dry-run example:
-
-```bash
-node scripts/archive-workspace-docs.mjs --topic interface-boundary --file .workspace-active/workspace/current/example-completed-plan.md
-```
-
-Workspace archive cleanup sequence:
-
-```bash
-node scripts/archive-workspace-docs.mjs --topic example-topic --file .workspace-active/workspace/current/example-completed-plan.md --apply
-node scripts/compact-workspace-index.mjs --topic example-topic --match 'example-topic|EXAMPLE' --apply
-node scripts/archive-global-todo-board.mjs --apply
-node scripts/generate-archive-topic-summaries.mjs --apply
-```
-
-Index-only pruning example:
-
-```bash
-node scripts/archive-workspace-docs.mjs --prune-index-only --apply
-```
+Run write/apply commands only after the current plan or user request authorizes
+the write. Use `--print` on `workspace-control.mjs` when you want to inspect
+the underlying script calls before execution.
 
 Real-project test scripts, when an external `TestWindow` exists, live under
 that repository's `scripts/` directory so the control workspace root

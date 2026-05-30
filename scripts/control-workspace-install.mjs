@@ -520,6 +520,153 @@ function scopeBlock(context, repo) {
 ${AGENTS_END}`;
 }
 
+function scopeBlockContent(existing) {
+  const start = existing.indexOf(AGENTS_START);
+  const end = existing.indexOf(AGENTS_END);
+  if (start >= 0 && end > start) {
+    return existing.slice(start, end + AGENTS_END.length);
+  }
+  return "";
+}
+
+function expectedScopeCoordinates(context, repo) {
+  const absolutePath = repositoryAbsPath(context.controlRoot, repo);
+  const coordinate = {
+    controlWorkspace: slash(path.relative(absolutePath, context.controlRoot)) || ".",
+    windowName: repo.windowName,
+    parentAgents: relativePathFrom(absolutePath, path.join(context.parentRoot, "AGENTS.md")),
+    activeIndex: relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceIndexPath ?? ".workspace-active/workspace/index.md")),
+    activeStatus: relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceCurrentStatusPath ?? ".workspace-active/workspace/current/workspace-current-status.md")),
+    currentPlanDirectory: relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceCurrentDir ?? ".workspace-active/workspace/current")),
+    windowLedger: relativePathFrom(absolutePath, windowLedgerDirFor({
+      workspaceRoot: context.controlRoot,
+      config: context.config,
+      windowName: repo.windowName,
+    })),
+  };
+  if (repo.windowName === context.config.designWindow) {
+    coordinate.designHandoffBoard = relativePathFrom(
+      absolutePath,
+      resolveMaybeRelative(context.controlRoot, context.config.designHandoffBoard ?? ".workspace-active/workspace/current/design-handoff-board.md"),
+    );
+  }
+  if (repo.windowName === context.config.testWindow) {
+    coordinate.testExchange = relativePathFrom(
+      absolutePath,
+      resolveMaybeRelative(context.controlRoot, context.config.testExchangePath ?? ".workspace-active/workspace/current/test-exchange.md"),
+    );
+  }
+  return coordinate;
+}
+
+function coordinateChecks(block, coordinates) {
+  const checks = [
+    ["controlWorkspace", `- Control workspace: \`${coordinates.controlWorkspace}\``],
+    ["windowName", `- Window name: \`${coordinates.windowName}\``],
+    ["parentAgents", `- Parent workspace AGENTS: \`${coordinates.parentAgents}\``],
+    ["activeIndex", `- Active workspace index: \`${coordinates.activeIndex}\``],
+    ["activeStatus", `- Active workspace status: \`${coordinates.activeStatus}\``],
+    ["currentPlanDirectory", `- Current plan directory: \`${coordinates.currentPlanDirectory}\``],
+    ["windowLedger", `- Window ledger: \`${coordinates.windowLedger}\``],
+  ];
+  if (coordinates.designHandoffBoard) {
+    checks.push(["designHandoffBoard", `- Design handoff board: \`${coordinates.designHandoffBoard}\``]);
+  }
+  if (coordinates.testExchange) {
+    checks.push(["testExchange", `- Test exchange: \`${coordinates.testExchange}\``]);
+  }
+  return checks.map(([key, needle]) => ({
+    key,
+    expected: needle,
+    ok: block.includes(needle),
+  }));
+}
+
+function accessProfileFor(context, repo) {
+  const absolutePath = repositoryAbsPath(context.controlRoot, repo);
+  const agentsPath = path.join(absolutePath, "AGENTS.md");
+  const exists = existsSync(absolutePath) && statSync(absolutePath).isDirectory();
+  const hasAgents = existsSync(agentsPath);
+  const agents = hasAgents ? readFileSync(agentsPath, "utf8") : "";
+  const block = scopeBlockContent(agents);
+  const coordinates = expectedScopeCoordinates(context, repo);
+  const checks = coordinateChecks(block, coordinates);
+  const automationChecks = [
+    {
+      key: "targetResultEnvelope",
+      ok: block.includes("TargetResultEnvelope"),
+    },
+    {
+      key: "singleWindowDispatchPacket",
+      ok: block.includes(`只处理 \`${repo.windowName}\` 对应的 dispatch packet`),
+    },
+    {
+      key: "noTargetNextHop",
+      ok: block.includes("子窗口默认不创建目标窗口下一跳 heartbeat"),
+    },
+    {
+      key: "testWindowBoundary",
+      ok: block.includes("非 TestWindow 不得创建、处理或验证 TestWindow heartbeat"),
+    },
+    {
+      key: "threadIdLocalOnly",
+      ok: block.includes("Thread id 只能写入 control workspace 的本地 runtime"),
+    },
+  ];
+  const required = repo.managedAgents !== false;
+  const issues = [];
+  if (required && !exists) {
+    issues.push("managed repository directory missing");
+  }
+  if (required && !hasAgents) {
+    issues.push("managed repository AGENTS.md missing");
+  }
+  if (required && !block) {
+    issues.push("managed access card missing");
+  }
+  if (block) {
+    for (const check of [...checks, ...automationChecks]) {
+      if (!check.ok) {
+        issues.push(`access card check failed: ${check.key}`);
+      }
+    }
+  }
+  return {
+    windowName: repo.windowName,
+    path: repo.path,
+    role: repo.role,
+    mode: repo.mode,
+    managedAgents: repo.managedAgents,
+    required,
+    exists,
+    hasAgents,
+    hasManagedBlock: Boolean(block),
+    coordinates,
+    coordinateChecks: checks,
+    automationChecks,
+    ok: issues.length === 0,
+    issues,
+  };
+}
+
+function accessProfilesPayload() {
+  const context = commandContext();
+  const windowFilter = getValue("--window");
+  const includeRealProject = hasFlag("--include-real-project");
+  const repositories = normalizedRepositories(context.config)
+    .filter((repo) => includeRealProject || repo.windowName !== context.config.realProjectWindow)
+    .filter((repo) => !windowFilter || repo.windowName === windowFilter);
+  if (windowFilter && repositories.length === 0) {
+    fail(`No configured repository found for window: ${windowFilter}`);
+  }
+  const profiles = repositories.map((repo) => accessProfileFor(context, repo));
+  return {
+    ok: profiles.every((profile) => profile.ok || !profile.required),
+    command: "access-profiles",
+    profiles,
+  };
+}
+
 function removeScopeBlock(existing) {
   const start = existing.indexOf(AGENTS_START);
   const end = existing.indexOf(AGENTS_END);
@@ -685,8 +832,8 @@ This board is intentionally small. DesignWindow records completed requirement de
 
 ## Handoff 清单
 
-| ID | 状态 | 标题 | 原始计划 | 需求设计 | Handoff | 用户确认 | 当前主线关系 | 建议 TODO | 优先级 | 下一步 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| ID | 状态 | 标题 | 原始计划 | 需求设计 | Handoff | 用户确认状态 | 用户确认 | 主线关系状态 | 当前主线关系 | 建议 TODO | 优先级枚举 | 优先级 | 下一步 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 `;
 }
 
@@ -950,6 +1097,7 @@ function help() {
       prompts: "Print child-window prompts for confirming scope and refreshing AGENTS.md.",
       "sync-root-agents": "Unpack the control AGENTS.md into the parent workspace AGENTS.md so Codex auto-loads total-control rules at the outer workspace root.",
       "write-agents": "Append or refresh managed access-card blocks in configured child AGENTS.md files.",
+      "access-profiles": "Print a read-only ChildWindowAccessProfile view from workspace.config plus child AGENTS managed blocks.",
       "sync-templates": "Create missing internal Design/Test templates or minimal external alignment templates.",
       "ledger-paths": "Show project ledger directories for configured windows.",
     },
@@ -959,6 +1107,7 @@ function help() {
       "node scripts/control-workspace-install.mjs prompts --window BaseWindow",
       "node scripts/control-workspace-install.mjs sync-root-agents --write",
       "node scripts/control-workspace-install.mjs write-agents --all --write",
+      "node scripts/control-workspace-install.mjs access-profiles --json",
       "node scripts/control-workspace-install.mjs ledger-paths --json",
       "node scripts/control-workspace-install.mjs sync-templates --all --write",
     ],
@@ -995,6 +1144,9 @@ function main() {
       break;
     case "write-agents":
       printResult(writeAgentsPayload());
+      break;
+    case "access-profiles":
+      printResult(accessProfilesPayload());
       break;
     case "sync-root-agents":
       printResult(syncRootAgentsPayload());

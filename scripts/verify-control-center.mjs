@@ -93,6 +93,7 @@ if (withScriptTests) {
       "scripts/check-script-docs.test.mjs",
       "scripts/check-test-boundary.test.mjs",
       "scripts/control-workspace-install.test.mjs",
+      "scripts/import-design-handoffs.test.mjs",
       "scripts/sync-current-plan.test.mjs",
       "scripts/workspace-control.test.mjs",
     ],

@@ -158,6 +158,29 @@ test("write-agents is dry-run by default and writes managed access cards with --
   assert.match(pluginAgents, /Window name: `PluginWindow`/);
 });
 
+test("access-profiles reports managed child access-card coordinates and automation gates", () => {
+  const fixture = makeFixture();
+  let payload = runJson(fixture, ["access-profiles", "--window", "BaseWindow"]);
+  assert.equal(payload.command, "access-profiles");
+  assert.equal(payload.ok, false);
+  assert.deepEqual(payload.profiles[0].issues, [
+    "managed repository AGENTS.md missing",
+    "managed access card missing",
+  ]);
+
+  runJson(fixture, ["write-agents", "--window", "BaseWindow", "--write"]);
+  payload = runJson(fixture, ["access-profiles", "--window", "BaseWindow"]);
+  const profile = payload.profiles[0];
+  assert.equal(payload.ok, true);
+  assert.equal(profile.ok, true);
+  assert.equal(profile.windowName, "BaseWindow");
+  assert.equal(profile.coordinates.parentAgents, "../AGENTS.md");
+  assert.equal(profile.coordinates.activeIndex, "../codex-control-workspace/.workspace-active/workspace/index.md");
+  assert.equal(profile.coordinates.windowLedger, "../workspace-ledger/BaseWindow");
+  assert.equal(profile.coordinateChecks.every((check) => check.ok), true);
+  assert.equal(profile.automationChecks.every((check) => check.ok), true);
+});
+
 test("write-agents can explicitly include unmanaged Design/Test windows while skipping real projects", () => {
   const fixture = makeFixture();
   const design = path.join(fixture.parent, "DesignWindow");

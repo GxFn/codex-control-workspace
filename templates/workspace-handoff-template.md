@@ -31,6 +31,11 @@ Design Key：<READABLE-TOPIC-YYYY-MM-DD>
 
 ## 当前设计状态
 
+- 用户确认状态：`unconfirmed` / `confirmed` / `needs-confirmation` / `not-required` / `superseded`
+- 用户确认说明：
+- Handoff 状态：`draft` / `ready-for-workspace` / `accepted-by-workspace` / `needs-design` / `paused` / `archived` / `research` / `absorbed-by-codex-loop`
+- 主线关系状态：`none` / `todo-candidate` / `next-mainline` / `blocks-current` / `interrupts-current` / `after-current`
+- 优先级枚举：`P0` / `P1` / `P2` / `P3`
 - 原始计划确认状态：
 - 需求设计状态：
 - 代码事实状态：

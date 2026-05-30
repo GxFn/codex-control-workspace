@@ -28,7 +28,11 @@
 
 - 来源类型：用户直接需求 / DesignWindow handoff / workspace-signal / TODO 提升
 - 来源文档：
-- 用户确认状态：
+- 用户确认状态：`unconfirmed` / `confirmed` / `needs-confirmation` / `not-required` / `superseded`
+- 用户确认说明：
+- handoff 状态：`draft` / `ready-for-workspace` / `accepted-by-workspace` / `needs-design` / `paused` / `archived` / `research` / `absorbed-by-codex-loop`
+- 主线关系状态：`none` / `todo-candidate` / `next-mainline` / `blocks-current` / `interrupts-current` / `after-current`
+- 优先级枚举：`P0` / `P1` / `P2` / `P3`
 - 总控接收结论：
 - 是否需要目标阶段确认：
 - 是否需要代码实现依赖调研：

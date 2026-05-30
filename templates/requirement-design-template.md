@@ -12,10 +12,12 @@
 ## 原始计划书
 
 - 原始计划书：
-- 原始计划书确认状态：
+- 原始计划书确认状态：`unconfirmed` / `confirmed` / `needs-confirmation` / `not-required` / `superseded`
+- 原始计划书确认说明：
 - 用户确认时间：
 - DesignWindow 来源 signal / handoff（如有）：
-- Design 接收状态：无 / 已接收 / 需补证 / 待用户确认
+- Design 接收状态：`draft` / `ready-for-workspace` / `accepted-by-workspace` / `needs-design` / `paused` / `archived` / `research` / `absorbed-by-codex-loop`
+- 当前主线关系状态：`none` / `todo-candidate` / `next-mainline` / `blocks-current` / `interrupts-current` / `after-current`
 
 ## 用户需求
 

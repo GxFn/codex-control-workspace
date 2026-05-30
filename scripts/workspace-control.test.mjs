@@ -38,6 +38,15 @@ test("--print design preserves focused handoff validation arguments", () => {
   assert.match(result.stdout, /node scripts\/import-design-handoffs\.mjs --json --id PCVM-2026-05-25/);
 });
 
+test("--print scripts --tests includes script validation and all script tests", () => {
+  const result = run(["--print", "scripts", "--tests"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /node scripts\/check-script-docs\.mjs/);
+  assert.match(result.stdout, /node --test scripts\/codex-automation-loop\.test\.mjs/);
+  assert.match(result.stdout, /scripts\/import-design-handoffs\.test\.mjs/);
+  assert.match(result.stdout, /scripts\/workspace-control\.test\.mjs/);
+});
+
 test("--print loop maps to codex automation closed-loop script", () => {
   const result = run(["--print", "loop", "status", "--json"]);
   assert.equal(result.status, 0, result.stderr);
