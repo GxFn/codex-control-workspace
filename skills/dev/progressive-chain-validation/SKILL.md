@@ -1,11 +1,20 @@
 ---
 name: workspace-progressive-chain-validation
-description: Use when ControlWorkspace needs to link into the external Progressive Chain Validation (PCV) canonical source for source-derived chain plans, node-level cold-start/rescan baselines, before/after metrics, scorecards, or PCV-guided workflow repair.
+description: Use when ControlWorkspace needs to link into the external Progressive Chain Validation (PCV) canonical source or the local PCVM workspace for source-derived chain plans, scoped rounds, node-level cold-start/rescan baselines, before/after metrics, scorecards, or PCV-guided workflow repair.
 ---
 
 # Workspace Progressive Chain Validation Bridge
 
-This is the ControlWorkspace bridge into the external PCV canonical source. It does not redefine PCV and does not replace the workspace `AGENTS.md` stop card.
+This is the ControlWorkspace bridge into the external PCV canonical source and the local PCVM artifact workspace. It does not redefine PCV and does not replace the workspace `AGENTS.md` stop card.
+
+For PCVM flow control, load these first:
+
+```text
+PCVM/skills/pcvm-flow-controller/SKILL.md
+PCVM/config/pcvm-flow-control.json
+```
+
+The old route of treating `.workspace-active/workspace/current/` as the PCVM state machine is retired unless a user explicitly asks to update total-control current documents. PCVM run state, scoped round evidence, engineering repair packages, and AI local-chain placeholders live under `PCVM/`.
 
 ## Source Of Truth
 
@@ -41,21 +50,23 @@ Use this bridge when:
 
 Do not use PCV as a generic replacement for normal workspace validation, TODO bookkeeping, Codex Automation Closed Loop delivery, or final acceptance. PCV is a chain-planning and node-validation tool; total-control judgment remains in workspace `AGENTS.md`.
 
-Workspace owns the state machine. PCV node state must be recorded inside the Workspace plan as canonical Workspace status plus PCV evidence labels; do not create a separate PCV status authority in ControlWorkspace.
+AlembicWorkspace owns judgment, dispatch, acceptance, and Test handoff. PCVM owns the PCV plan artifact, round records, metrics, issue records, and task-package design candidates. Do not use PCVM artifacts to close Workspace TODOs or product acceptance without total-control review.
 
 ## Workspace Routing
 
-- Active PCV planning lives in `.workspace-active/workspace/current/` when it is the current control surface.
+- Active PCVM run artifacts live under `PCVM/scratch/chain-runs/<run-id>/report/`.
+- `PCVM/skills/pcvm-flow-controller/SKILL.md` and `PCVM/config/pcvm-flow-control.json` are the first route-control files for PCVM work.
 - Long-term Alembic PCVM requirements live in `workspace-ledger/requirement-designs/progressive-chain-validation-metrics/`.
 - Per-repository PCVM evidence remains under the relevant `workspace-ledger/<WindowName>/` folder.
 - PCV source changes belong in the independent `progressive-chain-validation/` repo, not in `codex-control-workspace/`.
-- This bridge directory only records how ControlWorkspace consumes PCV. Runtime state, dispatch state, acceptance state, and PCV node state stay in Workspace current / ledger documents.
+- This bridge directory only records how ControlWorkspace consumes PCV and PCVM. Runtime dispatch state and final acceptance stay under AlembicWorkspace control; PCVM node/round artifacts stay under `PCVM/`.
 
 ## Control Workflow
 
 1. Apply the workspace stop card: state the user goal, current evidence, minimum closure, and first blocker.
-2. Read the active workspace index/status and the current control plan.
-3. Verify the PCV source checkout when current PCV facts are needed:
+2. Read `PCVM/skills/pcvm-flow-controller/SKILL.md` and `PCVM/config/pcvm-flow-control.json`.
+3. Read the active PCVM run plan and records.
+4. Verify the PCV source checkout when current PCV facts are needed:
 
    ```text
    git -C progressive-chain-validation rev-parse HEAD
@@ -63,11 +74,11 @@ Workspace owns the state machine. PCV node state must be recorded inside the Wor
    git -C ../progressive-chain-validation rev-parse HEAD
    ```
 
-4. Load canonical PCV `SKILL.md` as the method entrypoint, then the minimum relevant PCV references.
-5. Build the source chain map from real code before applying overlays or prior plans.
-6. Decide whether this is plan-only or execution.
-7. For execution, advance only one current node at a time. Broad cold-start, rescan, daemon, or end-to-end commands are observation-only until prerequisite component nodes have passed.
-8. Record only verified facts in the active control plan or ledger; do not turn PCV template output into total-control acceptance.
+5. Load canonical PCV `SKILL.md` as the method entrypoint, then the minimum relevant PCV references.
+6. Build the source chain map from real code before applying overlays or prior plans.
+7. Decide whether this is plan-only, round execution, engineering repair packaging, live AI local-chain prep, or acceptance review.
+8. For execution, advance only one current round/node at a time. Broad cold-start, rescan, daemon, or end-to-end commands are observation-only until prerequisite component nodes have passed.
+9. Record verified PCVM facts under `PCVM/scratch/chain-runs/<run-id>/report/`; do not turn PCVM output into total-control acceptance.
 
 ## Alembic Cold-Start Shortcut
 
