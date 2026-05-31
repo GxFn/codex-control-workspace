@@ -29,6 +29,39 @@ function run(root, args) {
   });
 }
 
+function seedCompletedResult(root, { targetWindow = "Alembic", taskId = "TASK-RETURN", group = "GROUP-RETURN" } = {}) {
+  const dispatch = run(root, [
+    "create-dispatch",
+    "--target-window",
+    targetWindow,
+    "--task-id",
+    taskId,
+    "--group",
+    group,
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+    "--objective",
+    "Return smoke fixture",
+    "--write",
+  ]);
+  assert.equal(dispatch.status, 0, dispatch.stderr || dispatch.stdout);
+  const result = run(root, [
+    "submit-result",
+    "--target-window",
+    targetWindow,
+    "--task-id",
+    taskId,
+    "--group",
+    group,
+    "--status",
+    "completed",
+    "--evidence-ref",
+    "fixture evidence",
+    "--write",
+  ]);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+}
+
 test("creates dispatch packet and delivery envelope without parsing current plan", () => {
   const root = makeFixture();
   const dispatch = run(root, [
@@ -256,6 +289,7 @@ test("normalizes legacy deliveryRole values when deriving window config", () => 
 
 test("builds controller-return envelopes from registered controller threads", () => {
   const root = makeFixture();
+  seedCompletedResult(root);
   writeFile(
     path.join(root, ".workspace-local/workspace.config.json"),
     JSON.stringify({ controlWindow: "AlembicWorkspace" }, null, 2),
@@ -282,6 +316,8 @@ test("builds controller-return envelopes from registered controller threads", ()
     "TASK-RETURN",
     "--control-plan",
     ".workspace-active/workspace/current/plan.md",
+    "--return-reason",
+    "blocked",
     "--require-thread",
     "--write",
   ]);
@@ -292,15 +328,20 @@ test("builds controller-return envelopes from registered controller threads", ()
   assert.equal(payload.envelope.kind, "ControllerReturnEnvelope");
   assert.equal(payload.envelope.version, 2);
   assert.equal(payload.envelope.transport.kind, "direct-thread");
+  assert.equal(payload.envelope.loopGuard.returnReason, "blocked");
+  assert.equal(payload.envelope.loopGuard.noEligibleTaskAction, "stop-without-next-delivery");
+  assert.equal(payload.envelope.loopGuard.repeatControllerReturnForbidden, true);
   assert.equal(payload.envelope.targetThread.threadRegistryFile, "thread-registry/AlembicWorkspace.json");
   assert.equal(payload.envelope.codexAutomation, undefined);
   assert.match(payload.envelope.prompt, /^继续总控验收：Alembic 回填。/);
+  assert.match(payload.envelope.prompt, /没有任务、目标完成或需要用户裁决时停止，不创建下一跳/);
   assert.match(payload.envelope.prompt, /\n- dispatchGroup: GROUP-RETURN\n/);
   assert.doesNotMatch(readFileSync(path.join(root, payload.returnFile), "utf8"), /0192fac-controller-thread/);
 });
 
 test("controller-return never embeds raw ids in v2 envelopes", () => {
   const root = makeFixture();
+  seedCompletedResult(root);
   writeFile(
     path.join(root, ".workspace-local/workspace.config.json"),
     JSON.stringify({ controlWindow: "AlembicWorkspace" }, null, 2),
@@ -362,6 +403,7 @@ test("controller-return requires registered controller thread when requested", (
 
 test("controller-return can be built as a dry-run without thread registration", () => {
   const root = makeFixture();
+  seedCompletedResult(root);
   const result = run(root, [
     "build-controller-return",
     "--group",
@@ -379,6 +421,58 @@ test("controller-return can be built as a dry-run without thread registration", 
   assert.equal(payload.threadReady, false);
   assert.equal(payload.envelope.codexAutomation, undefined);
   assert.equal(payload.envelope.transport.kind, "direct-thread");
+});
+
+test("controller-return fails closed when group still has missing results", () => {
+  const root = makeFixture();
+  writeFile(
+    path.join(root, ".workspace-local/workspace.config.json"),
+    JSON.stringify({ controlWindow: "AlembicWorkspace" }, null, 2),
+  );
+  const register = run(root, [
+    "register-thread",
+    "--window",
+    "AlembicWorkspace",
+    "--thread-id",
+    "0192fac-controller-thread",
+    "--role",
+    "controller",
+    "--write",
+  ]);
+  assert.equal(register.status, 0, register.stderr || register.stdout);
+  const dispatch = run(root, [
+    "create-dispatch",
+    "--target-window",
+    "Alembic",
+    "--task-id",
+    "TASK-MISSING",
+    "--group",
+    "GROUP-MISSING",
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+    "--objective",
+    "Missing result fixture",
+    "--write",
+  ]);
+  assert.equal(dispatch.status, 0, dispatch.stderr || dispatch.stdout);
+
+  const result = run(root, [
+    "build-controller-return",
+    "--group",
+    "GROUP-MISSING",
+    "--last-completed-target",
+    "Alembic",
+    "--last-task-id",
+    "TASK-MISSING",
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+    "--return-reason",
+    "result-ready",
+    "--require-thread",
+    "--write",
+  ]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /Cannot build controller return while dispatch group has missing results/);
 });
 
 test("records direct-thread delivery run evidence", () => {

@@ -36,7 +36,7 @@ Usage:
   node scripts/codex-automation-loop.mjs build-window-config --window <name> [--busy-policy append-if-steerable|fail-if-busy] [--require-thread] --write [--json]
   node scripts/codex-automation-loop.mjs create-dispatch --target-window <name> --task-id <id> --control-plan <path> --objective <text> [--prompt <text>|--prompt-file <path>] [--group <id>] [--context-policy assumed-current|refresh-if-missing|force-refresh] [--scope <text>...] [--forbidden <text>...] [--evidence <text>...] [--write] [--json]
   node scripts/codex-automation-loop.mjs build-delivery --packet-file <path> [--delivery-id <id>] [--return-route controller|none] [--busy-policy append-if-steerable|fail-if-busy] [--automation-enabled] [--require-thread] [--write] [--json]
-  node scripts/codex-automation-loop.mjs build-controller-return --group <id> --last-completed-target <window> --last-task-id <taskId> --control-plan <path> [--controller-window <name>] [--busy-policy append-if-steerable|fail-if-busy] [--automation-enabled] [--require-thread] [--write] [--json]
+  node scripts/codex-automation-loop.mjs build-controller-return --group <id> --last-completed-target <window> --last-task-id <taskId> --control-plan <path> [--controller-window <name>] [--return-reason result-ready|blocked|smoke] [--busy-policy append-if-steerable|fail-if-busy] [--automation-enabled] [--require-thread] [--write] [--json]
   node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <path> --status sent|blocked|failed [--host-method send_message_to_thread] [--host-mode new-turn|append-to-active-turn|unknown] [--readback-ok true|false] [--evidence <text>] [--error <text>] --write [--json]
   node scripts/codex-automation-loop.mjs keep-live-state --automation-run-id <id> --status running|stopped|failed [--mechanism macos-caffeinate|manual|none] [--pid <pid>] [--error <text>] --write [--json]
   node scripts/codex-automation-loop.mjs submit-result --target-window <name> --task-id <id> --status completed|blocked|needs-review [--group <id>] [--changed-repo <repo>...] [--commit <hash>...] [--evidence-ref <ref>...] [--verification <text>...] [--risk <text>...] [--next-suggestion <text>] [--write] [--json]
@@ -237,6 +237,14 @@ function validateReturnRoute(value) {
   return value;
 }
 
+function validateReturnReason(value) {
+  const allowed = new Set(["result-ready", "blocked", "smoke"]);
+  if (!allowed.has(value)) {
+    fail(`--return-reason must be one of: ${[...allowed].join(", ")}`);
+  }
+  return value;
+}
+
 function validateDeliveryRole(value) {
   const normalized = String(value || "target").trim();
   const aliases = new Map([
@@ -356,7 +364,7 @@ function formatControllerReturnPrompt({ dispatchGroup, lastCompletedTarget, last
     `- lastCompletedTarget: ${lastCompletedTarget}`,
     `- lastTaskId: ${lastTaskId}`,
     `- controlPlan: ${controlPlan}`,
-    "- rules: 用完即弃；review-results；证据通过且目标未完成时创建下一批 dispatch；仅异常诊断。",
+    "- rules: 用完即弃；review-results；证据通过且目标未完成且存在 eligible task 时才创建下一批 dispatch；没有任务、目标完成或需要用户裁决时停止，不创建下一跳；禁止为回跳本身再次回跳。",
     "- skill: codex-control-workspace/skills/dev/codex-automation-controller/SKILL.md",
   ].join("\n");
 }
@@ -686,10 +694,15 @@ function commandBuildControllerReturn() {
   const controlPlan = requireValue("--control-plan");
   const config = readWorkspaceConfig();
   const controllerWindow = getValue("--controller-window", config.controlWindow || config.workspaceName || "ControlWorkspace");
+  const returnReason = validateReturnReason(getValue("--return-reason", "result-ready"));
   const busyPolicy = validateBusyPolicy(getValue("--busy-policy", "append-if-steerable"));
   const automationEnabled = hasFlag("--automation-enabled");
   const registration = loadThreadRegistration(controllerWindow);
   if (hasFlag("--require-thread") && !registration) fail(`No registered controller thread for window: ${controllerWindow}`);
+  const review = computeReviewResults({ group: dispatchGroup });
+  if (review.decision === "wait") {
+    fail(`Cannot build controller return while dispatch group has missing results: ${review.missing.join(", ")}`);
+  }
   const windowConfig = buildWindowConfig(controllerWindow, { busyPolicy });
 
   const prompt = formatControllerReturnPrompt({ dispatchGroup, lastCompletedTarget, lastTaskId, controlPlan });
@@ -725,6 +738,19 @@ function commandBuildControllerReturn() {
       continuousLoop: automationEnabled,
       keepLive: automationEnabled,
       keepLiveStateFile: automationEnabled ? path.relative(stateDir, keepLiveStateFile()) : undefined,
+    },
+    loopGuard: {
+      returnReason,
+      reviewDecision: review.decision,
+      deliveryAllowedOnlyFor: ["result-ready", "blocked", "smoke"],
+      controllerReviewRequired: true,
+      noEligibleTaskAction: "stop-without-next-delivery",
+      repeatControllerReturnForbidden: true,
+      nextDispatchAllowedOnlyWhen: [
+        "current plan has eligible unfinished task",
+        "target evidence requires controller rework dispatch",
+        "user-approved unattended automation remains inside boundary",
+      ],
     },
     windowConfig,
     createdAt: nowIso(),
@@ -908,9 +934,7 @@ function commandSubmitResult() {
   );
 }
 
-function loadPacketsForReview() {
-  const group = getValue("--group", "");
-  const taskId = getValue("--task-id", "");
+function loadPacketsForScope({ group = "", taskId = "" } = {}) {
   if (!group && !taskId) fail("review-results requires --group or --task-id.");
   const packets = listJsonFiles(dirs.packets)
     .map((file) => readJson(file, "dispatch packet"))
@@ -919,8 +943,8 @@ function loadPacketsForReview() {
   return { group, taskId, packets };
 }
 
-function commandReviewResults() {
-  const { group, taskId, packets } = loadPacketsForReview();
+function computeReviewResults({ group = "", taskId = "" } = {}) {
+  const { packets } = loadPacketsForScope({ group, taskId });
   if (packets.length === 0) fail("No matching dispatch packets found for review.");
   const results = packets.map((packet) => {
     const file = resultFileFor(packet.targetWindow, packet.taskId);
@@ -934,23 +958,30 @@ function commandReviewResults() {
   const blocked = results.filter((item) => item.result?.status === "blocked").map((item) => item.packet.id);
   const needsReview = results.filter((item) => item.result && item.result.status !== "blocked").map((item) => item.packet.id);
   const decision = missing.length > 0 ? "wait" : blocked.length > 0 ? "blocked" : "needs-controller-review";
+  return { group, taskId, packets, missing, blocked, needsReview, decision };
+}
+
+function commandReviewResults() {
+  const group = getValue("--group", "");
+  const taskId = getValue("--task-id", "");
+  const review = computeReviewResults({ group, taskId });
 
   output(
     {
       ok: true,
       command: "review-results",
-      group: group || undefined,
-      taskId: taskId || undefined,
-      packetCount: packets.length,
-      missing,
-      blocked,
-      needsReview,
-      decision,
+      group: review.group || undefined,
+      taskId: review.taskId || undefined,
+      packetCount: review.packets.length,
+      missing: review.missing,
+      blocked: review.blocked,
+      needsReview: review.needsReview,
+      decision: review.decision,
     },
     [
       `Review scope: ${group ? `group ${group}` : `task ${taskId}`}`,
-      `Packets: ${packets.length}`,
-      `Decision: ${decision}`,
+      `Packets: ${review.packets.length}`,
+      `Decision: ${review.decision}`,
     ],
   );
 }

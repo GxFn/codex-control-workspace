@@ -143,6 +143,12 @@ automation payloads. It should become a direct-thread plan:
     "continuousLoop": false,
     "keepLive": false
   },
+  "loopGuard": {
+    "returnReason": "result-ready",
+    "controllerReviewRequired": true,
+    "noEligibleTaskAction": "stop-without-next-delivery",
+    "repeatControllerReturnForbidden": true
+  },
   "correlationId": "group-id",
   "createdAt": "2026-05-31T00:00:00.000Z"
 }
@@ -167,6 +173,16 @@ Forbidden in v2 delivery envelopes:
 - `rrule`
 - `codexAutomation`
 - raw `targetThreadId` in default JSON output
+
+Controller-return exit logic:
+
+- Build controller return only after `review-results` is no longer `wait`.
+- Send it to the existing registered controller thread; do not create a new
+  controller window only for return.
+- On receipt, total control reviews evidence and current TODOs. If no eligible
+  next task remains, it stops without creating another delivery.
+- A controller-return message must never create another controller-return for
+  itself.
 
 ## Delivery Run Evidence
 

@@ -76,7 +76,7 @@ node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --
      controller-return envelope:
 
 ```text
-node scripts/codex-automation-loop.mjs build-controller-return --group <dispatchGroup> --last-completed-target <currentWindow> --last-task-id <taskId> --control-plan <controlPlan> --require-thread --write --json
+node scripts/codex-automation-loop.mjs build-controller-return --group <dispatchGroup> --last-completed-target <currentWindow> --last-task-id <taskId> --control-plan <controlPlan> --return-reason result-ready --require-thread --write --json
 ```
 
    - Use the controller-return direct thread delivery path defined by the
@@ -90,6 +90,9 @@ node scripts/codex-automation-loop.mjs build-controller-return --group <dispatch
 - Target windows do not create target-window next-hop deliveries by default.
   Controller return is allowed only through `build-controller-return` after
   `review-results` says the group is ready for total-control review.
+- Controller return only wakes total control for review. It does not authorize a
+  next dispatch. If total control finds no eligible next task, it stops without
+  creating another delivery.
 - `TestWindow` is total-control-owned unless the current plan and delivery
   envelope explicitly authorize an exception.
 - Raw thread ids stay only in local runtime files, never in tracked docs,

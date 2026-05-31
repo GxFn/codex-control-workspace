@@ -31,7 +31,7 @@ Use `node scripts/codex-automation-loop.mjs` from the control workspace root.
 | Record keep-live state | `keep-live-state --status active --host-mode manual-or-external --reason "<reason>" --write --json` | Tracks unattended-run keep-live support under ignored local runtime. This state does not prove delivery or acceptance. |
 | Record target result | `submit-result ... --write --json` | Writes a `TargetResultEnvelope`; it is not an acceptance verdict. |
 | Check group readiness | `review-results --group <group> --json` | Returns `wait`, `blocked`, or `needs-controller-review`; total control still pulls raw evidence. |
-| Build controller return | `build-controller-return --group <group> ... --require-thread --write --json` | Looks up the registered control thread from local runtime state and writes a `ControllerReturnEnvelope` after a target result group is ready. Output never exposes raw thread ids; the delivery adapter reads the ignored registry file for local send execution. |
+| Build controller return | `build-controller-return --group <group> ... --return-reason result-ready --require-thread --write --json` | Looks up the registered control thread from local runtime state and writes a `ControllerReturnEnvelope` after a target result group is ready. Output never exposes raw thread ids; the delivery adapter reads the ignored registry file for local send execution. |
 | Stop future delivery | `stop-loop --reason "<reason>" --write --json` | Writes an explicit local stop marker. |
 
 ## Delivery Transport Policy
@@ -50,6 +50,13 @@ enabled, the loop is continuous: controller review, evidence pull, acceptance
 or rework decision, next task package, direct dispatch, and controller return
 repeat until final completion, a hard gate, explicit user stop, missing
 evidence requiring human judgment, or no eligible TODO remains.
+
+Controller return is a wakeup for total-control review, not an instruction to
+keep looping. A controller-return envelope carries `loopGuard`: total control
+may create the next dispatch only when the current plan still has an eligible
+unfinished task, target evidence requires rework dispatch, or an approved
+unattended run remains inside boundary. If no task remains, the correct action
+is to stop without another delivery.
 
 Keep-live / keep-awake is enabled support for unattended automation runs. It is
 not a delivery transport, not a target task, and not acceptance evidence; failure

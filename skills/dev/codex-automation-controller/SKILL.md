@@ -123,6 +123,11 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <deli
      `controller`. Target windows may only create a controller-return delivery
      through `build-controller-return` after `review-results` says the group is
      ready; they still must not create another target-window hop.
+   - Controller return is not a loop trigger by itself. When total control is
+     woken by a controller-return envelope, it reviews the group and either:
+     creates the next dispatch only when the current plan still has an eligible
+     unfinished task, or stops without another delivery when the goal is done,
+     no task remains, or a user decision is needed.
 
 4. **Stop**
    - Stop only for explicit user stop, hard gate, final archive, missing
@@ -149,3 +154,7 @@ Stop and report when any applies:
 
 Do not stop merely because a phase completed or a plan refresh is needed when
 the next unit still serves the approved final goal.
+
+Do stop without creating another delivery when `review-results` plus current
+plan/TODO inspection shows no eligible next task. Do not create a controller
+return for the controller-return message itself.
