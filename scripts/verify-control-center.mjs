@@ -16,6 +16,11 @@ const checks = [
     args: ["scripts/check-workspace-boundary.mjs"],
   },
   {
+    label: "repository residue",
+    command: "node",
+    args: ["scripts/check-repository-residue.mjs"],
+  },
+  {
     label: "repo status",
     command: "node",
     args: ["scripts/collect-repo-status.mjs"],
@@ -90,6 +95,7 @@ if (withScriptTests) {
       "scripts/collect-repo-status.test.mjs",
       "scripts/check-decision-preflight.test.mjs",
       "scripts/check-dispatch-coverage.test.mjs",
+      "scripts/check-repository-residue.test.mjs",
       "scripts/check-script-docs.test.mjs",
       "scripts/check-test-boundary.test.mjs",
       "scripts/control-workspace-install.test.mjs",

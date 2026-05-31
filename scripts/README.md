@@ -132,6 +132,10 @@ Current scripts:
   workspace child repository.
 - `check-workspace-boundary.mjs`: verifies that child source repositories and
   local noise files are not tracked by the workspace Git repository.
+- `check-repository-residue.mjs`: scans configured child repositories for
+  local runtime residue such as `.asd/`, `.cursor/skills`, and
+  `.agents/skills`. It is read-only by default; use `--fix` only after the
+  residue is confirmed as generated workspace pollution.
 - `verify-workspace-docs.mjs`: checks the workspace index, current control
   plan, required sections, Markdown links, and completed document references.
 - `check-workspace-current-layout.mjs`: verifies that short-term workspace docs
@@ -243,8 +247,8 @@ current set is `codex-automation-loop.test.mjs`,
 `collect-repo-status.test.mjs`, `check-decision-preflight.test.mjs`,
 `check-dispatch-coverage.test.mjs`, `check-script-docs.test.mjs`,
 `check-test-boundary.test.mjs`, `control-workspace-install.test.mjs`,
-`import-design-handoffs.test.mjs`, `sync-current-plan.test.mjs`, and
-`workspace-control.test.mjs`.
+`import-design-handoffs.test.mjs`, `check-repository-residue.test.mjs`,
+`sync-current-plan.test.mjs`, and `workspace-control.test.mjs`.
 
 ## Common Routes
 

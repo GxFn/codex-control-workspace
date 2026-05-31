@@ -72,6 +72,7 @@ export const defaultWorkspaceConfig = {
   ],
   protectedWorkspacePrefixes: [],
   disallowedTrackedPaths: [".DS_Store"],
+  allowedRepositoryResiduePaths: [],
 };
 
 export function getArgValue(args, name, fallback = null) {
