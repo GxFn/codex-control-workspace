@@ -32,7 +32,7 @@ Evidence backfill → total-control acceptance
 Next wave, dispatch again, archive, or stop
 ```
 
-It is intentionally simple. No hosted service, no database, no hidden scheduler. The workflow is made of `AGENTS.md`, Markdown ledgers, small Node scripts, Codex skills, and optional Codex heartbeat automations. You can read every decision surface in the repository.
+It is intentionally simple. No hosted service, no database, no hidden scheduler. The workflow is made of `AGENTS.md`, Markdown ledgers, small Node scripts, Codex skills, and direct Codex thread delivery. You can read every decision surface in the repository.
 
 The important trick is continuity with human priority. When someone is at the Mac, they can inspect progress, redirect scope, edit code, or stop automation at any time; automation stays behind the developer's live judgment. When nobody is at the Mac and unattended mode is enabled, the controller can keep moving after a child window finishes: review the evidence, accept or reject it, create the next task package, fan out to the next windows, and repeat until the user goal is done, a hard gate appears, or there is no eligible TODO left. It is automation in service of total control, not a one-shot reminder and not a replacement for a present developer.
 
@@ -131,7 +131,7 @@ The child still owns its repository. It can inspect code, implement changes, run
 
 ## Codex Automation Closed Loop
 
-Codex Automation Closed Loop lets the controller wake real Codex windows with heartbeat automations while keeping planning and acceptance in total control.
+Codex Automation Closed Loop uses direct thread dispatch as the normal work pipeline while keeping planning and acceptance in total control. The delivery contract is direct-thread only: send the task prompt to the registered Codex thread and fail closed to total-control judgment if the thread id or host thread-send capability is unavailable.
 
 The script layer manages explicit packets and envelopes:
 
@@ -143,11 +143,11 @@ node scripts/workspace-control.mjs loop submit-result --target-window <window> -
 node scripts/workspace-control.mjs loop review-results --group <group> --json
 ```
 
-The script does not call Codex automation APIs by itself. It prepares delivery envelopes. A Codex controller window or delivery adapter creates the heartbeat from the envelope, then the target window reports a `TargetResultEnvelope`.
+The script layer prepares dispatch packets and delivery envelopes; it does not by itself prove that a prompt reached a target thread. A Codex controller window or delivery adapter must record the actual transport action with direct thread send readback / delivery-run evidence. The target window then reports a `TargetResultEnvelope`.
 
-The loop is designed for long unattended runs that remain interruptible. If a developer is present, their manual correction, code edit, or scope decision takes priority over the next automated hop. If the Mac is left alone, total control can review result envelopes, pull raw evidence, accept or reject it, create the next task package, and dispatch again until the user goal is done, a hard gate appears, or there is no eligible TODO left.
+The loop is designed for long unattended runs that remain interruptible. If a developer is present, their manual correction, code edit, or scope decision takes priority over the next automated hop. If unattended automation is explicitly enabled, the controller runs as a continuous closed loop: review result envelopes, pull raw evidence, accept or reject it, create the next task package, and dispatch again until the user goal is done, a hard gate appears, the user stops it, or there is no eligible TODO left.
 
-On macOS, keep-awake is delivery support, not task logic. If an installation enables it, failure to start or stop keep-awake is reported as an automation readiness risk rather than hidden behind task status.
+On macOS, keep-live / keep-awake is required support for unattended automation mode, not task logic and not delivery transport. If an installation enables automation, keep-live should be enabled for the run; failure to start or stop keep-live is reported as an automation readiness risk rather than hidden behind task status.
 
 ## Daily Use
 

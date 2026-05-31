@@ -62,8 +62,6 @@ test("creates dispatch packet and delivery envelope without parsing current plan
     dispatchPayload.packetFile,
     "--delivery-id",
     "delivery-1",
-    "--stagger-seconds",
-    "20",
     "--write",
   ]);
   assert.equal(delivery.status, 0, delivery.stderr || delivery.stdout);
@@ -71,7 +69,11 @@ test("creates dispatch packet and delivery envelope without parsing current plan
   assert.equal(deliveryPayload.envelope.prompt, dispatchPayload.packet.prompt);
   assert.equal(deliveryPayload.envelope.oneShot, true);
   assert.equal(deliveryPayload.envelope.returnRoute, "controller");
-  assert.equal(deliveryPayload.envelope.schedule.staggerSeconds, 20);
+  assert.equal(deliveryPayload.envelope.version, 2);
+  assert.equal(deliveryPayload.envelope.transport.kind, "direct-thread");
+  assert.equal(deliveryPayload.envelope.transport.busyPolicy, "append-if-steerable");
+  assert.equal(deliveryPayload.envelope.schedule, undefined);
+  assert.equal(deliveryPayload.envelope.codexAutomation, undefined);
 });
 
 test("creates a readable default target prompt", () => {
@@ -141,6 +143,7 @@ test("registers target threads locally and redacts thread ids in delivery output
   const registerPayload = JSON.parse(register.stdout);
   assert.equal(registerPayload.threadRegistered, true);
   assert.equal(registerPayload.threadIdRedacted, true);
+  assert.equal(registerPayload.deliveryRole, "target");
   assert.doesNotMatch(register.stdout, /0192fac-real-thread/);
 
   const dispatch = JSON.parse(
@@ -166,8 +169,89 @@ test("registers target threads locally and redacts thread ids in delivery output
   const payload = JSON.parse(delivery.stdout);
   assert.equal(payload.threadReady, true);
   assert.equal(payload.threadIdRedacted, true);
-  assert.equal(payload.envelope.codexAutomation.targetThreadId, "<redacted>");
-  assert.match(readFileSync(path.join(root, payload.deliveryFile), "utf8"), /0192fac-real-thread/);
+  assert.equal(payload.envelope.transport.kind, "direct-thread");
+  assert.equal(payload.envelope.targetThread.threadIdRedacted, true);
+  assert.equal(payload.envelope.targetThread.threadRegistryFile, "thread-registry/Alembic.json");
+  assert.equal(payload.envelope.codexAutomation, undefined);
+  assert.doesNotMatch(readFileSync(path.join(root, payload.deliveryFile), "utf8"), /0192fac-real-thread/);
+});
+
+test("builds derived window config without exposing raw thread ids", () => {
+  const root = makeFixture();
+  writeFile(
+    path.join(root, ".workspace-local/workspace.config.json"),
+    JSON.stringify(
+      {
+        controlWindow: "AlembicWorkspace",
+        dispatchWindows: ["Alembic"],
+        repositories: [{ windowName: "Alembic", path: "../Alembic", role: "Base repo" }],
+      },
+      null,
+      2,
+    ),
+  );
+  const register = run(root, [
+    "register-thread",
+    "--window",
+    "Alembic",
+    "--thread-id",
+    "0192fac-real-thread",
+    "--role",
+    "target",
+    "--cwd",
+    "../Alembic",
+    "--responsibility-root",
+    "../Alembic",
+    "--write",
+  ]);
+  assert.equal(register.status, 0, register.stderr || register.stdout);
+
+  const configResult = run(root, ["build-window-config", "--window", "Alembic", "--require-thread", "--write"]);
+  assert.equal(configResult.status, 0, configResult.stderr || configResult.stdout);
+  const payload = JSON.parse(configResult.stdout);
+  assert.equal(payload.config.kind, "CodexSubwindowDispatchConfig");
+  assert.equal(payload.config.threadRegistered, true);
+  assert.equal(payload.config.delivery.transport, "direct-thread");
+  assert.equal(payload.config.threadRegistryFile, "thread-registry/Alembic.json");
+  assert.doesNotMatch(configResult.stdout, /0192fac-real-thread/);
+  assert.doesNotMatch(readFileSync(path.join(root, payload.configFile), "utf8"), /0192fac-real-thread/);
+});
+
+test("normalizes legacy deliveryRole values when deriving window config", () => {
+  const root = makeFixture();
+  writeFile(
+    path.join(root, ".workspace-local/workspace.config.json"),
+    JSON.stringify(
+      {
+        dispatchWindows: ["AlembicTest-IDE"],
+        repositories: [{ windowName: "AlembicTest-IDE", path: "../AlembicTest", role: "Test window" }],
+      },
+      null,
+      2,
+    ),
+  );
+  writeFile(
+    path.join(root, ".workspace-local/codex-automation-loop/thread-registry/AlembicTest-IDE.json"),
+    JSON.stringify(
+      {
+        kind: "CodexWindowThreadRegistration",
+        version: 2,
+        windowName: "AlembicTest-IDE",
+        deliveryRole: "AlembicTest",
+        threadId: "0192fac-test-thread",
+        cwd: "../AlembicTest",
+      },
+      null,
+      2,
+    ),
+  );
+
+  const configResult = run(root, ["build-window-config", "--window", "AlembicTest-IDE", "--require-thread", "--write"]);
+  assert.equal(configResult.status, 0, configResult.stderr || configResult.stdout);
+  const payload = JSON.parse(configResult.stdout);
+  assert.equal(payload.config.deliveryRole, "test-target");
+  assert.equal(payload.config.dispatchable, true);
+  assert.doesNotMatch(configResult.stdout, /0192fac-test-thread/);
 });
 
 test("builds controller-return envelopes from registered controller threads", () => {
@@ -206,13 +290,16 @@ test("builds controller-return envelopes from registered controller threads", ()
   assert.equal(payload.threadReady, true);
   assert.equal(payload.threadIdRedacted, true);
   assert.equal(payload.envelope.kind, "ControllerReturnEnvelope");
-  assert.equal(payload.envelope.codexAutomation.targetThreadId, "<redacted>");
+  assert.equal(payload.envelope.version, 2);
+  assert.equal(payload.envelope.transport.kind, "direct-thread");
+  assert.equal(payload.envelope.targetThread.threadRegistryFile, "thread-registry/AlembicWorkspace.json");
+  assert.equal(payload.envelope.codexAutomation, undefined);
   assert.match(payload.envelope.prompt, /^继续总控验收：Alembic 回填。/);
   assert.match(payload.envelope.prompt, /\n- dispatchGroup: GROUP-RETURN\n/);
-  assert.match(readFileSync(path.join(root, payload.returnFile), "utf8"), /0192fac-controller-thread/);
+  assert.doesNotMatch(readFileSync(path.join(root, payload.returnFile), "utf8"), /0192fac-controller-thread/);
 });
 
-test("controller-return can emit local automation payload for immediate heartbeat creation", () => {
+test("controller-return never embeds raw ids in v2 envelopes", () => {
   const root = makeFixture();
   writeFile(
     path.join(root, ".workspace-local/workspace.config.json"),
@@ -241,14 +328,15 @@ test("controller-return can emit local automation payload for immediate heartbea
     "--control-plan",
     ".workspace-active/workspace/current/plan.md",
     "--require-thread",
-    "--include-thread-id",
     "--write",
   ]);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.threadReady, true);
-  assert.equal(payload.threadIdRedacted, false);
-  assert.equal(payload.envelope.codexAutomation.targetThreadId, "0192fac-controller-thread");
+  assert.equal(payload.threadIdRedacted, true);
+  assert.equal(payload.envelope.targetThread.threadIdRedacted, true);
+  assert.equal(payload.envelope.codexAutomation, undefined);
+  assert.doesNotMatch(result.stdout, /0192fac-controller-thread/);
 });
 
 test("controller-return requires registered controller thread when requested", () => {
@@ -290,6 +378,86 @@ test("controller-return can be built as a dry-run without thread registration", 
   assert.equal(payload.wrote, false);
   assert.equal(payload.threadReady, false);
   assert.equal(payload.envelope.codexAutomation, undefined);
+  assert.equal(payload.envelope.transport.kind, "direct-thread");
+});
+
+test("records direct-thread delivery run evidence", () => {
+  const root = makeFixture();
+  const register = run(root, [
+    "register-thread",
+    "--window",
+    "Alembic",
+    "--thread-id",
+    "0192fac-real-thread",
+    "--role",
+    "target",
+    "--write",
+  ]);
+  assert.equal(register.status, 0, register.stderr || register.stdout);
+  const dispatch = JSON.parse(
+    run(root, [
+      "create-dispatch",
+      "--target-window",
+      "Alembic",
+      "--task-id",
+      "TASK-RUN",
+      "--group",
+      "GROUP-RUN",
+      "--control-plan",
+      ".workspace-active/workspace/current/plan.md",
+      "--objective",
+      "Implement fixture",
+      "--write",
+    ]).stdout,
+  );
+  const delivery = JSON.parse(
+    run(root, ["build-delivery", "--packet-file", dispatch.packetFile, "--require-thread", "--write"]).stdout,
+  );
+  const runResult = run(root, [
+    "record-delivery-run",
+    "--delivery-file",
+    delivery.deliveryFile,
+    "--status",
+    "sent",
+    "--host-mode",
+    "new-turn",
+    "--readback-ok",
+    "true",
+    "--evidence",
+    "thread readback saw prompt",
+    "--write",
+  ]);
+  assert.equal(runResult.status, 0, runResult.stderr || runResult.stdout);
+  const payload = JSON.parse(runResult.stdout);
+  assert.equal(payload.run.kind, "DirectThreadDeliveryRun");
+  assert.equal(payload.run.status, "sent");
+  assert.equal(payload.run.thread.threadIdRedacted, true);
+  assert.equal(payload.run.thread.threadRegistryFile, "thread-registry/Alembic.json");
+  assert.equal(payload.run.readback.ok, true);
+  assert.doesNotMatch(readFileSync(path.join(root, payload.runFile), "utf8"), /0192fac-real-thread/);
+});
+
+test("records keep-live state for unattended automation", () => {
+  const root = makeFixture();
+  const result = run(root, [
+    "keep-live-state",
+    "--automation-run-id",
+    "GROUP-RUN",
+    "--status",
+    "running",
+    "--mechanism",
+    "macos-caffeinate",
+    "--pid",
+    "12345",
+    "--write",
+  ]);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.state.kind, "AutomationKeepLiveState");
+  assert.equal(payload.state.enabled, true);
+  assert.equal(payload.state.status, "running");
+  assert.equal(payload.state.pid, 12345);
+  assert.match(readFileSync(path.join(root, payload.stateFile), "utf8"), /GROUP-RUN/);
 });
 
 test("--help prints usage instead of status", () => {

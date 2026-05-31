@@ -61,6 +61,7 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
 | Prove the governance scripts work as a chain | `run-workspace-pipeline-e2e.mjs` | Uses a temporary fixture workspace and runs write/apply modes without touching product repositories. |
 | Keep script catalog and tests from drifting | `check-script-docs.mjs` | Runs inside `verify-control-center`; add tests to `--with-script-tests`. |
 | Manage Codex Automation Closed Loop contracts | `codex-automation-loop.mjs`, `workspace-control.mjs loop ...` | Runtime files stay under ignored `.workspace-local/codex-automation-loop/`; the script creates dispatch packets, delivery envelopes, target result envelopes, group readiness summaries, and stop markers. It never calls Codex automation APIs, parses current plans, accepts evidence, selects TODOs, or writes product repositories. Read [codex-automation-loop.md](codex-automation-loop.md) for the full operating map. |
+| Manage direct-thread child-window config and delivery evidence | `codex-automation-loop.mjs build-window-config`, `record-delivery-run`, `keep-live-state` | Child-window config, delivery-run evidence, and keep-live state stay under ignored local runtime. They describe sendability and transport evidence only; total control still owns the current plan, delivery decision, evidence pull, and acceptance verdict. |
 
 ## When To Extract A New Script
 

@@ -94,10 +94,13 @@ Current scripts:
   into a delivery envelope, records target result envelopes, reviews whether a
   dispatch group is ready for total-control evidence pull, stores local thread
   registrations under `.workspace-local/codex-automation-loop/`, and writes an
-  explicit stop marker. It does not parse current plans, decide sendable
-  windows, claim target work, create Codex automations, or accept evidence.
-  Total control owns planning and review, delivery adapters consume envelopes,
-  and target windows return result envelopes.
+  explicit stop marker. The direct-thread design adds local child-window config,
+  delivery-run evidence, and keep-live state under the same ignored runtime
+  root; tracked docs only describe the schema and must not contain raw thread
+  ids. The script does not parse current plans, decide sendable windows, claim
+  target work, create legacy automations, or accept evidence. Total control
+  owns planning and review, delivery adapters consume envelopes, and target
+  windows return result envelopes.
 - `control-workspace-install.mjs`: sibling-directory installation helper for
   GitHub-distributed control workspaces. It discovers repositories next to the
   control repo, writes user-confirmed `workspace.config.json` repository scope,

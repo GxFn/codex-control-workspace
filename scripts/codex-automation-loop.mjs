@@ -11,12 +11,20 @@ const stateDir = path.resolve(getValue("--state-dir", path.join(workspaceRoot, "
 const write = hasFlag("--write");
 const json = hasFlag("--json");
 const version = 1;
+const threadRegistrationVersion = 2;
+const deliveryEnvelopeVersion = 2;
+const windowConfigVersion = 1;
+const deliveryRunVersion = 1;
+const keepLiveVersion = 1;
 
 const dirs = {
   packets: path.join(stateDir, "dispatch-packets"),
   deliveries: path.join(stateDir, "delivery-envelopes"),
+  deliveryRuns: path.join(stateDir, "delivery-runs"),
   results: path.join(stateDir, "target-results"),
   registry: path.join(stateDir, "thread-registry"),
+  windowConfig: path.join(stateDir, "window-config"),
+  keepLive: path.join(stateDir, "keep-live"),
 };
 
 const helpText = `
@@ -24,10 +32,13 @@ Codex automation closed-loop contract manager
 
 Usage:
   node scripts/codex-automation-loop.mjs status [--json]
-  node scripts/codex-automation-loop.mjs register-thread --window <name> --thread-id <id> [--role target|controller] [--cwd <path>] --write [--json]
+  node scripts/codex-automation-loop.mjs register-thread --window <name> --thread-id <id> [--role target|controller|test-target|design|observer] [--cwd <path>] [--responsibility-root <path>] [--display-title <title>] [--write-boundary <path>...] [--canonical-use <text>] [--supersedes-window <name>...] --write [--json]
+  node scripts/codex-automation-loop.mjs build-window-config --window <name> [--busy-policy append-if-steerable|fail-if-busy] [--require-thread] --write [--json]
   node scripts/codex-automation-loop.mjs create-dispatch --target-window <name> --task-id <id> --control-plan <path> --objective <text> [--prompt <text>|--prompt-file <path>] [--group <id>] [--context-policy assumed-current|refresh-if-missing|force-refresh] [--scope <text>...] [--forbidden <text>...] [--evidence <text>...] [--write] [--json]
-  node scripts/codex-automation-loop.mjs build-delivery --packet-file <path> [--delivery-id <id>] [--return-route controller|none] [--no-keep-live] [--stagger-seconds <n>] [--require-thread] [--include-thread-id] [--write] [--json]
-  node scripts/codex-automation-loop.mjs build-controller-return --group <id> --last-completed-target <window> --last-task-id <taskId> --control-plan <path> [--controller-window <name>] [--require-thread] [--include-thread-id] [--write] [--json]
+  node scripts/codex-automation-loop.mjs build-delivery --packet-file <path> [--delivery-id <id>] [--return-route controller|none] [--busy-policy append-if-steerable|fail-if-busy] [--automation-enabled] [--require-thread] [--write] [--json]
+  node scripts/codex-automation-loop.mjs build-controller-return --group <id> --last-completed-target <window> --last-task-id <taskId> --control-plan <path> [--controller-window <name>] [--busy-policy append-if-steerable|fail-if-busy] [--automation-enabled] [--require-thread] [--write] [--json]
+  node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <path> --status sent|blocked|failed [--host-method send_message_to_thread] [--host-mode new-turn|append-to-active-turn|unknown] [--readback-ok true|false] [--evidence <text>] [--error <text>] --write [--json]
+  node scripts/codex-automation-loop.mjs keep-live-state --automation-run-id <id> --status running|stopped|failed [--mechanism macos-caffeinate|manual|none] [--pid <pid>] [--error <text>] --write [--json]
   node scripts/codex-automation-loop.mjs submit-result --target-window <name> --task-id <id> --status completed|blocked|needs-review [--group <id>] [--changed-repo <repo>...] [--commit <hash>...] [--evidence-ref <ref>...] [--verification <text>...] [--risk <text>...] [--next-suggestion <text>] [--write] [--json]
   node scripts/codex-automation-loop.mjs review-results (--group <id>|--task-id <id>) [--json]
   node scripts/codex-automation-loop.mjs stop-loop --reason <text> --write [--json]
@@ -35,7 +46,7 @@ Usage:
 Design:
   This script is the new CodexAutomationClosedLoop contract surface. It does
   not parse current plans, decide sendable windows, claim target work, create
-  Codex automations, or accept evidence. Total control creates dispatch
+  legacy Codex automations, or accept evidence. Total control creates dispatch
   packets and later reviews raw evidence. Delivery adapters only consume the
   delivery envelope. Target windows return result envelopes.
 `.trim();
@@ -101,9 +112,12 @@ function output(payload, textLines = []) {
 function inferAgentNext(payload) {
   if (!payload.ok) return "Stop and inspect the reported closed-loop contract issue.";
   if (payload.command === "create-dispatch") return "Build a delivery envelope from the dispatch packet or queue it for the delivery adapter.";
-  if (payload.command === "register-thread") return "Build delivery envelopes for registered target windows when total control decides to dispatch.";
-  if (payload.command === "build-delivery") return payload.threadReady ? "Create the Codex heartbeat from the delivery envelope." : "Register the target thread before creating the Codex heartbeat.";
-  if (payload.command === "build-controller-return") return payload.threadReady ? "Create the controller-return heartbeat from the return envelope." : "Register the controller thread before enabling unattended return.";
+  if (payload.command === "register-thread") return "Build or refresh the local window config, then build delivery envelopes when total control decides to dispatch.";
+  if (payload.command === "build-window-config") return "Use this child-window config when creating direct-thread delivery envelopes.";
+  if (payload.command === "build-delivery") return payload.threadReady ? "Send the prompt with the host thread tool, then record a delivery run." : "Register the target thread before direct-thread delivery.";
+  if (payload.command === "build-controller-return") return payload.threadReady ? "Send the controller-return prompt with the host thread tool, then record a delivery run." : "Register the controller thread before unattended return.";
+  if (payload.command === "record-delivery-run") return payload.status === "sent" ? "Wait for the target result envelope or run review-results when ready." : "Return to total control judgment for the delivery block.";
+  if (payload.command === "keep-live-state") return "Continue or stop unattended automation according to the current plan and keep-live status.";
   if (payload.command === "submit-result") return "Wake total control or run review-results; the result is not an acceptance verdict.";
   if (payload.command === "review-results") return payload.decision === "wait" ? "Wait for missing target result envelopes." : "Total control must pull raw evidence and make the verdict.";
   if (payload.command === "stop-loop") return "Closed-loop delivery is stopped; do not create new deliveries.";
@@ -165,8 +179,20 @@ function deliveryFileFor(deliveryId) {
   return path.join(dirs.deliveries, `${slug(deliveryId)}.json`);
 }
 
+function deliveryRunFileFor(deliveryRunId) {
+  return path.join(dirs.deliveryRuns, `${slug(deliveryRunId)}.json`);
+}
+
 function threadFileFor(windowName) {
   return path.join(dirs.registry, `${slug(windowName)}.json`);
+}
+
+function windowConfigFileFor(windowName) {
+  return path.join(dirs.windowConfig, `${slug(windowName)}.json`);
+}
+
+function keepLiveStateFile() {
+  return path.join(dirs.keepLive, "state.json");
 }
 
 function resultFileFor(targetWindow, taskId) {
@@ -211,6 +237,71 @@ function validateReturnRoute(value) {
   return value;
 }
 
+function validateDeliveryRole(value) {
+  const normalized = String(value || "target").trim();
+  const aliases = new Map([
+    ["AlembicTest", "test-target"],
+    ["TestWindow", "test-target"],
+    ["DesignWindow", "design"],
+  ]);
+  const role = aliases.get(normalized) || normalized;
+  const allowed = new Set(["target", "controller", "test-target", "design", "observer"]);
+  if (!allowed.has(role)) {
+    fail(`--role must be one of: ${[...allowed].join(", ")}`);
+  }
+  return role;
+}
+
+function normalizeLegacyRole(value) {
+  const role = String(value || "target").trim();
+  if (role === "controller") return "controller";
+  if (/test/i.test(role)) return "test-target";
+  if (/design/i.test(role)) return "design";
+  if (/observer/i.test(role)) return "observer";
+  return "target";
+}
+
+function validateBusyPolicy(value) {
+  const allowed = new Set(["append-if-steerable", "fail-if-busy"]);
+  if (!allowed.has(value)) {
+    fail(`--busy-policy must be one of: ${[...allowed].join(", ")}`);
+  }
+  return value;
+}
+
+function validateDeliveryRunStatus(value) {
+  const allowed = new Set(["sent", "blocked", "failed"]);
+  if (!allowed.has(value)) {
+    fail(`--status must be one of: ${[...allowed].join(", ")}`);
+  }
+  return value;
+}
+
+function validateHostMode(value) {
+  const allowed = new Set(["new-turn", "append-to-active-turn", "unknown"]);
+  if (!allowed.has(value)) {
+    fail(`--host-mode must be one of: ${[...allowed].join(", ")}`);
+  }
+  return value;
+}
+
+function validateKeepLiveStatus(value) {
+  const allowed = new Set(["running", "stopped", "failed"]);
+  if (!allowed.has(value)) {
+    fail(`--status must be one of: ${[...allowed].join(", ")}`);
+  }
+  return value;
+}
+
+function parseBoolean(value, fallback = false) {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (value === true || value === false) return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (["true", "1", "yes", "y"].includes(normalized)) return true;
+  if (["false", "0", "no", "n"].includes(normalized)) return false;
+  fail(`Boolean value expected, got: ${value}`);
+}
+
 function validateThreadId(value) {
   const threadId = String(value ?? "").trim();
   const placeholders = new Set(["current-codex-thread", "current thread", "<thread id>", "unknown", ""]);
@@ -231,6 +322,15 @@ function readWorkspaceConfig() {
     if (existsSync(candidate)) return readJson(candidate, "workspace config");
   }
   return {};
+}
+
+function repositoryForWindow(windowName) {
+  const config = readWorkspaceConfig();
+  const repositories = Array.isArray(config.repositories) ? config.repositories : [];
+  return {
+    config,
+    repository: repositories.find((item) => item.windowName === windowName) ?? null,
+  };
 }
 
 function formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup }) {
@@ -277,17 +377,27 @@ function commandRegisterThread() {
   if (!write) fail("register-thread requires --write.");
   const windowName = requireValue("--window");
   const threadId = validateThreadId(requireValue("--thread-id"));
-  const role = getValue("--role", "target");
-  if (!["target", "controller"].includes(role)) fail("--role must be target or controller.");
+  const deliveryRole = validateDeliveryRole(getValue("--role", "target"));
   const cwd = getValue("--cwd", "");
+  const responsibilityRoot = getValue("--responsibility-root", "");
+  const displayTitle = getValue("--display-title", "");
+  const canonicalUse = getValue("--canonical-use", "");
+  const writeBoundary = getAllValues("--write-boundary");
+  const supersedesWindowNames = getAllValues("--supersedes-window");
   const registration = {
-    kind: "CodexAutomationThreadRegistration",
-    version,
+    kind: "CodexWindowThreadRegistration",
+    version: threadRegistrationVersion,
     windowName,
-    role,
+    displayTitle: displayTitle || undefined,
+    deliveryRole,
     threadId,
     cwd: cwd || undefined,
+    responsibilityRoot: responsibilityRoot || cwd || undefined,
+    writeBoundary,
+    canonicalUse: canonicalUse || undefined,
+    supersedesWindowNames,
     registeredAt: nowIso(),
+    lastVerifiedAt: nowIso(),
   };
   ensureStateDirs();
   atomicWriteJson(threadFileFor(windowName), registration);
@@ -297,7 +407,7 @@ function commandRegisterThread() {
       command: "register-thread",
       wrote: true,
       windowName,
-      role,
+      deliveryRole,
       threadRegistered: true,
       threadIdRedacted: true,
       registryFile: path.relative(workspaceRoot, threadFileFor(windowName)),
@@ -310,10 +420,20 @@ function loadThreadRegistration(windowName) {
   const file = threadFileFor(windowName);
   if (!existsSync(file)) return null;
   const registration = readJson(file, "thread registration");
-  if (registration.kind !== "CodexAutomationThreadRegistration") {
+  if (!["CodexAutomationThreadRegistration", "CodexWindowThreadRegistration"].includes(registration.kind)) {
     fail(`Invalid thread registration for ${windowName}.`);
   }
-  return registration;
+  const roleCandidate = registration.deliveryRole || registration.role || registration.windowRole || registration.windowName;
+  const deliveryRole = normalizeLegacyRole(roleCandidate);
+  return {
+    ...registration,
+    kind: "CodexWindowThreadRegistration",
+    version: threadRegistrationVersion,
+    deliveryRole,
+    role: undefined,
+    threadRegistryFile: path.relative(stateDir, file),
+    responsibilityRoot: registration.responsibilityRoot || registration.cwd,
+  };
 }
 
 function redactDeliveryEnvelope(envelope) {
@@ -321,10 +441,50 @@ function redactDeliveryEnvelope(envelope) {
   if (redacted.targetThread?.threadId) {
     redacted.targetThread.threadId = "<redacted>";
   }
-  if (redacted.codexAutomation?.targetThreadId) {
-    redacted.codexAutomation.targetThreadId = "<redacted>";
-  }
   return redacted;
+}
+
+function buildWindowConfig(windowName, { busyPolicy = "append-if-steerable", requireThread = false } = {}) {
+  const registration = loadThreadRegistration(windowName);
+  if (requireThread && !registration) fail(`No registered thread for window: ${windowName}`);
+  const { config, repository } = repositoryForWindow(windowName);
+  const dispatchWindows = new Set([
+    ...(Array.isArray(config.dispatchWindows) ? config.dispatchWindows : []),
+    ...(Array.isArray(config.requiredDispatchWindows) ? config.requiredDispatchWindows : []),
+    config.controlWindow,
+  ].filter(Boolean));
+  const deliveryRole = registration?.deliveryRole || (windowName === config.controlWindow ? "controller" : "target");
+  const dispatchable = ["controller", "target", "test-target"].includes(deliveryRole) && (dispatchWindows.size === 0 || dispatchWindows.has(windowName) || Boolean(registration));
+  return {
+    kind: "CodexSubwindowDispatchConfig",
+    version: windowConfigVersion,
+    windowName,
+    repositoryPath: repository?.path,
+    responsibility: repository?.role,
+    dispatchable,
+    threadRegistered: Boolean(registration),
+    threadRegistryFile: path.relative(stateDir, threadFileFor(windowName)),
+    cwd: registration?.cwd || repository?.path,
+    responsibilityRoot: registration?.responsibilityRoot || repository?.path,
+    deliveryRole,
+    delivery: {
+      transport: "direct-thread",
+      requireThread: true,
+      busyPolicy,
+      missingThread: "fail-closed",
+      readbackRequired: true,
+    },
+    automation: {
+      mode: "manual-or-unattended",
+      continuousWhenEnabled: true,
+      keepLive: "required-when-automation-enabled",
+    },
+    result: {
+      returnRoute: "controller",
+      resultEnvelopeRequired: true,
+    },
+    generatedAt: nowIso(),
+  };
 }
 
 function commandStatus() {
@@ -334,8 +494,11 @@ function commandStatus() {
   }
   const packetCount = listJsonFiles(dirs.packets).length;
   const deliveryCount = listJsonFiles(dirs.deliveries).length;
+  const deliveryRunCount = listJsonFiles(dirs.deliveryRuns).length;
   const resultCount = listJsonFiles(dirs.results).length;
   const registeredThreadCount = listJsonFiles(dirs.registry).length;
+  const windowConfigCount = listJsonFiles(dirs.windowConfig).length;
+  const keepLiveStateExists = existsSync(keepLiveStateFile());
   output(
     {
       ok: true,
@@ -343,16 +506,48 @@ function commandStatus() {
       stateDir,
       packetCount,
       deliveryCount,
+      deliveryRunCount,
       resultCount,
       registeredThreadCount,
+      windowConfigCount,
+      keepLiveStateExists,
     },
     [
       "Codex automation closed-loop status",
       `State: ${path.relative(workspaceRoot, stateDir) || "."}`,
       `Dispatch packets: ${packetCount}`,
       `Delivery envelopes: ${deliveryCount}`,
+      `Delivery runs: ${deliveryRunCount}`,
       `Target results: ${resultCount}`,
       `Registered threads: ${registeredThreadCount}`,
+      `Window configs: ${windowConfigCount}`,
+      `Keep-live state: ${keepLiveStateExists ? "present" : "missing"}`,
+    ],
+  );
+}
+
+function commandBuildWindowConfig() {
+  const windowName = requireValue("--window");
+  const busyPolicy = validateBusyPolicy(getValue("--busy-policy", "append-if-steerable"));
+  const config = buildWindowConfig(windowName, { busyPolicy, requireThread: hasFlag("--require-thread") });
+  const configFile = windowConfigFileFor(windowName);
+  if (write) {
+    ensureStateDirs();
+    atomicWriteJson(configFile, config);
+  }
+  output(
+    {
+      ok: true,
+      command: "build-window-config",
+      wrote: write,
+      windowName,
+      config,
+      configFile: write ? path.relative(workspaceRoot, configFile) : "",
+    },
+    [
+      `${write ? "Created" : "Would create"} window config for ${windowName}.`,
+      `Thread: ${config.threadRegistered ? "registered" : "missing"}`,
+      `Dispatchable: ${config.dispatchable ? "yes" : "no"}`,
     ],
   );
 }
@@ -415,13 +610,14 @@ function commandBuildDelivery() {
   if (!packet.targetWindow || !packet.prompt || !packet.taskId) fail("Dispatch packet is missing targetWindow, taskId, or prompt.");
 
   const deliveryId = getValue("--delivery-id", `delivery-${packet.id}`);
-  const stagger = Number(getValue("--stagger-seconds", "0"));
-  if (!Number.isFinite(stagger) || stagger < 0) fail("--stagger-seconds must be a non-negative number.");
+  const busyPolicy = validateBusyPolicy(getValue("--busy-policy", "append-if-steerable"));
+  const automationEnabled = hasFlag("--automation-enabled");
   const registration = loadThreadRegistration(packet.targetWindow);
   if (hasFlag("--require-thread") && !registration) fail(`No registered thread for target window: ${packet.targetWindow}`);
+  const windowConfig = buildWindowConfig(packet.targetWindow, { busyPolicy });
   const envelope = {
     kind: "DeliveryEnvelope",
-    version,
+    version: deliveryEnvelopeVersion,
     deliveryId,
     sourcePacketId: packet.id,
     targetWindow: packet.targetWindow,
@@ -431,34 +627,33 @@ function commandBuildDelivery() {
     prompt: packet.prompt,
     returnRoute: validateReturnRoute(getValue("--return-route", "controller")),
     oneShot: true,
-    keepLive: !hasFlag("--no-keep-live"),
     correlationId: packet.dispatchGroup || packet.id,
     targetThread: registration
       ? {
           windowName: registration.windowName,
-          role: registration.role,
-          threadId: registration.threadId,
+          deliveryRole: registration.deliveryRole,
+          threadIdRedacted: true,
+          threadRegistryFile: registration.threadRegistryFile,
           cwd: registration.cwd,
+          responsibilityRoot: registration.responsibilityRoot,
         }
       : undefined,
-    schedule: {
-      kind: "heartbeat",
-      rrule: "FREQ=MINUTELY;INTERVAL=1",
-      staggerSeconds: stagger,
+    transport: {
+      kind: "direct-thread",
+      threadRegistryFile: path.relative(stateDir, threadFileFor(packet.targetWindow)),
+      busyPolicy,
+      readbackRequired: true,
+      missingThread: "fail-closed",
     },
+    automation: {
+      enabled: automationEnabled,
+      continuousLoop: automationEnabled,
+      keepLive: automationEnabled,
+      keepLiveStateFile: automationEnabled ? path.relative(stateDir, keepLiveStateFile()) : undefined,
+    },
+    windowConfig,
     createdAt: nowIso(),
   };
-  if (registration) {
-    envelope.codexAutomation = {
-      kind: "heartbeat",
-      destination: "thread",
-      targetThreadId: registration.threadId,
-      name: `Codex automation ${packet.targetWindow}`,
-      prompt: packet.prompt,
-      rrule: envelope.schedule.rrule,
-      status: "ACTIVE",
-    };
-  }
 
   const deliveryFile = deliveryFileFor(envelope.deliveryId);
   if (write) {
@@ -470,10 +665,10 @@ function commandBuildDelivery() {
       ok: true,
       command: "build-delivery",
       wrote: write,
-      envelope: hasFlag("--include-thread-id") ? envelope : redactDeliveryEnvelope(envelope),
+      envelope: redactDeliveryEnvelope(envelope),
       deliveryFile: write ? path.relative(workspaceRoot, deliveryFile) : "",
       threadReady: Boolean(registration),
-      threadIdRedacted: Boolean(registration) && !hasFlag("--include-thread-id"),
+      threadIdRedacted: Boolean(registration),
     },
     [
       `${write ? "Created" : "Would create"} delivery envelope ${deliveryId}.`,
@@ -491,13 +686,16 @@ function commandBuildControllerReturn() {
   const controlPlan = requireValue("--control-plan");
   const config = readWorkspaceConfig();
   const controllerWindow = getValue("--controller-window", config.controlWindow || config.workspaceName || "ControlWorkspace");
+  const busyPolicy = validateBusyPolicy(getValue("--busy-policy", "append-if-steerable"));
+  const automationEnabled = hasFlag("--automation-enabled");
   const registration = loadThreadRegistration(controllerWindow);
   if (hasFlag("--require-thread") && !registration) fail(`No registered controller thread for window: ${controllerWindow}`);
+  const windowConfig = buildWindowConfig(controllerWindow, { busyPolicy });
 
   const prompt = formatControllerReturnPrompt({ dispatchGroup, lastCompletedTarget, lastTaskId, controlPlan });
   const envelope = {
     kind: "ControllerReturnEnvelope",
-    version,
+    version: deliveryEnvelopeVersion,
     deliveryId: `controller-return-${slug(dispatchGroup)}__${slug(lastCompletedTarget)}__${slug(lastTaskId)}`,
     dispatchGroup,
     lastCompletedTarget,
@@ -508,28 +706,29 @@ function commandBuildControllerReturn() {
     targetThread: registration
       ? {
           windowName: registration.windowName,
-          role: registration.role,
-          threadId: registration.threadId,
+          deliveryRole: registration.deliveryRole,
+          threadIdRedacted: true,
+          threadRegistryFile: registration.threadRegistryFile,
           cwd: registration.cwd,
+          responsibilityRoot: registration.responsibilityRoot,
         }
       : undefined,
-    schedule: {
-      kind: "heartbeat",
-      rrule: "FREQ=MINUTELY;INTERVAL=1",
+    transport: {
+      kind: "direct-thread",
+      threadRegistryFile: path.relative(stateDir, threadFileFor(controllerWindow)),
+      busyPolicy,
+      readbackRequired: true,
+      missingThread: "fail-closed",
     },
+    automation: {
+      enabled: automationEnabled,
+      continuousLoop: automationEnabled,
+      keepLive: automationEnabled,
+      keepLiveStateFile: automationEnabled ? path.relative(stateDir, keepLiveStateFile()) : undefined,
+    },
+    windowConfig,
     createdAt: nowIso(),
   };
-  if (registration) {
-    envelope.codexAutomation = {
-      kind: "heartbeat",
-      destination: "thread",
-      targetThreadId: registration.threadId,
-      name: `Codex automation ${controllerWindow} return`,
-      prompt,
-      rrule: envelope.schedule.rrule,
-      status: "ACTIVE",
-    };
-  }
 
   const returnFile = deliveryFileFor(envelope.deliveryId);
   if (write) {
@@ -541,15 +740,123 @@ function commandBuildControllerReturn() {
       ok: true,
       command: "build-controller-return",
       wrote: write,
-      envelope: hasFlag("--include-thread-id") ? envelope : redactDeliveryEnvelope(envelope),
+      envelope: redactDeliveryEnvelope(envelope),
       returnFile: write ? path.relative(workspaceRoot, returnFile) : "",
       threadReady: Boolean(registration),
-      threadIdRedacted: Boolean(registration) && !hasFlag("--include-thread-id"),
+      threadIdRedacted: Boolean(registration),
     },
     [
       `${write ? "Created" : "Would create"} controller-return envelope ${envelope.deliveryId}.`,
       `Controller: ${controllerWindow}`,
       `Thread: ${registration ? "registered" : "missing"}`,
+    ],
+  );
+}
+
+function commandRecordDeliveryRun() {
+  if (!write) fail("record-delivery-run requires --write.");
+  const deliveryFile = resolveInputPath(requireValue("--delivery-file"), "--delivery-file");
+  const envelope = readJson(deliveryFile, "delivery envelope");
+  if (!["DeliveryEnvelope", "ControllerReturnEnvelope"].includes(envelope.kind)) {
+    fail("Delivery file must contain a DeliveryEnvelope or ControllerReturnEnvelope.");
+  }
+  const status = validateDeliveryRunStatus(requireValue("--status"));
+  const readbackOk = parseBoolean(getValue("--readback-ok", ""), status === "sent");
+  const evidence = getValue("--evidence", "");
+  const error = getValue("--error", "");
+  if (status === "sent" && (!readbackOk || !evidence.trim())) {
+    fail("sent delivery runs require --readback-ok true and --evidence.");
+  }
+  if (status !== "sent" && !error.trim()) {
+    fail("blocked/failed delivery runs require --error.");
+  }
+  const deliveryRunId = getValue("--delivery-run-id", `run-${envelope.deliveryId}`);
+  const keepLiveState = envelope.automation?.keepLive ? path.relative(stateDir, keepLiveStateFile()) : null;
+  const run = {
+    kind: "DirectThreadDeliveryRun",
+    version: deliveryRunVersion,
+    deliveryRunId,
+    deliveryId: envelope.deliveryId,
+    targetWindow: envelope.targetWindow || envelope.targetThread?.windowName,
+    taskId: envelope.taskId || envelope.lastTaskId,
+    dispatchGroup: envelope.dispatchGroup,
+    transport: "direct-thread",
+    status,
+    thread: {
+      windowName: envelope.targetThread?.windowName || envelope.targetWindow,
+      threadIdRedacted: true,
+      threadRegistryFile: envelope.transport?.threadRegistryFile || envelope.targetThread?.threadRegistryFile,
+    },
+    hostAction: {
+      method: getValue("--host-method", "send_message_to_thread"),
+      mode: validateHostMode(getValue("--host-mode", "unknown")),
+    },
+    readback: {
+      checked: status === "sent" || getValue("--readback-ok", "") !== "",
+      ok: readbackOk,
+      evidence: evidence || undefined,
+    },
+    keepLive: {
+      enabledForRun: Boolean(envelope.automation?.keepLive),
+      stateFile: keepLiveState,
+    },
+    error: error || undefined,
+    createdAt: nowIso(),
+  };
+  const runFile = deliveryRunFileFor(deliveryRunId);
+  ensureStateDirs();
+  atomicWriteJson(runFile, run);
+  output(
+    {
+      ok: true,
+      command: "record-delivery-run",
+      wrote: true,
+      status,
+      run,
+      runFile: path.relative(workspaceRoot, runFile),
+    },
+    [
+      `Recorded direct-thread delivery run ${deliveryRunId}.`,
+      `Status: ${status}`,
+    ],
+  );
+}
+
+function commandKeepLiveState() {
+  if (!write) fail("keep-live-state requires --write.");
+  const automationRunId = requireValue("--automation-run-id");
+  const status = validateKeepLiveStatus(requireValue("--status"));
+  const pidValue = getValue("--pid", "");
+  const pid = pidValue ? Number(pidValue) : undefined;
+  if (pidValue && (!Number.isInteger(pid) || pid <= 0)) fail("--pid must be a positive integer.");
+  const state = {
+    kind: "AutomationKeepLiveState",
+    version: keepLiveVersion,
+    enabled: status === "running",
+    automationRunId,
+    mechanism: getValue("--mechanism", "manual"),
+    startedAt: status === "running" ? nowIso() : undefined,
+    stoppedAt: status === "stopped" ? nowIso() : undefined,
+    pid,
+    status,
+    lastCheckedAt: nowIso(),
+    error: getValue("--error", "") || null,
+  };
+  if (status === "failed" && !state.error) fail("failed keep-live state requires --error.");
+  ensureStateDirs();
+  atomicWriteJson(keepLiveStateFile(), state);
+  output(
+    {
+      ok: true,
+      command: "keep-live-state",
+      wrote: true,
+      status,
+      state,
+      stateFile: path.relative(workspaceRoot, keepLiveStateFile()),
+    },
+    [
+      `Recorded keep-live state for ${automationRunId}.`,
+      `Status: ${status}`,
     ],
   );
 }
@@ -678,6 +985,9 @@ try {
     case "register-thread":
       commandRegisterThread();
       break;
+    case "build-window-config":
+      commandBuildWindowConfig();
+      break;
     case "create-dispatch":
       commandCreateDispatch();
       break;
@@ -686,6 +996,12 @@ try {
       break;
     case "build-controller-return":
       commandBuildControllerReturn();
+      break;
+    case "record-delivery-run":
+      commandRecordDeliveryRun();
+      break;
+    case "keep-live-state":
+      commandKeepLiveState();
       break;
     case "submit-result":
       commandSubmitResult();

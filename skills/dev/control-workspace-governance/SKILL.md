@@ -27,6 +27,7 @@ This skill may guide workspace documentation, TODO intake, dispatch planning, an
 - Read [references/workspace-ledgers.md](references/workspace-ledgers.md) when creating, moving, syncing, archiving, or validating workspace control documents, status mirrors, indexes, templates, Design handoff ledgers, test exchange entries, workspace skill assets, or `AGENTS.md` map / skill-pointer layering.
 - Read [references/control-architecture.md](references/control-architecture.md) when restructuring `AGENTS.md`, skills, references, templates, scripts, current plans, or automation surfaces as one consistent control system.
 - Read [references/codex-automation-loop.md](references/codex-automation-loop.md) when total control starts, stops, designs, debugs, or validates the new Codex Automation Closed Loop packet / envelope / result workflow.
+- Read [references/direct-thread-window-config.md](references/direct-thread-window-config.md) when designing or implementing child-window direct thread dispatch config, thread registry files, delivery-run evidence, keep-live state, or v1/v2 automation runtime migration.
 - Read [references/phased-migration.md](references/phased-migration.md) when a task moves, extracts, deletes, or rehomes behavior across BaseWindow repositories.
 
 ## Non-Negotiables

@@ -11,8 +11,9 @@ Current development skills:
 
 - `control-workspace-governance/`: total-control procedures and references for
   TODO, dispatch, testing, workspace ledger / document-surface, script pipeline,
-  automation operation, phased migration, and control architecture work. Hard
-  anti-failure rules remain in workspace `AGENTS.md`.
+  automation operation, direct-thread child-window config, phased migration, and
+  control architecture work. Hard anti-failure rules remain in workspace
+  `AGENTS.md`.
 - `codex-automation-controller/`: total-control rules for the new
   CodexAutomationClosedLoop controller side: create dispatch packets, build
   delivery envelopes, review result envelopes, pull raw evidence, and decide

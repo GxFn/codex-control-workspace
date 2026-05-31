@@ -15,6 +15,15 @@ control. It lets total control fan out work to target windows, receive compact
 result envelopes, pull raw evidence, and decide the next wave. It does not
 replace total-control planning or acceptance.
 
+Direct thread dispatch is the normal work pipeline. When unattended automation
+is explicitly enabled, run it as a continuous loop inside the approved user
+goal, repository boundary, and eligible TODO set: review, pull evidence, decide,
+plan the next package, dispatch again, and keep moving until final completion,
+a hard gate, explicit user stop, missing evidence that needs human judgment, or
+no eligible TODO remains. Automation-enabled runs should also enable keep-live /
+keep-awake support; keep-live is runtime liveness support, not delivery
+transport and not acceptance evidence.
+
 The previous `claim / finish / chain-next / start-plan / resume-plan` protocol
 is retired. Do not use it for closed-loop work.
 
@@ -42,9 +51,9 @@ command manuals into the prompt.
    - Read workspace `AGENTS.md`, workspace index/status, the current control
      plan, and this skill.
    - State that this is the total-control window.
-   - If this is a heartbeat wakeup and it contains `automation_id`, consume only
-     that one-shot automation through the Codex automation tool before long
-     review. This only clears the wakeup; it is not acceptance evidence.
+   - Direct thread delivery has no automation cleanup step. If a previous local
+     automation is still present, treat it as stale runtime state and stop for
+     total-control cleanup rather than continuing a legacy route.
 
 2. **Review target results**
    - Run:
@@ -68,7 +77,13 @@ node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --
      thread id only in local runtime:
 
 ```text
-node scripts/codex-automation-loop.mjs register-thread --window <window> --thread-id <realThreadId> --write --json
+node scripts/codex-automation-loop.mjs register-thread --window <window> --thread-id <realThreadId> --role target --responsibility-root <repo-or-workspace-path> --write --json
+```
+
+   - Build or refresh the target's local file config before delivery:
+
+```text
+node scripts/codex-automation-loop.mjs build-window-config --window <window> --busy-policy append-if-steerable --require-thread --write --json
 ```
 
    - For each target, create a dispatch packet. Omit `--prompt` for the default
@@ -82,20 +97,36 @@ node scripts/codex-automation-loop.mjs create-dispatch --target-window <window> 
    - Then create a delivery envelope:
 
 ```text
-node scripts/codex-automation-loop.mjs build-delivery --packet-file <packetFile> --require-thread --stagger-seconds <seconds> --write --json
+node scripts/codex-automation-loop.mjs build-delivery --packet-file <packetFile> --require-thread --busy-policy append-if-steerable --write --json
 ```
 
-   - The delivery adapter or total-control operator creates the Codex heartbeat
-     from the delivery envelope. The script itself does not call Codex
-     automation APIs. Delivery command output redacts thread ids by default;
-     raw ids stay in ignored local runtime files.
+   - Add `--automation-enabled` only for an explicitly unattended run. In that
+     mode, record keep-live state before dispatch:
+
+```text
+node scripts/codex-automation-loop.mjs keep-live-state --status active --host-mode manual-or-external --reason "<approved unattended run>" --write --json
+```
+
+   - The delivery adapter or total-control operator uses direct thread delivery
+     when the host capability and real thread registration are available. The
+     script itself does not prove delivery. Delivery command output never emits
+     raw thread ids; raw ids stay in ignored local runtime files. If the thread
+     id or host send capability is unavailable, fail closed and return to
+     total-control judgment.
+   - After the host send and readback, record delivery evidence:
+
+```text
+node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <deliveryFile> --status sent --readback-ok true --evidence "<host send/readback evidence>" --write --json
+```
+
    - For unattended return, register the controller thread once with role
-     `controller`. Target windows may only create a controller-return heartbeat
+     `controller`. Target windows may only create a controller-return delivery
      through `build-controller-return` after `review-results` says the group is
      ready; they still must not create another target-window hop.
 
 4. **Stop**
-   - Stop only for explicit user stop, hard gate, final archive, or no useful
+   - Stop only for explicit user stop, hard gate, final archive, missing
+     evidence that needs total-control judgment, or no useful
      automation-eligible work:
 
 ```text

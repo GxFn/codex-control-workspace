@@ -502,16 +502,16 @@ function scopeBlock(context, repo) {
 1. 先读本文件。
 2. 再读父级 \`${parentAgents}\`。
 3. 再读 \`${activeIndex}\` 和 \`${activeStatus}\`。
-4. 如果有当前计划、任务包或 Codex Automation heartbeat，只按 \`${currentDir}\` 中明确分配给 \`${repo.windowName}\` 的内容执行。
+4. 如果有当前计划、任务包或 direct-thread delivery，只按 \`${currentDir}\` 中明确分配给 \`${repo.windowName}\` 的内容执行。
 5. 目标、范围、禁止事项、验证命令和回填字段以当前计划 / 任务包和本仓库规则为准；提示词只是唤醒入口，不是唯一任务说明。
 
-### Codex Automation 最小门禁
+### Direct Thread Dispatch 最小门禁
 
-- Automation 只是一次性唤醒 / 投递信封，不改变本窗口职责，也不扩大任务范围；具体任务以 dispatch packet、当前计划和本仓库规则为准。
-- Heartbeat 提示词只承载动态变量、规则名和 skill 指向；不得把提示词当成完整命令手册。用 \`currentWindow\` / \`taskId\` / \`dispatchGroup\` / \`controlPlan\` 等变量按 \`codex-automation-target\` skill 执行，变量缺失或冲突时停止回报。
+- Direct-thread delivery 是正常工作投递流水线，不改变本窗口职责，也不扩大任务范围；具体任务以 dispatch packet、当前计划和本仓库规则为准。
+- Delivery prompt 只承载动态变量、规则名和 skill 指向；不得把提示词当成完整命令手册。用 \`currentWindow\` / \`taskId\` / \`dispatchGroup\` / \`controlPlan\` 等变量按 \`codex-automation-target\` skill 执行，变量缺失或冲突时停止回报。
 - 本窗口只处理 \`${repo.windowName}\` 对应的 dispatch packet，并返回 \`TargetResultEnvelope\`；不得代领、代验或处理其它窗口任务。
-- 子窗口默认不创建目标窗口下一跳 heartbeat；补证、重派和下一阶段都由总控 review 后决定。若 delivery \`returnRoute=controller\` 且 \`review-results\` 显示本组结果已齐件或阻塞，只允许通过 \`build-controller-return\` 创建一次总控回跳。
-- 非 TestWindow 不得创建、处理或验证 TestWindow heartbeat，除非当前计划和 delivery envelope 同时显式授权。
+- 子窗口默认不创建目标窗口下一跳 delivery；补证、重派和下一阶段都由总控 review 后决定。若 delivery \`returnRoute=controller\` 且 \`review-results\` 显示本组结果已齐件或阻塞，只允许通过 \`build-controller-return\` 创建一次总控回跳。
+- 非 TestWindow 不得创建、处理或验证 TestWindow delivery，除非当前计划和 delivery envelope 同时显式授权。
 - Thread id 只能写入 control workspace 的本地 runtime；不得写入 tracked 文档、回填正文或 GitHub。
 
 ### 文档落点
@@ -602,11 +602,11 @@ function accessProfileFor(context, repo) {
     },
     {
       key: "noTargetNextHop",
-      ok: block.includes("子窗口默认不创建目标窗口下一跳 heartbeat"),
+      ok: block.includes("子窗口默认不创建目标窗口下一跳 delivery"),
     },
     {
       key: "testWindowBoundary",
-      ok: block.includes("非 TestWindow 不得创建、处理或验证 TestWindow heartbeat"),
+      ok: block.includes("非 TestWindow 不得创建、处理或验证 TestWindow delivery"),
     },
     {
       key: "threadIdLocalOnly",

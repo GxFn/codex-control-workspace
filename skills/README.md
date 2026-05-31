@@ -26,9 +26,10 @@ Current drafts:
 - `dev/control-workspace-governance/`: trial extraction for bulky
   ControlWorkspace control-center details. It currently holds TODO / Backlog,
   window dispatch, testing / validation, workspace ledger / document-surface,
-  workspace script pipeline, Codex Automation Closed Loop operation, phased
-  migration, and workspace control architecture references that used to live
-  inline in `AGENTS.md` or ad hoc conversation memory.
+  workspace script pipeline, Codex Automation Closed Loop operation,
+  direct-thread child-window config, phased migration, and workspace control
+  architecture references that used to live inline in `AGENTS.md` or ad hoc
+  conversation memory.
   `AGENTS.md` remains the hard boundary source and points to this skill only
   when those detailed workflows are needed. Anti-failure hard rules must stay
   in `AGENTS.md`, not only here.

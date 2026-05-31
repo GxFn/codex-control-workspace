@@ -103,7 +103,7 @@ test("send-eligible nonstandard coverage row fails closed", () => {
   assert.match(`${result.stdout}\n${result.stderr}`, /unexpected send-eligible dispatch window: custom-worker/);
 });
 
-test("delivered Alembic window remains send-covered after automation creation", () => {
+test("delivered Alembic window remains send-covered after direct-thread delivery creation", () => {
   const root = createFixture("");
   writeFile(
     path.join(root, "docs/workspace/current/example-plan.md"),
@@ -119,7 +119,7 @@ test("delivered Alembic window remains send-covered after automation creation", 
 
 | 窗口 / 状态 | 任务 |
 | --- | --- |
-| \`Alembic\`<br>已投递 | 目标 heartbeat 已创建，等待 TargetResultEnvelope。 |
+| \`Alembic\`<br>已投递 | direct-thread delivery 已创建，等待 TargetResultEnvelope。 |
 | \`AlembicCore\`<br>观察中 | 当前不发送。 |
 | \`AlembicAgent\`<br>无任务 | 当前不发送。 |
 | \`AlembicDashboard\`<br>无任务 | 当前不发送。 |
