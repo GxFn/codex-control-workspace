@@ -32,7 +32,7 @@ Codex Control Workspace 提供的是一个**总控面**：
 下一阶段、继续派发、归档或停止
 ```
 
-它刻意保持朴素：没有托管服务，没有数据库，没有隐藏调度器。核心就是 `AGENTS.md`、Markdown 账本、小型 Node 脚本、Codex skill，以及可选的 Codex heartbeat 自动化。所有判断面都在文件里，可以读、可以改、可以复核。
+它刻意保持朴素：没有托管服务，没有数据库，没有隐藏调度器。核心就是 `AGENTS.md`、Markdown 账本、小型 Node 脚本、Codex skill、direct Codex thread delivery，以及可选的 keep-live 支持。所有判断面都在文件里，可以读、可以改、可以复核。
 
 真正的优势是“人优先的连续性”。有人在 Mac 前时，可以随时查看进度、调整范围、直接改代码或关闭自动化；自动化永远排在开发者现场判断之后。没有人在 Mac 前且已开启无人值守模式时，总控才会在子窗口完成后继续验收证据、接受或打回、补计划、创建下一阶段任务包、再次派发，直到用户最终目标完成、出现硬门禁，或没有可领取 TODO。自动化服务于总控判断，而不是替代总控判断。
 
@@ -131,7 +131,7 @@ node scripts/control-workspace-install.mjs configure \
 
 ## Codex 自动化闭环
 
-Codex Automation Closed Loop 用 Codex heartbeat 唤醒真实子窗口，但计划和验收始终留在总控。
+Codex Automation Closed Loop 使用 direct thread dispatch 作为正常工作流水线，但计划和验收始终留在总控。delivery contract 只走 direct-thread：把任务提示词发送到已登记的 Codex 线程；如果缺真实 thread id 或宿主线程投递能力不可用，fail closed 回到总控裁决。
 
 脚本层只负责明确的 packet / envelope：
 
@@ -143,7 +143,9 @@ node scripts/workspace-control.mjs loop submit-result --target-window <window> -
 node scripts/workspace-control.mjs loop review-results --group <group> --json
 ```
 
-脚本不会直接调用 Codex automation API。它只生成 delivery envelope。总控窗口或 delivery adapter 按 envelope 创建 heartbeat，目标窗口完成后回填 `TargetResultEnvelope`。
+脚本不会直接调用 Codex automation API。它只生成 dispatch packet / delivery envelope。总控窗口或 delivery adapter 按 envelope 执行 direct thread send，并用 send/readback 的 delivery-run 证据证明已投递；目标窗口完成后回填 `TargetResultEnvelope`，并在结果齐件时通过 controller-return 回调总控。
+
+总控完成 direct-thread send、readback 和 delivery-run 记录后，该派发动作即完成；总控不应为已派发任务创建 heartbeat、自唤醒或人工工作态来占住自己。子窗口回调是下一次进入该任务的入口。
 
 这个闭环面向长时间无人值守运行，但始终可被人接管。开发者在场时，手动修正、代码修改和范围裁决优先于下一次自动跳转；Mac 空闲无人看守时，总控可以复核 result envelope、拉取原始证据、接受或打回、创建下一阶段任务包并继续派发，直到用户最终目标完成、出现硬门禁，或没有可领取 TODO。
 

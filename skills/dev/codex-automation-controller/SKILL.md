@@ -24,6 +24,15 @@ no eligible TODO remains. Automation-enabled runs should also enable keep-live /
 keep-awake support; keep-live is runtime liveness support, not delivery
 transport and not acceptance evidence.
 
+Total control is a traffic controller, not a worker locked to one lane. After a
+target dispatch has been sent, read back, and recorded as a delivery run, that
+dispatch is complete from the controller side. Do not create a heartbeat,
+self-wakeup, recurring reminder, or artificial in-progress state just to keep
+the controller attached to that task. The target window returns by submitting a
+`TargetResultEnvelope` and, when the group is ready, sending one controller
+return. Until then, total control is free to handle other user input or parallel
+plans.
+
 The previous `claim / finish / chain-next / start-plan / resume-plan` protocol
 is retired. Do not use it for closed-loop work.
 
@@ -101,12 +110,17 @@ node scripts/codex-automation-loop.mjs build-delivery --packet-file <packetFile>
 ```
 
    - Add `--automation-enabled` only for an explicitly unattended run. In that
-     mode, record keep-live state before dispatch:
+     mode, start keep-live before dispatch:
 
 ```text
-node scripts/codex-automation-loop.mjs keep-live-state --status active --host-mode manual-or-external --reason "<approved unattended run>" --write --json
+node scripts/codex-automation-loop.mjs start-keep-live --automation-run-id <dispatchGroup-or-runId> --write --json
 ```
 
+     The script owns a local macOS watcher and writes both state and control
+     files under ignored runtime. `keep-live-state` remains only for manual or
+     external keep-live evidence. If `start-keep-live` cannot prove an active
+     watcher, record it as an automation readiness risk; do not treat
+     keep-live as working merely because a state file exists.
    - The delivery adapter or total-control operator uses direct thread delivery
      when the host capability and real thread registration are available. The
      script itself does not prove delivery. Delivery command output never emits
@@ -119,6 +133,11 @@ node scripts/codex-automation-loop.mjs keep-live-state --status active --host-mo
 node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <deliveryFile> --status sent --readback-ok true --evidence "<host send/readback evidence>" --write --json
 ```
 
+   - Once the delivery run is recorded as sent/readback-ok, the controller-side
+     dispatch is done. End the current controller work for that task unless
+     there is a separate ready result to review. Do not schedule controller
+     heartbeat or self-wakeup work; the target's result envelope plus
+     controller-return is the next re-entry point.
    - For unattended return, register the controller thread once with role
      `controller`. Target windows may only create a controller-return delivery
      through `build-controller-return` after `review-results` says the group is
@@ -137,6 +156,10 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <deli
 ```text
 node scripts/codex-automation-loop.mjs stop-loop --reason "<reason>" --write --json
 ```
+
+   - `stop-loop` also stops the local keep-live watcher. Use
+     `stop-keep-live --automation-run-id <id> --reason "<reason>" --write --json`
+     only when closing keep-live without closing the delivery loop.
 
 ## Hard Gates
 

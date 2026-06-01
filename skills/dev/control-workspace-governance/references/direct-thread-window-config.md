@@ -19,6 +19,10 @@ dispatch, acceptance, or product implementation.
   not delivery transport, target work, or acceptance evidence.
 - Delivery success proves only that the prompt reached a thread. Total control
   still needs a `TargetResultEnvelope` and raw evidence before acceptance.
+- Once delivery success and readback are recorded, the controller-side dispatch
+  is complete. Total control must not keep itself busy through heartbeat or
+  self-wakeup for that task; it waits for target callback and remains available
+  for other concurrent workspace work.
 
 ## File Owners
 
@@ -227,6 +231,9 @@ Allowed `status` values:
 - `failed`: host send attempted but failed; include error summary.
 
 `sent` is not acceptance. The target still must return a result envelope.
+It is, however, enough to close the controller-side dispatch action for that
+target. The controller should not remain in an artificial active state while it
+waits.
 
 ## Keep-Live State
 
@@ -239,8 +246,14 @@ Keep-live is required only when unattended automation is enabled:
   "enabled": true,
   "automationRunId": "run-or-dispatch-group",
   "mechanism": "macos-caffeinate",
+  "strategy": "watcher",
+  "command": "caffeinate",
+  "args": ["-dims", "-w", "<worker-pid>"],
+  "token": "<local-token>",
   "startedAt": "2026-05-31T00:00:00.000Z",
   "pid": 12345,
+  "workerPid": 12345,
+  "childPid": 12346,
   "status": "running",
   "lastCheckedAt": "2026-05-31T00:00:00.000Z",
   "error": null
@@ -250,6 +263,15 @@ Keep-live is required only when unattended automation is enabled:
 Keep-live failure blocks unattended reliability, not the target task itself.
 Total control records it as automation readiness risk and decides whether to
 continue manually.
+
+Local keep-live uses `start-keep-live` / `stop-keep-live`. The script writes
+both `keep-live/state.json` and `keep-live/control.json`; the watcher exits by
+observing a stop marker, and `stop-loop` also stops keep-live. `keep-live-state`
+is reserved for manually proven or external keep-live evidence.
+
+Keep-live is never a controller heartbeat. If keep-live is absent, fails, or is
+not needed, direct-thread dispatch can still be complete after send/readback;
+the target callback is responsible for returning the task to total control.
 
 ## Stop And Cleanup
 

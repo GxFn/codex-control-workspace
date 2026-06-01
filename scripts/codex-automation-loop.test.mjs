@@ -554,6 +554,53 @@ test("records keep-live state for unattended automation", () => {
   assert.match(readFileSync(path.join(root, payload.stateFile), "utf8"), /GROUP-RUN/);
 });
 
+test(
+  "starts and stops a local keep-live watcher on macOS",
+  { skip: process.platform !== "darwin" ? "keep-live watcher is macOS-only" : false },
+  () => {
+    const root = makeFixture();
+    let startPayload = null;
+    try {
+      const start = run(root, [
+        "start-keep-live",
+        "--automation-run-id",
+        "WATCH-RUN",
+        "--keep-live-command",
+        process.execPath,
+        "--keep-live-arg=-e",
+        "--keep-live-arg",
+        "setInterval(() => {}, 1000)",
+        "--write",
+      ]);
+      assert.equal(start.status, 0, start.stderr || start.stdout);
+      startPayload = JSON.parse(start.stdout);
+      assert.equal(startPayload.ready, true);
+      assert.equal(startPayload.keepLive.status, "running");
+      assert.ok(startPayload.keepLive.workerPid > 0);
+      assert.ok(startPayload.keepLive.childPid > 0);
+
+      const status = JSON.parse(run(root, ["status"]).stdout);
+      assert.equal(status.keepLive.active, true);
+      assert.equal(status.keepLive.status, "running");
+
+      const stop = run(root, ["stop-keep-live", "--automation-run-id", "WATCH-RUN", "--reason", "test done", "--write"]);
+      assert.equal(stop.status, 0, stop.stderr || stop.stdout);
+      const stopPayload = JSON.parse(stop.stdout);
+      assert.equal(stopPayload.ok, true);
+      assert.equal(stopPayload.keepLive.active, false);
+      assert.equal(stopPayload.keepLive.status, "stopped");
+      const state = JSON.parse(readFileSync(path.join(root, stopPayload.stateFile), "utf8"));
+      assert.equal(state.workerPid, 0);
+      assert.equal(state.childPid, 0);
+      assert.equal(state.stopReason, "test done");
+    } finally {
+      if (startPayload?.keepLive?.active) {
+        run(root, ["stop-keep-live", "--automation-run-id", "WATCH-RUN", "--reason", "test cleanup", "--write"]);
+      }
+    }
+  },
+);
+
 test("--help prints usage instead of status", () => {
   const root = makeFixture();
   const result = spawnSync("node", [script, "--help", "--root", root], {

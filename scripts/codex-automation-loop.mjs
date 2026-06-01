@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -8,6 +9,7 @@ const command = args[0] && !args[0].startsWith("--") ? args[0] : "status";
 const options = args[0] && !args[0].startsWith("--") ? args.slice(1) : args;
 const workspaceRoot = path.resolve(getValue("--root", process.cwd()));
 const stateDir = path.resolve(getValue("--state-dir", path.join(workspaceRoot, ".workspace-local/codex-automation-loop")));
+const scriptPath = new URL(import.meta.url).pathname;
 const write = hasFlag("--write");
 const json = hasFlag("--json");
 const version = 1;
@@ -38,6 +40,8 @@ Usage:
   node scripts/codex-automation-loop.mjs build-delivery --packet-file <path> [--delivery-id <id>] [--return-route controller|none] [--busy-policy append-if-steerable|fail-if-busy] [--automation-enabled] [--require-thread] [--write] [--json]
   node scripts/codex-automation-loop.mjs build-controller-return --group <id> --last-completed-target <window> --last-task-id <taskId> --control-plan <path> [--controller-window <name>] [--return-reason result-ready|blocked|smoke] [--busy-policy append-if-steerable|fail-if-busy] [--automation-enabled] [--require-thread] [--write] [--json]
   node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <path> --status sent|blocked|failed [--host-method send_message_to_thread] [--host-mode new-turn|append-to-active-turn|unknown] [--readback-ok true|false] [--evidence <text>] [--error <text>] --write [--json]
+  node scripts/codex-automation-loop.mjs start-keep-live --automation-run-id <id> [--keep-live-command <cmd>] [--keep-live-arg <arg>...] [--no-keep-live] --write [--json]
+  node scripts/codex-automation-loop.mjs stop-keep-live --automation-run-id <id> [--reason <text>] --write [--json]
   node scripts/codex-automation-loop.mjs keep-live-state --automation-run-id <id> --status running|stopped|failed [--mechanism macos-caffeinate|manual|none] [--pid <pid>] [--error <text>] --write [--json]
   node scripts/codex-automation-loop.mjs submit-result --target-window <name> --task-id <id> --status completed|blocked|needs-review [--group <id>] [--changed-repo <repo>...] [--commit <hash>...] [--evidence-ref <ref>...] [--verification <text>...] [--risk <text>...] [--next-suggestion <text>] [--write] [--json]
   node scripts/codex-automation-loop.mjs review-results (--group <id>|--task-id <id>) [--json]
@@ -117,6 +121,8 @@ function inferAgentNext(payload) {
   if (payload.command === "build-delivery") return payload.threadReady ? "Send the prompt with the host thread tool, then record a delivery run." : "Register the target thread before direct-thread delivery.";
   if (payload.command === "build-controller-return") return payload.threadReady ? "Send the controller-return prompt with the host thread tool, then record a delivery run." : "Register the controller thread before unattended return.";
   if (payload.command === "record-delivery-run") return payload.status === "sent" ? "Wait for the target result envelope or run review-results when ready." : "Return to total control judgment for the delivery block.";
+  if (payload.command === "start-keep-live") return payload.keepLive?.active ? "Continue unattended direct-thread dispatch; keep-live is active." : "Treat keep-live as an automation readiness risk before claiming unattended reliability.";
+  if (payload.command === "stop-keep-live") return payload.keepLive?.active ? "Inspect and stop the recorded keep-live process before claiming shutdown is clean." : "Keep-live is stopped; continue only by total-control judgment.";
   if (payload.command === "keep-live-state") return "Continue or stop unattended automation according to the current plan and keep-live status.";
   if (payload.command === "submit-result") return "Wake total control or run review-results; the result is not an acceptance verdict.";
   if (payload.command === "review-results") return payload.decision === "wait" ? "Wait for missing target result envelopes." : "Total control must pull raw evidence and make the verdict.";
@@ -193,6 +199,10 @@ function windowConfigFileFor(windowName) {
 
 function keepLiveStateFile() {
   return path.join(dirs.keepLive, "state.json");
+}
+
+function keepLiveControlFile() {
+  return path.join(dirs.keepLive, "control.json");
 }
 
 function resultFileFor(targetWindow, taskId) {
@@ -308,6 +318,461 @@ function parseBoolean(value, fallback = false) {
   if (["true", "1", "yes", "y"].includes(normalized)) return true;
   if (["false", "0", "no", "n"].includes(normalized)) return false;
   fail(`Boolean value expected, got: ${value}`);
+}
+
+function keepLiveCommand() {
+  return getValue(
+    "--keep-live-command",
+    process.env.CODEX_AUTOMATION_KEEP_LIVE_COMMAND || process.env.CODEX_VAD_KEEP_AWAKE_COMMAND || "caffeinate",
+  );
+}
+
+function keepLiveArgs() {
+  const explicitArgs = getAllValues("--keep-live-arg");
+  if (explicitArgs.length > 0) return explicitArgs;
+  const jsonArgs = process.env.CODEX_AUTOMATION_KEEP_LIVE_ARGS_JSON || process.env.CODEX_VAD_KEEP_AWAKE_ARGS_JSON;
+  if (jsonArgs) {
+    try {
+      const parsed = JSON.parse(jsonArgs);
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) return parsed;
+    } catch {
+      return ["-dims"];
+    }
+  }
+  return ["-dims"];
+}
+
+function keepLiveEnabled() {
+  if (hasFlag("--no-keep-live")) return false;
+  if (process.env.CODEX_AUTOMATION_KEEP_LIVE === "0") return false;
+  return process.env.CODEX_VAD_KEEP_AWAKE !== "0";
+}
+
+function keepLiveMechanism(commandName = keepLiveCommand()) {
+  return process.platform === "darwin" && path.basename(commandName) === "caffeinate" ? "macos-caffeinate" : "process-watch";
+}
+
+function readOptionalJson(file) {
+  if (!existsSync(file)) return {};
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function isPidRunning(pid) {
+  const numericPid = Number(pid);
+  if (!Number.isInteger(numericPid) || numericPid <= 0) return false;
+  try {
+    process.kill(numericPid, 0);
+    return true;
+  } catch (error) {
+    return error.code === "EPERM";
+  }
+}
+
+function sleepSync(ms) {
+  const waitBuffer = new Int32Array(new SharedArrayBuffer(4));
+  Atomics.wait(waitBuffer, 0, 0, ms);
+}
+
+function waitForPidExit(pid, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!isPidRunning(pid)) return true;
+    sleepSync(50);
+  }
+  return !isPidRunning(pid);
+}
+
+function normalizeKeepLiveState(state = {}) {
+  const commandName = state.command || keepLiveCommand();
+  const args = Array.isArray(state.args) && state.args.every((item) => typeof item === "string") ? state.args : keepLiveArgs();
+  const workerPid = Number.isInteger(Number(state.workerPid)) ? Number(state.workerPid) : Number(state.pid) || 0;
+  const childPid = Number.isInteger(Number(state.childPid)) ? Number(state.childPid) : 0;
+  return {
+    kind: "AutomationKeepLiveState",
+    version: keepLiveVersion,
+    enabled: keepLiveEnabled(),
+    automationRunId: state.automationRunId || "",
+    mechanism: state.mechanism || keepLiveMechanism(commandName),
+    strategy: state.strategy || "watcher",
+    platform: process.platform,
+    command: commandName,
+    args,
+    token: typeof state.token === "string" ? state.token : "",
+    pid: workerPid,
+    workerPid,
+    childPid,
+    status: state.status || "missing",
+    startedAt: state.startedAt,
+    stoppedAt: state.stoppedAt,
+    stopReason: state.stopReason || "",
+    lastCheckedAt: nowIso(),
+    error: state.error || null,
+  };
+}
+
+function keepLiveStatus(extra = {}) {
+  const state = normalizeKeepLiveState(readOptionalJson(keepLiveStateFile()));
+  const workerActive = isPidRunning(state.workerPid);
+  const childActive = isPidRunning(state.childPid);
+  const active = workerActive || childActive;
+  const status = active ? "running" : state.status === "failed" ? "failed" : state.status === "stopped" ? "stopped" : "missing";
+  return {
+    ...state,
+    ...extra,
+    active,
+    workerActive,
+    childActive,
+    status: extra.status || status,
+    lastCheckedAt: nowIso(),
+  };
+}
+
+function writeKeepLiveControl(value) {
+  atomicWriteJson(keepLiveControlFile(), value);
+}
+
+function readKeepLiveControl() {
+  return readOptionalJson(keepLiveControlFile());
+}
+
+function keepLiveWorkerArgs(status, token, automationRunId) {
+  return [
+    scriptPath,
+    "keep-live-worker",
+    "--root",
+    workspaceRoot,
+    "--state-dir",
+    stateDir,
+    "--automation-run-id",
+    automationRunId,
+    "--token",
+    token,
+    "--keep-live-command",
+    status.command,
+    ...status.args.flatMap((arg) => ["--keep-live-arg", arg]),
+  ];
+}
+
+function readWorkerControl(token, timeoutMs = 1000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const control = readKeepLiveControl();
+    if (control.token === token && (Number(control.childPid) > 0 || control.action === "failed")) return control;
+    sleepSync(25);
+  }
+  return readKeepLiveControl();
+}
+
+function writeKeepLiveState(state) {
+  ensureStateDirs();
+  atomicWriteJson(keepLiveStateFile(), state);
+}
+
+function startKeepLive({ automationRunId }) {
+  const current = keepLiveStatus({
+    automationRunId,
+    command: keepLiveCommand(),
+    args: keepLiveArgs(),
+  });
+  if (!current.enabled) {
+    const state = { ...current, active: false, status: "stopped", stopReason: "disabled", pid: 0, workerPid: 0, childPid: 0 };
+    writeKeepLiveState(state);
+    return { ...state, message: "disabled" };
+  }
+  if (current.platform !== "darwin") {
+    const state = { ...current, active: false, status: "stopped", stopReason: "non-darwin", pid: 0, workerPid: 0, childPid: 0 };
+    writeKeepLiveState(state);
+    return { ...state, message: "macOS only" };
+  }
+  if (current.active) {
+    const state = { ...current, automationRunId, status: "running" };
+    writeKeepLiveState(state);
+    return { ...state, message: "already running" };
+  }
+
+  const token = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  writeKeepLiveControl({
+    version: keepLiveVersion,
+    action: "run",
+    token,
+    automationRunId,
+    requestedAt: nowIso(),
+    command: current.command,
+    args: current.args,
+    workerPid: 0,
+    childPid: 0,
+  });
+
+  try {
+    const worker = spawn(process.execPath, keepLiveWorkerArgs(current, token, automationRunId), {
+      detached: true,
+      stdio: "ignore",
+    });
+    worker.unref?.();
+    const control = readWorkerControl(token);
+    if (!worker.pid || control.action === "failed") {
+      const state = {
+        ...current,
+        automationRunId,
+        active: false,
+        status: "failed",
+        token,
+        pid: 0,
+        workerPid: 0,
+        childPid: 0,
+        error: control.error || "worker did not start",
+      };
+      writeKeepLiveState(state);
+      return { ...state, message: "failed" };
+    }
+    const state = {
+      ...current,
+      automationRunId,
+      active: true,
+      workerActive: true,
+      childActive: Number(control.childPid) > 0,
+      status: "running",
+      token,
+      pid: worker.pid,
+      workerPid: worker.pid,
+      childPid: Number(control.childPid) || 0,
+      startedAt: nowIso(),
+      stoppedAt: undefined,
+      stopReason: "",
+      error: null,
+    };
+    writeKeepLiveState(state);
+    return { ...state, message: "started" };
+  } catch (error) {
+    const state = {
+      ...current,
+      automationRunId,
+      active: false,
+      status: "failed",
+      token,
+      pid: 0,
+      workerPid: 0,
+      childPid: 0,
+      error: error.message,
+    };
+    writeKeepLiveState(state);
+    return { ...state, message: "failed" };
+  }
+}
+
+function stopKeepLive({ automationRunId = "", reason = "" } = {}) {
+  const current = keepLiveStatus();
+  const stopReason = reason || "stopped";
+  if (!current.active) {
+    const state = {
+      ...current,
+      automationRunId: automationRunId || current.automationRunId,
+      active: false,
+      workerActive: false,
+      childActive: false,
+      status: "stopped",
+      pid: 0,
+      workerPid: 0,
+      childPid: 0,
+      token: "",
+      stoppedAt: current.stoppedAt || nowIso(),
+      stopReason,
+      error: null,
+    };
+    writeKeepLiveState(state);
+    return { ...state, message: current.status === "missing" ? "not started" : "not running" };
+  }
+
+  if (current.strategy === "watcher" && current.token) {
+    writeKeepLiveControl({
+      version: keepLiveVersion,
+      action: "stop",
+      token: current.token,
+      automationRunId: automationRunId || current.automationRunId,
+      requestedAt: nowIso(),
+      reason: stopReason,
+      workerPid: current.workerPid,
+      childPid: current.childPid,
+    });
+    const workerExited = waitForPidExit(current.workerPid, 5000);
+    const childExited = waitForPidExit(current.childPid, 3000);
+    const workerActive = isPidRunning(current.workerPid);
+    const childActive = isPidRunning(current.childPid);
+    const state = {
+      ...current,
+      automationRunId: automationRunId || current.automationRunId,
+      active: workerActive || childActive,
+      workerActive,
+      childActive,
+      status: workerActive || childActive ? "failed" : "stopped",
+      pid: workerActive ? current.workerPid : 0,
+      workerPid: workerActive ? current.workerPid : 0,
+      childPid: childActive ? current.childPid : 0,
+      token: workerActive || childActive ? current.token : "",
+      stoppedAt: workerActive || childActive ? undefined : nowIso(),
+      stopReason,
+      error: [
+        workerExited ? "" : `worker pid ${current.workerPid} did not exit after stop marker`,
+        childExited ? "" : `keep-live child pid ${current.childPid} did not exit after worker stop`,
+      ].filter(Boolean).join("; ") || null,
+    };
+    writeKeepLiveState(state);
+    return { ...state, message: state.active ? "stop failed" : "stopped" };
+  }
+
+  try {
+    process.kill(current.workerPid, "SIGTERM");
+  } catch (error) {
+    const state = { ...current, status: "failed", error: error.message };
+    writeKeepLiveState(state);
+    return { ...state, message: "stop failed" };
+  }
+  const stopped = waitForPidExit(current.workerPid, 3000);
+  const active = !stopped && isPidRunning(current.workerPid);
+  const state = {
+    ...current,
+    automationRunId: automationRunId || current.automationRunId,
+    active,
+    workerActive: active,
+    childActive: false,
+    status: active ? "failed" : "stopped",
+    pid: active ? current.workerPid : 0,
+    workerPid: active ? current.workerPid : 0,
+    childPid: 0,
+    token: active ? current.token : "",
+    stoppedAt: active ? undefined : nowIso(),
+    stopReason,
+    error: active ? `pid ${current.workerPid} did not exit after SIGTERM` : null,
+  };
+  writeKeepLiveState(state);
+  return { ...state, message: active ? "stop failed" : "stopped" };
+}
+
+function keepLiveWorkerCommandArgs(commandName, args) {
+  if (process.platform === "darwin" && path.basename(commandName) === "caffeinate" && !args.includes("-w")) {
+    return [...args, "-w", String(process.pid)];
+  }
+  return args;
+}
+
+function commandKeepLiveWorker() {
+  const automationRunId = requireValue("--automation-run-id");
+  const token = requireValue("--token");
+  const commandName = keepLiveCommand();
+  const childArgs = keepLiveWorkerCommandArgs(commandName, keepLiveArgs());
+  let child = null;
+  let exiting = false;
+  let pollTimer = null;
+
+  const writeWorkerState = (state) => {
+    writeKeepLiveState({
+      kind: "AutomationKeepLiveState",
+      version: keepLiveVersion,
+      enabled: true,
+      automationRunId,
+      mechanism: keepLiveMechanism(commandName),
+      strategy: "watcher",
+      platform: process.platform,
+      command: commandName,
+      args: childArgs,
+      token,
+      pid: process.pid,
+      workerPid: process.pid,
+      childPid: child?.pid || 0,
+      lastCheckedAt: nowIso(),
+      ...state,
+    });
+  };
+
+  const stopChild = () => {
+    if (!child?.pid || !isPidRunning(child.pid)) return;
+    try {
+      process.kill(child.pid, "SIGTERM");
+    } catch {
+      return;
+    }
+    if (!waitForPidExit(child.pid, 1200)) {
+      try {
+        process.kill(child.pid, "SIGKILL");
+      } catch {
+        // Residual process state is surfaced by the parent stop command.
+      }
+    }
+  };
+
+  const exitWorker = (code = 0, state = {}) => {
+    if (exiting) return;
+    exiting = true;
+    stopChild();
+    writeWorkerState({
+      active: false,
+      workerActive: false,
+      childActive: false,
+      status: state.status || "stopped",
+      stoppedAt: nowIso(),
+      stopReason: state.stopReason || "worker exit",
+      error: state.error || null,
+    });
+    if (pollTimer) clearInterval(pollTimer);
+    process.exitCode = code;
+  };
+
+  try {
+    child = spawn(commandName, childArgs, { stdio: "ignore" });
+  } catch (error) {
+    writeKeepLiveControl({
+      version: keepLiveVersion,
+      action: "failed",
+      token,
+      automationRunId,
+      workerPid: process.pid,
+      childPid: 0,
+      updatedAt: nowIso(),
+      error: error.message,
+    });
+    writeWorkerState({ active: false, status: "failed", error: error.message });
+    process.exitCode = 1;
+    return;
+  }
+
+  writeKeepLiveControl({
+    version: keepLiveVersion,
+    action: "run",
+    token,
+    automationRunId,
+    workerPid: process.pid,
+    childPid: child.pid || 0,
+    updatedAt: nowIso(),
+    command: commandName,
+    args: childArgs,
+  });
+  writeWorkerState({
+    active: true,
+    workerActive: true,
+    childActive: Boolean(child.pid),
+    status: "running",
+    startedAt: nowIso(),
+    error: null,
+  });
+
+  child.on("exit", () => exitWorker(0, { stopReason: "keep-live child exited" }));
+  process.on("SIGTERM", () => exitWorker(0, { stopReason: "worker SIGTERM" }));
+  process.on("SIGINT", () => exitWorker(0, { stopReason: "worker SIGINT" }));
+
+  pollTimer = setInterval(() => {
+    const control = readKeepLiveControl();
+    if (control.token === token && control.action === "stop") {
+      exitWorker(0, { stopReason: control.reason || "stop marker" });
+    }
+    const state = readOptionalJson(keepLiveStateFile());
+    if (state.token === token && state.status === "stopped") {
+      exitWorker(0, { stopReason: state.stopReason || "state stopped" });
+    }
+  }, 500).unref?.();
 }
 
 function validateThreadId(value) {
@@ -506,6 +971,7 @@ function commandStatus() {
   const resultCount = listJsonFiles(dirs.results).length;
   const registeredThreadCount = listJsonFiles(dirs.registry).length;
   const windowConfigCount = listJsonFiles(dirs.windowConfig).length;
+  const keepLive = keepLiveStatus();
   const keepLiveStateExists = existsSync(keepLiveStateFile());
   output(
     {
@@ -519,6 +985,7 @@ function commandStatus() {
       registeredThreadCount,
       windowConfigCount,
       keepLiveStateExists,
+      keepLive,
     },
     [
       "Codex automation closed-loop status",
@@ -529,7 +996,7 @@ function commandStatus() {
       `Target results: ${resultCount}`,
       `Registered threads: ${registeredThreadCount}`,
       `Window configs: ${windowConfigCount}`,
-      `Keep-live state: ${keepLiveStateExists ? "present" : "missing"}`,
+      `Keep-live: ${keepLive.active ? `active worker=${keepLive.workerPid} child=${keepLive.childPid}` : keepLive.status}`,
     ],
   );
 }
@@ -848,6 +1315,48 @@ function commandRecordDeliveryRun() {
   );
 }
 
+function commandStartKeepLive() {
+  if (!write) fail("start-keep-live requires --write.");
+  const automationRunId = requireValue("--automation-run-id");
+  const keepLive = startKeepLive({ automationRunId });
+  output(
+    {
+      ok: keepLive.status !== "failed",
+      command: "start-keep-live",
+      wrote: true,
+      ready: Boolean(keepLive.active),
+      keepLive,
+      stateFile: path.relative(workspaceRoot, keepLiveStateFile()),
+      controlFile: path.relative(workspaceRoot, keepLiveControlFile()),
+    },
+    [
+      `Keep-live ${keepLive.message || keepLive.status} for ${automationRunId}.`,
+      `Active: ${keepLive.active ? "yes" : "no"}`,
+    ],
+  );
+}
+
+function commandStopKeepLive() {
+  if (!write) fail("stop-keep-live requires --write.");
+  const automationRunId = requireValue("--automation-run-id");
+  const reason = getValue("--reason", "manual stop");
+  const keepLive = stopKeepLive({ automationRunId, reason });
+  output(
+    {
+      ok: !keepLive.active,
+      command: "stop-keep-live",
+      wrote: true,
+      keepLive,
+      stateFile: path.relative(workspaceRoot, keepLiveStateFile()),
+      controlFile: path.relative(workspaceRoot, keepLiveControlFile()),
+    },
+    [
+      `Keep-live ${keepLive.message || keepLive.status} for ${automationRunId}.`,
+      `Active: ${keepLive.active ? "yes" : "no"}`,
+    ],
+  );
+}
+
 function commandKeepLiveState() {
   if (!write) fail("keep-live-state requires --write.");
   const automationRunId = requireValue("--automation-run-id");
@@ -989,22 +1498,32 @@ function commandReviewResults() {
 function commandStopLoop() {
   if (!write) fail("stop-loop requires --write.");
   const reason = requireValue("--reason");
+  const keepLive = stopKeepLive({ automationRunId: getValue("--automation-run-id", "stop-loop"), reason });
   const marker = {
     kind: "CodexAutomationLoopStop",
     version,
     stoppedAt: nowIso(),
     reason,
+    keepLive: {
+      active: keepLive.active,
+      status: keepLive.status,
+      stateFile: path.relative(stateDir, keepLiveStateFile()),
+    },
   };
   atomicWriteJson(path.join(stateDir, "stop.json"), marker);
   output(
     {
-      ok: true,
+      ok: !keepLive.active,
       command: "stop-loop",
       wrote: true,
       markerFile: path.relative(workspaceRoot, path.join(stateDir, "stop.json")),
       reason,
+      keepLive,
     },
-    [`Closed-loop delivery stopped: ${reason}`],
+    [
+      `Closed-loop delivery stopped: ${reason}`,
+      `Keep-live: ${keepLive.active ? "still active" : keepLive.status}`,
+    ],
   );
 }
 
@@ -1030,6 +1549,15 @@ try {
       break;
     case "record-delivery-run":
       commandRecordDeliveryRun();
+      break;
+    case "start-keep-live":
+      commandStartKeepLive();
+      break;
+    case "stop-keep-live":
+      commandStopKeepLive();
+      break;
+    case "keep-live-worker":
+      commandKeepLiveWorker();
       break;
     case "keep-live-state":
       commandKeepLiveState();

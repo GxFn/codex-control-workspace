@@ -28,7 +28,9 @@ Use `node scripts/codex-automation-loop.mjs` from the control workspace root.
 | Create a controller dispatch packet | `create-dispatch ... --write --json` | Writes a `ControllerDispatchPacket`; total control has already decided the task. By default the script generates a compact multi-line target prompt. |
 | Create a delivery envelope | `build-delivery --packet-file <packetFile> --require-thread --write --json` | Writes a `DeliveryEnvelope`; the delivery adapter must use direct thread dispatch. If a real thread id or host send capability is unavailable, fail closed for total-control judgment. |
 | Record delivery evidence | `record-delivery-run --delivery-file <deliveryFile> --status sent --readback-ok true --evidence "<evidence>" --write --json` | Records the local host send/readback result for a delivery envelope. This is transport evidence only, not task acceptance. |
-| Record keep-live state | `keep-live-state --status active --host-mode manual-or-external --reason "<reason>" --write --json` | Tracks unattended-run keep-live support under ignored local runtime. This state does not prove delivery or acceptance. |
+| Start keep-live watcher | `start-keep-live --automation-run-id <id> --write --json` | Starts a local macOS watcher for unattended-run keep-live support and records state/control files under ignored runtime. This is readiness support only, not delivery or acceptance. |
+| Stop keep-live watcher | `stop-keep-live --automation-run-id <id> --reason "<reason>" --write --json` | Stops the local watcher through its control marker and records whether worker / child processes exited. |
+| Record external keep-live state | `keep-live-state --automation-run-id <id> --status running --mechanism macos-caffeinate --pid <pid> --write --json` | Compatibility command for manually proven or external keep-live evidence. Prefer `start-keep-live` for local unattended automation. |
 | Record target result | `submit-result ... --write --json` | Writes a `TargetResultEnvelope`; it is not an acceptance verdict. |
 | Check group readiness | `review-results --group <group> --json` | Returns `wait`, `blocked`, or `needs-controller-review`; total control still pulls raw evidence. |
 | Build controller return | `build-controller-return --group <group> ... --return-reason result-ready --require-thread --write --json` | Looks up the registered control thread from local runtime state and writes a `ControllerReturnEnvelope` after a target result group is ready. Output never exposes raw thread ids; the delivery adapter reads the ignored registry file for local send execution. |
@@ -51,6 +53,14 @@ or rework decision, next task package, direct dispatch, and controller return
 repeat until final completion, a hard gate, explicit user stop, missing
 evidence requiring human judgment, or no eligible TODO remains.
 
+Controller dispatch has a completion boundary. After the direct-thread send is
+read back and recorded with `record-delivery-run`, total control has finished
+that dispatch and should release itself for other workspace traffic. It should
+not keep a heartbeat, self-wakeup, reminder, or synthetic working state merely
+to stay attached to the dispatched task. The next touchpoint is the target
+window's `TargetResultEnvelope` plus one controller-return when the group is
+ready.
+
 Controller return is a wakeup for total-control review, not an instruction to
 keep looping. A controller-return envelope carries `loopGuard`: total control
 may create the next dispatch only when the current plan still has an eligible
@@ -60,7 +70,17 @@ is to stop without another delivery.
 
 Keep-live / keep-awake is enabled support for unattended automation runs. It is
 not a delivery transport, not a target task, and not acceptance evidence; failure
-to start or stop it is an automation readiness risk.
+to start or stop it is an automation readiness risk. Keep-live must not be used
+as a controller heartbeat or as a reason to block total control from handling
+other concurrent tasks.
+
+The current script contract owns local macOS keep-live through
+`start-keep-live` / `stop-keep-live`. The watcher starts `caffeinate` by
+default, writes `keep-live/state.json` and `keep-live/control.json`, and stops
+through a local stop marker so shutdown does not depend on fragile
+cross-command process ownership. A run may claim keep-live only when the command
+reports an active watcher. Otherwise mark keep-live as a readiness risk and
+continue using target callback as the automation return path.
 
 A `DeliveryEnvelope` alone is only a mechanical plan. Do not claim that a
 delivery was sent unless `record-delivery-run` or equivalent host readback
