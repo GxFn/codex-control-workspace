@@ -332,11 +332,19 @@ test("builds controller-return envelopes from registered controller threads", ()
   assert.equal(payload.envelope.loopGuard.noEligibleTaskAction, "stop-without-next-delivery");
   assert.equal(payload.envelope.loopGuard.repeatControllerReturnForbidden, true);
   assert.equal(payload.envelope.targetThread.threadRegistryFile, "thread-registry/AlembicWorkspace.json");
+  assert.equal(payload.envelope.deliveryCompletion.required, true);
+  assert.equal(payload.envelope.deliveryCompletion.pendingUntil, "host-send-readback-recorded");
+  assert.equal(payload.deliveryStatus, "pending-host-send");
+  assert.equal(payload.deliveryCompletionRequired, true);
   assert.equal(payload.envelope.codexAutomation, undefined);
   assert.match(payload.envelope.prompt, /^继续总控验收：Alembic 回填。/);
   assert.match(payload.envelope.prompt, /没有任务、目标完成或需要用户裁决时停止，不创建下一跳/);
   assert.match(payload.envelope.prompt, /\n- dispatchGroup: GROUP-RETURN\n/);
   assert.doesNotMatch(readFileSync(path.join(root, payload.returnFile), "utf8"), /0192fac-controller-thread/);
+
+  const review = JSON.parse(run(root, ["review-results", "--group", "GROUP-RETURN"]).stdout);
+  assert.equal(review.controllerReturnDelivery.status, "pending-host-send");
+  assert.equal(review.controllerReturnDelivery.envelopeCount, 1);
 });
 
 test("controller-return never embeds raw ids in v2 envelopes", () => {
@@ -473,6 +481,70 @@ test("controller-return fails closed when group still has missing results", () =
   ]);
   assert.notEqual(result.status, 0);
   assert.match(result.stdout, /Cannot build controller return while dispatch group has missing results/);
+});
+
+test("controller-return is only complete after host send readback is recorded", () => {
+  const root = makeFixture();
+  seedCompletedResult(root);
+  writeFile(
+    path.join(root, ".workspace-local/workspace.config.json"),
+    JSON.stringify({ controlWindow: "AlembicWorkspace" }, null, 2),
+  );
+  const register = run(root, [
+    "register-thread",
+    "--window",
+    "AlembicWorkspace",
+    "--thread-id",
+    "0192fac-controller-thread",
+    "--role",
+    "controller",
+    "--write",
+  ]);
+  assert.equal(register.status, 0, register.stderr || register.stdout);
+  const build = JSON.parse(
+    run(root, [
+      "build-controller-return",
+      "--group",
+      "GROUP-RETURN",
+      "--last-completed-target",
+      "Alembic",
+      "--last-task-id",
+      "TASK-RETURN",
+      "--control-plan",
+      ".workspace-active/workspace/current/plan.md",
+      "--require-thread",
+      "--write",
+    ]).stdout,
+  );
+
+  const pending = JSON.parse(run(root, ["review-results", "--group", "GROUP-RETURN"]).stdout);
+  assert.equal(pending.controllerReturnDelivery.status, "pending-host-send");
+  assert.equal(pending.controllerReturnDelivery.sentCount, 0);
+
+  const runResult = run(root, [
+    "record-delivery-run",
+    "--delivery-file",
+    build.returnFile,
+    "--status",
+    "sent",
+    "--host-method",
+    "send_message_to_thread",
+    "--host-mode",
+    "new-turn",
+    "--readback-ok",
+    "true",
+    "--evidence",
+    "controller thread readback saw the return prompt",
+    "--write",
+  ]);
+  assert.equal(runResult.status, 0, runResult.stderr || runResult.stdout);
+
+  const sent = JSON.parse(run(root, ["review-results", "--group", "GROUP-RETURN"]).stdout);
+  assert.equal(sent.controllerReturnDelivery.status, "sent");
+  assert.equal(sent.controllerReturnDelivery.sentCount, 1);
+  assert.equal(sent.controllerReturnDelivery.deliveries[0].readbackOk, true);
+  assert.doesNotMatch(readFileSync(path.join(root, build.returnFile), "utf8"), /0192fac-controller-thread/);
+  assert.doesNotMatch(runResult.stdout, /0192fac-controller-thread/);
 });
 
 test("records direct-thread delivery run evidence", () => {

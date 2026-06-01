@@ -78,6 +78,10 @@ node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --
    - `needs-controller-review` means envelopes are present; pull raw evidence
      from commits, diffs, command outputs, runtime JSON, logs, reports, or
      screenshots before writing an acceptance verdict.
+   - `controllerReturnDelivery.status` describes only the return transport.
+     `pending-host-send` means a target built a `ControllerReturnEnvelope` but
+     did not yet perform the real direct-thread send/readback/record step.
+     Treat that as a delivery break, not as a completed callback.
 
 3. **Dispatch next work**
    - If the goal still needs work, total control decides the next task package
@@ -141,7 +145,10 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <deli
    - For unattended return, register the controller thread once with role
      `controller`. Target windows may only create a controller-return delivery
      through `build-controller-return` after `review-results` says the group is
-     ready; they still must not create another target-window hop.
+     ready; they still must send that controller-return through the host
+     thread tool, confirm readback, and record the delivery run before the
+     callback is complete. They still must not create another target-window
+     hop.
    - Controller return is not a loop trigger by itself. When total control is
      woken by a controller-return envelope, it reviews the group and either:
      creates the next dispatch only when the current plan still has an eligible

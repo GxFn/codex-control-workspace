@@ -32,8 +32,8 @@ Use `node scripts/codex-automation-loop.mjs` from the control workspace root.
 | Stop keep-live watcher | `stop-keep-live --automation-run-id <id> --reason "<reason>" --write --json` | Stops the local watcher through its control marker and records whether worker / child processes exited. |
 | Record external keep-live state | `keep-live-state --automation-run-id <id> --status running --mechanism macos-caffeinate --pid <pid> --write --json` | Compatibility command for manually proven or external keep-live evidence. Prefer `start-keep-live` for local unattended automation. |
 | Record target result | `submit-result ... --write --json` | Writes a `TargetResultEnvelope`; it is not an acceptance verdict. |
-| Check group readiness | `review-results --group <group> --json` | Returns `wait`, `blocked`, or `needs-controller-review`; total control still pulls raw evidence. |
-| Build controller return | `build-controller-return --group <group> ... --return-reason result-ready --require-thread --write --json` | Looks up the registered control thread from local runtime state and writes a `ControllerReturnEnvelope` after a target result group is ready. Output never exposes raw thread ids; the delivery adapter reads the ignored registry file for local send execution. |
+| Check group readiness | `review-results --group <group> --json` | Returns `wait`, `blocked`, or `needs-controller-review`; total control still pulls raw evidence. It also reports `controllerReturnDelivery.status` so pending controller-return files without send/readback evidence are visible. |
+| Build controller return | `build-controller-return --group <group> ... --return-reason result-ready --require-thread --write --json` | Looks up the registered control thread from local runtime state and writes a pending `ControllerReturnEnvelope` after a target result group is ready. Output never exposes raw thread ids; the delivery adapter reads the ignored registry file for local send execution. This is not a completed callback until `record-delivery-run` records `status=sent` and `readback.ok=true`. |
 | Stop future delivery | `stop-loop --reason "<reason>" --write --json` | Writes an explicit local stop marker. |
 
 ## Delivery Transport Policy
@@ -68,6 +68,14 @@ unfinished task, target evidence requires rework dispatch, or an approved
 unattended run remains inside boundary. If no task remains, the correct action
 is to stop without another delivery.
 
+Creating a controller-return envelope is only the local return plan. The target
+window must still use the host thread-send capability to send the envelope
+prompt to the registered controller thread, read back the controller thread,
+and record a delivery run. If host send or readback is unavailable, the target
+records or reports a blocked / failed delivery and stops. `review-results`
+must show `controllerReturnDelivery.status="sent"` before anyone treats the
+return as a real callback.
+
 Keep-live / keep-awake is enabled support for unattended automation runs. It is
 not a delivery transport, not a target task, and not acceptance evidence; failure
 to start or stop it is an automation readiness risk. Keep-live must not be used
@@ -85,6 +93,10 @@ continue using target callback as the automation return path.
 A `DeliveryEnvelope` alone is only a mechanical plan. Do not claim that a
 delivery was sent unless `record-delivery-run` or equivalent host readback
 evidence proves the direct-thread send.
+
+A `ControllerReturnEnvelope` follows the same rule. It is `pending-host-send`
+until a matching `DirectThreadDeliveryRun` has `status="sent"` and
+`readback.ok=true`.
 
 ## Prompt Rules
 

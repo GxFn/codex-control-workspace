@@ -181,8 +181,13 @@ Forbidden in v2 delivery envelopes:
 Controller-return exit logic:
 
 - Build controller return only after `review-results` is no longer `wait`.
-- Send it to the existing registered controller thread; do not create a new
-  controller window only for return.
+- `build-controller-return` only writes a pending controller-return envelope.
+  The target must still send it to the existing registered controller thread,
+  confirm readback, and record a `DirectThreadDeliveryRun` with `status="sent"`
+  and `readback.ok=true`; do not create a new controller window only for
+  return.
+- If host thread send or readback is unavailable, record or report a blocked /
+  failed delivery instead of claiming the callback happened.
 - On receipt, total control reviews evidence and current TODOs. If no eligible
   next task remains, it stops without creating another delivery.
 - A controller-return message must never create another controller-return for

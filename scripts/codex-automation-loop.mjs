@@ -815,7 +815,7 @@ function formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup }
     `- taskId: ${taskId}`,
     `- controlPlan: ${controlPlan}`,
     ...(dispatchGroup ? [`- dispatchGroup: ${dispatchGroup}`] : []),
-    "- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；结果齐件且 returnRoute=controller 时只创建总控回跳。",
+    "- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；结果齐件且 returnRoute=controller 时执行一次总控回跳（build + send/readback + record）。",
     "- skill: ../codex-control-workspace/skills/dev/codex-automation-target/SKILL.md",
   ].join("\n");
 }
@@ -915,6 +915,94 @@ function redactDeliveryEnvelope(envelope) {
     redacted.targetThread.threadId = "<redacted>";
   }
   return redacted;
+}
+
+function deliveryRunsFor(deliveryId) {
+  return listJsonFiles(dirs.deliveryRuns)
+    .map((file) => ({
+      file,
+      run: readJson(file, "delivery run"),
+    }))
+    .filter((item) => item.run.kind === "DirectThreadDeliveryRun" && item.run.deliveryId === deliveryId)
+    .sort((a, b) => String(a.run.createdAt || "").localeCompare(String(b.run.createdAt || "")));
+}
+
+function deliveryRunStatusForEnvelope(envelope) {
+  const runs = deliveryRunsFor(envelope.deliveryId);
+  const sentRun = runs.findLast?.((item) => item.run.status === "sent" && item.run.readback?.ok === true)
+    || [...runs].reverse().find((item) => item.run.status === "sent" && item.run.readback?.ok === true);
+  const latestRun = runs[runs.length - 1] || null;
+  const status = sentRun
+    ? "sent"
+    : runs.length === 0
+      ? "pending-host-send"
+      : latestRun.run.status;
+
+  return {
+    deliveryId: envelope.deliveryId,
+    kind: envelope.kind,
+    targetWindow: envelope.targetWindow || envelope.targetThread?.windowName,
+    taskId: envelope.taskId || envelope.lastTaskId,
+    dispatchGroup: envelope.dispatchGroup,
+    status,
+    sent: Boolean(sentRun),
+    readbackOk: Boolean(sentRun?.run.readback?.ok),
+    runCount: runs.length,
+    latestRunFile: latestRun ? path.relative(workspaceRoot, latestRun.file) : undefined,
+  };
+}
+
+function controllerReturnDeliveryStatusForGroup(dispatchGroup) {
+  if (!dispatchGroup) {
+    return {
+      status: "not-applicable",
+      dispatchGroup: undefined,
+      envelopeCount: 0,
+      sentCount: 0,
+      pendingCount: 0,
+      failedCount: 0,
+      blockedCount: 0,
+      deliveries: [],
+    };
+  }
+
+  const deliveries = listJsonFiles(dirs.deliveries)
+    .map((file) => ({
+      file,
+      envelope: readJson(file, "delivery envelope"),
+    }))
+    .filter((item) => item.envelope.kind === "ControllerReturnEnvelope" && item.envelope.dispatchGroup === dispatchGroup)
+    .map((item) => ({
+      file: path.relative(workspaceRoot, item.file),
+      ...deliveryRunStatusForEnvelope(item.envelope),
+    }));
+
+  const sentCount = deliveries.filter((item) => item.status === "sent").length;
+  const pendingCount = deliveries.filter((item) => item.status === "pending-host-send").length;
+  const failedCount = deliveries.filter((item) => item.status === "failed").length;
+  const blockedCount = deliveries.filter((item) => item.status === "blocked").length;
+  const status = deliveries.length === 0
+    ? "not-built"
+    : sentCount > 0
+      ? "sent"
+      : pendingCount > 0
+        ? "pending-host-send"
+        : failedCount > 0
+          ? "failed"
+          : blockedCount > 0
+            ? "blocked"
+            : "unknown";
+
+  return {
+    status,
+    dispatchGroup,
+    envelopeCount: deliveries.length,
+    sentCount,
+    pendingCount,
+    failedCount,
+    blockedCount,
+    deliveries,
+  };
 }
 
 function buildWindowConfig(windowName, { busyPolicy = "append-if-steerable", requireThread = false } = {}) {
@@ -1206,6 +1294,12 @@ function commandBuildControllerReturn() {
       keepLive: automationEnabled,
       keepLiveStateFile: automationEnabled ? path.relative(stateDir, keepLiveStateFile()) : undefined,
     },
+    deliveryCompletion: {
+      required: true,
+      pendingUntil: "host-send-readback-recorded",
+      completionProof: "DirectThreadDeliveryRun status=sent with readback.ok=true",
+      blockedAction: "record-delivery-run status=blocked or failed, then stop for total-control judgment",
+    },
     loopGuard: {
       returnReason,
       reviewDecision: review.decision,
@@ -1237,11 +1331,14 @@ function commandBuildControllerReturn() {
       returnFile: write ? path.relative(workspaceRoot, returnFile) : "",
       threadReady: Boolean(registration),
       threadIdRedacted: Boolean(registration),
+      deliveryStatus: "pending-host-send",
+      deliveryCompletionRequired: true,
     },
     [
       `${write ? "Created" : "Would create"} controller-return envelope ${envelope.deliveryId}.`,
       `Controller: ${controllerWindow}`,
       `Thread: ${registration ? "registered" : "missing"}`,
+      "Delivery: pending host send/readback/record-delivery-run",
     ],
   );
 }
@@ -1474,6 +1571,8 @@ function commandReviewResults() {
   const group = getValue("--group", "");
   const taskId = getValue("--task-id", "");
   const review = computeReviewResults({ group, taskId });
+  const returnGroup = review.group || (review.packets.length === 1 ? review.packets[0].dispatchGroup : "");
+  const controllerReturnDelivery = controllerReturnDeliveryStatusForGroup(returnGroup);
 
   output(
     {
@@ -1486,11 +1585,13 @@ function commandReviewResults() {
       blocked: review.blocked,
       needsReview: review.needsReview,
       decision: review.decision,
+      controllerReturnDelivery,
     },
     [
       `Review scope: ${group ? `group ${group}` : `task ${taskId}`}`,
       `Packets: ${review.packets.length}`,
       `Decision: ${review.decision}`,
+      `Controller return delivery: ${controllerReturnDelivery.status}`,
     ],
   );
 }

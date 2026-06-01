@@ -21,7 +21,7 @@ Target wakeups should be task-first and compact:
 - taskId: <taskId>
 - controlPlan: <path>
 - dispatchGroup: <group>
-- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；结果齐件且 returnRoute=controller 时只创建总控回跳。
+- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；结果齐件且 returnRoute=controller 时执行一次总控回跳（build + send/readback + record）。
 ```
 
 Do not require the prompt to repeat command manuals. Derive commands from the
@@ -72,17 +72,30 @@ node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --
 ```
 
    - If the decision is `wait`, stop; another target has not reported yet.
-   - If the decision is `blocked` or `needs-controller-review`, build only a
+   - If the decision is `blocked` or `needs-controller-review`, build one
      controller-return envelope:
 
 ```text
 node scripts/codex-automation-loop.mjs build-controller-return --group <dispatchGroup> --last-completed-target <currentWindow> --last-task-id <taskId> --control-plan <controlPlan> --return-reason result-ready --require-thread --write --json
 ```
 
-   - Use the controller-return direct thread delivery path defined by the
-     current control plan. This is the allowed total-control return, not a next
-     target hop. The delivery adapter records send/readback evidence with
-     `record-delivery-run`; target result text must not contain raw thread ids.
+   - Building the envelope is not a controller return. The return is complete
+     only after the target window performs the direct-thread host send to the
+     registered controller thread, confirms readback, and records the delivery
+     run:
+
+```text
+node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <controllerReturnFile> --status sent --host-method send_message_to_thread --host-mode new-turn --readback-ok true --evidence "<host send/readback evidence>" --write --json
+```
+
+   - Use the Codex host thread tool such as `send_message_to_thread` for the
+     actual send. If the tool is not visible, search for the thread tool first;
+     if no host thread-send capability is available, record or report a
+     `blocked` / `failed` delivery instead of claiming the return happened.
+   - Target result text, tracked docs, and prompts must not contain raw thread
+     ids. Raw ids may be read only from ignored local runtime when passing the
+     value to the host send tool.
+   - This is the allowed total-control return, not a next target hop.
 
 ## Boundaries
 
@@ -90,6 +103,9 @@ node scripts/codex-automation-loop.mjs build-controller-return --group <dispatch
 - Target windows do not create target-window next-hop deliveries by default.
   Controller return is allowed only through `build-controller-return` after
   `review-results` says the group is ready for total-control review.
+- A `ControllerReturnEnvelope` file is only a pending delivery. It is not a
+  real callback until a matching `DirectThreadDeliveryRun` has status `sent`
+  and `readback.ok=true`.
 - Controller return only wakes total control for review. It does not authorize a
   next dispatch. If total control finds no eligible next task, it stops without
   creating another delivery.
