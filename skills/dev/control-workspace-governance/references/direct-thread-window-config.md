@@ -20,8 +20,7 @@ dispatch, acceptance, or product implementation.
 - Delivery success proves only that the prompt reached a thread. Total control
   still needs a `TargetResultEnvelope` and raw evidence before acceptance.
 - Once delivery success and readback are recorded, the controller-side dispatch
-  is complete. Total control must not keep itself busy through heartbeat or
-  self-wakeup for that task; it waits for target callback and remains available
+  is complete. Total control waits for target callback and remains available
   for other concurrent workspace work.
 
 ## File Owners
@@ -32,6 +31,7 @@ dispatch, acceptance, or product implementation.
 | `.workspace-local/workspace.config.json` | local install scope | Machine-specific repository/window map override. | no |
 | `.workspace-local/codex-automation-loop/thread-registry/<window>.json` | local runtime | Real Codex thread registration for one window. | no |
 | `.workspace-local/codex-automation-loop/window-config/<window>.json` | local runtime | Derived child-window dispatch config, safe to regenerate from workspace config + thread registry. | no |
+| `.workspace-local/codex-automation-loop/dispatch-groups/<group>.json` | total control | First-class dispatch group protocol: expected targets, control plan, and return policy. | no |
 | `.workspace-local/codex-automation-loop/dispatch-packets/*.json` | total control | Controller-created work packet. | no |
 | `.workspace-local/codex-automation-loop/delivery-envelopes/*.json` | total control / delivery adapter | Mechanical delivery plan that references a dispatch packet. | no |
 | `.workspace-local/codex-automation-loop/delivery-runs/*.json` | delivery adapter | Actual direct-thread send attempt, readback, and failure evidence. | no |
@@ -100,7 +100,6 @@ duplicating raw thread ids into tracked docs.
   "delivery": {
     "transport": "direct-thread",
     "requireThread": true,
-    "busyPolicy": "append-if-steerable",
     "missingThread": "fail-closed",
     "readbackRequired": true
   },
@@ -119,6 +118,48 @@ duplicating raw thread ids into tracked docs.
 No field in `window-config` may contain raw thread ids. Store only file refs or
 redacted/hashes when a diagnostic needs identity continuity.
 
+## Dispatch Group
+
+`DispatchGroup` is the owner of callback policy. Do not let target windows
+choose callback strategy ad hoc, and do not model it as a temporary delivery
+flag.
+
+```json
+{
+  "kind": "DispatchGroup",
+  "version": 1,
+  "groupId": "group-id",
+  "controlPlan": ".workspace-active/workspace/current/plan.md",
+  "controllerWindow": "AlembicWorkspace-Aux",
+  "expectedTargets": [
+    {
+      "targetWindow": "AlembicPlugin",
+      "taskId": "TASK-ID",
+      "packetId": "group-id__AlembicPlugin__TASK-ID"
+    }
+  ],
+  "returnPolicy": {
+    "mode": "group-ready"
+  },
+  "createdAt": "2026-05-31T00:00:00.000Z",
+  "updatedAt": "2026-05-31T00:00:00.000Z"
+}
+```
+
+Supported `returnPolicy.mode` values:
+
+- `group-ready`: barrier callback. Build one controller return only after all
+  expected target results exist.
+- `per-target`: each target may callback once its own result exists. The
+  controller return still carries the group snapshot so total control can see
+  missing / blocked / remaining targets.
+
+`controllerWindow` is fixed by the controller that creates the first dispatch
+packet in the group. Later packets in the same group must use the same
+controller. `build-controller-return` reads this field by default, so a group
+started by controller A returns to controller A even when the workspace config's
+global `controlWindow` points at a different controller.
+
 ## Delivery Envelope Changes
 
 The code-stage `DeliveryEnvelope` should stop producing legacy schedule or
@@ -135,11 +176,13 @@ automation payloads. It should become a direct-thread plan:
   "dispatchGroup": "group-id",
   "controlPlan": ".workspace-active/workspace/current/plan.md",
   "prompt": "继续当前窗口任务：...",
+  "returnPolicy": {
+    "mode": "group-ready"
+  },
   "returnRoute": "controller",
   "transport": {
     "kind": "direct-thread",
     "threadRegistryFile": "thread-registry/AlembicPlugin.json",
-    "busyPolicy": "append-if-steerable",
     "readbackRequired": true
   },
   "automation": {
@@ -173,14 +216,63 @@ When the user explicitly enables unattended automation for the current plan:
 
 Forbidden in v2 delivery envelopes:
 
-- `schedule.kind = "heartbeat"`
+- legacy `schedule` payloads
 - `rrule`
 - `codexAutomation`
 - raw `targetThreadId` in default JSON output
 
+## Controller Return Envelope
+
+The controller-return envelope is a wakeup plan for the already registered
+total-control thread. It is not a child-window next hop and it is not completed
+until a matching delivery run proves host send/readback.
+
+```json
+{
+  "kind": "ControllerReturnEnvelope",
+  "version": 2,
+  "deliveryId": "controller-return-...",
+  "dispatchGroup": "group-id",
+  "triggerTarget": "AlembicPlugin",
+  "triggerTaskId": "TASK-ID",
+  "returnPolicy": {
+    "mode": "per-target"
+  },
+  "groupSnapshot": {
+    "groupStatus": "partially-ready",
+    "expectedTargets": ["AlembicPlugin", "AlembicAgent"],
+    "completedTargets": ["AlembicPlugin"],
+    "blockedTargets": [],
+    "missingTargets": ["AlembicAgent"],
+    "ready": [],
+    "blocked": [],
+    "missing": []
+  },
+  "reviewScope": "single-target",
+  "returnRoute": "controller",
+  "deliveryStatus": "pending-host-send"
+}
+```
+
+For `group-ready`, `reviewScope` is `group` and the prompt lead is
+`继续总控验收：<windowA>、<windowB> 回填。`. The dispatch group id stays in the
+variables. For `per-target`, `reviewScope` is `single-target` and the prompt
+lead is `继续总控验收：<triggerTarget> 回填。`. Both modes must carry the
+group snapshot so the controller can distinguish one returned window from a
+complete dispatch group.
+
+The human-visible prompt should not repeat the full snapshot when it is a
+happy path. Do not print `completedTargets`, and do not print
+`blockedTargets: 无` or `missingTargets: 无`. Keep those details in
+`groupSnapshot`; expose only non-empty exception state such as
+`blockedTargets` or `remainingTargets`.
+
 Controller-return exit logic:
 
-- Build controller return only after `review-results` is no longer `wait`.
+- Build controller return according to the stored `DispatchGroup.controllerWindow`
+  and `DispatchGroup.returnPolicy`. `group-ready` waits for every expected
+  target result; `per-target` may return for the trigger target while other
+  targets remain missing.
 - `build-controller-return` only writes a pending controller-return envelope.
   The target must still send it to the existing registered controller thread,
   confirm readback, and record a `DirectThreadDeliveryRun` with `status="sent"`
@@ -230,9 +322,10 @@ Every actual thread-send attempt writes a run file:
 
 Allowed `status` values:
 
-- `sent`: host send succeeded and readback evidence exists.
+- `sent`: host send succeeded as a normal new turn / follow-up, and readback
+  evidence exists.
 - `blocked`: missing thread registration, no host thread-send capability, or
-  busy not-steerable target.
+  another condition that prevents direct send.
 - `failed`: host send attempted but failed; include error summary.
 
 `sent` is not acceptance. The target still must return a result envelope.
@@ -270,20 +363,21 @@ Total control records it as automation readiness risk and decides whether to
 continue manually.
 
 Local keep-live uses `start-keep-live` / `stop-keep-live`. The script writes
-both `keep-live/state.json` and `keep-live/control.json`; the watcher exits by
-observing a stop marker, and `stop-loop` also stops keep-live. `keep-live-state`
+both `keep-live/state.json` and `keep-live/control.json`; the watcher is shared
+across concurrent controller runs, and `stop-loop` only releases the current
+run's lease. The watcher exits after the final lease is released. `keep-live-state`
 is reserved for manually proven or external keep-live evidence.
 
-Keep-live is never a controller heartbeat. If keep-live is absent, fails, or is
-not needed, direct-thread dispatch can still be complete after send/readback;
-the target callback is responsible for returning the task to total control.
+If keep-live is absent, fails, or is not needed, direct-thread dispatch can
+still be complete after send/readback; the target callback is responsible for
+returning the task to total control.
 
 ## Stop And Cleanup
 
 - `stop.json` stops future unattended automation dispatch. It does not delete
   past delivery evidence.
-- Stale legacy delivery envelopes with `schedule.kind = "heartbeat"` should be
-  ignored for new dispatch and may be archived or deleted only by total-control
+- Stale legacy delivery envelopes with old schedule payloads should be ignored
+  for new dispatch and may be archived or deleted only by total-control
   decision.
 - Thread registrations are not deleted by default. Replace them only when the
   user opens a new responsibility window or explicitly changes the canonical
@@ -291,13 +385,15 @@ the target callback is responsible for returning the task to total control.
 
 ## Implementation Checklist
 
-1. Add `window-config/` and `delivery-runs/` directories to the local runtime
-   initializer.
+1. Add `window-config/`, `dispatch-groups/`, and `delivery-runs/` directories
+   to the local runtime initializer.
 2. Extend thread registration from v1 to v2 while reading v1 as compatibility.
 3. Generate `CodexSubwindowDispatchConfig` from workspace config + thread
    registry without exposing raw thread ids.
 4. Change `build-delivery` / `build-controller-return` to v2 direct-thread
-   envelopes and remove legacy schedule / automation payloads.
+   envelopes, preserve `DispatchGroup.controllerWindow` /
+   `DispatchGroup.returnPolicy`, and remove legacy schedule / automation
+   payloads.
 5. Add a delivery adapter entry that consumes v2 envelopes, calls the host
    thread-send capability, writes `DirectThreadDeliveryRun`, and fails closed
    when thread-send cannot be proven.

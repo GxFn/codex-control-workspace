@@ -137,13 +137,16 @@ The script layer manages explicit packets and envelopes:
 
 ```sh
 node scripts/workspace-control.mjs loop register-thread --window <window> --thread-id <realThreadId> --write --json
-node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --control-plan <plan> --objective "<objective>" --prompt-file <promptFile> --write --json
+node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --group <group> --controller-window <controllerWindow> --return-policy group-ready --control-plan <plan> --objective "<objective>" --write --json
 node scripts/workspace-control.mjs loop build-delivery --packet-file <packetFile> --require-thread --write --json
 node scripts/workspace-control.mjs loop submit-result --target-window <window> --task-id <taskId> --status completed --evidence-ref <ref> --write --json
 node scripts/workspace-control.mjs loop review-results --group <group> --json
+node scripts/workspace-control.mjs loop build-controller-return --group <group> --trigger-target <window> --trigger-task-id <taskId> --control-plan <plan> --require-thread --write --json
 ```
 
 The script layer prepares dispatch packets and delivery envelopes; it does not by itself prove that a prompt reached a target thread. A Codex controller window or delivery adapter must record the actual transport action with direct thread send readback / delivery-run evidence. The target window then reports a `TargetResultEnvelope`.
+
+Callback behavior is part of the `DispatchGroup` protocol. Total control chooses `controller-window` and `return-policy` when the group is created: `controller-window` fixes the originating controller that receives the callback, `group-ready` creates one barrier callback after all expected targets return, while `per-target` lets each completed target wake total control with a group snapshot that still lists completed, blocked, and missing targets.
 
 The loop is designed for long unattended runs that remain interruptible. If a developer is present, their manual correction, code edit, or scope decision takes priority over the next automated hop. If unattended automation is explicitly enabled, the controller runs as a continuous closed loop: review result envelopes, pull raw evidence, accept or reject it, create the next task package, and dispatch again until the user goal is done, a hard gate appears, the user stops it, or there is no eligible TODO left.
 

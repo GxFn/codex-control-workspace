@@ -9,7 +9,7 @@
 - 如果本窗口通过 ControlWorkspace 的 direct-thread delivery 唤醒，先读取 workspace `AGENTS.md`、当前总控文档、`skills/dev/codex-automation-target/SKILL.md` 和本文件。
 - 只执行 dispatch packet 指定给 `TestWindow` 的任务，并返回 `TargetResultEnvelope`；不得代领、处理、验证或总结其它窗口任务。
 - 自动化 smoke 中的 `TestWindow` 可以只是非测试型可见窗口目标；除非当前总控文档或测试单明确要求真实测试，否则不得运行真实项目测试、cold-start、Dashboard 手动观察或回归验证。
-- 子窗口默认不创建目标窗口下一跳 delivery；补证、重派或下一阶段都由总控 review 后决定。若 delivery `returnRoute=controller` 且 `review-results` 显示本组结果已齐件或阻塞，只允许通过 `build-controller-return` 创建一次总控回跳 envelope，并必须继续完成真实 direct-thread send、readback 和 `record-delivery-run`；只有存在 `status=sent` 且 `readback.ok=true` 的 `DirectThreadDeliveryRun`，才算真实回跳完成。
+- 子窗口默认不创建目标窗口下一跳 delivery；补证、重派或下一阶段都由总控 review 后决定。若 delivery `returnRoute=controller` 且 `review-results` 显示 `DispatchGroup.returnPolicy` 允许回调，只允许通过 `build-controller-return` 创建一次总控回跳 envelope，并默认回到 `DispatchGroup.controllerWindow` 指定的原发起总控；之后必须继续完成真实 direct-thread send、readback 和 `record-delivery-run`。只有存在 `status=sent` 且 `readback.ok=true` 的 `DirectThreadDeliveryRun`，才算真实回跳完成。`group-ready` 必须携带整组 ready / blocked / missing 快照；`per-target` 必须携带当前触发窗口和剩余窗口快照，不能把单个回填误判为整组完成。
 
 ## 窗口定位
 

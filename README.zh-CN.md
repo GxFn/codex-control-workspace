@@ -137,15 +137,18 @@ Codex Automation Closed Loop 使用 direct thread dispatch 作为正常工作流
 
 ```sh
 node scripts/workspace-control.mjs loop register-thread --window <window> --thread-id <realThreadId> --write --json
-node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --control-plan <plan> --objective "<objective>" --prompt-file <promptFile> --write --json
+node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --group <group> --controller-window <controllerWindow> --return-policy group-ready --control-plan <plan> --objective "<objective>" --write --json
 node scripts/workspace-control.mjs loop build-delivery --packet-file <packetFile> --require-thread --write --json
 node scripts/workspace-control.mjs loop submit-result --target-window <window> --task-id <taskId> --status completed --evidence-ref <ref> --write --json
 node scripts/workspace-control.mjs loop review-results --group <group> --json
+node scripts/workspace-control.mjs loop build-controller-return --group <group> --trigger-target <window> --trigger-task-id <taskId> --control-plan <plan> --require-thread --write --json
 ```
 
-脚本不会直接调用 Codex automation API。它只生成 dispatch packet / delivery envelope。总控窗口或 delivery adapter 按 envelope 执行 direct thread send，并用 send/readback 的 delivery-run 证据证明已投递；目标窗口完成后回填 `TargetResultEnvelope`，并在结果齐件时通过 controller-return 回调总控。
+脚本不会直接调用 Codex automation API。它只生成 dispatch packet / delivery envelope。总控窗口或 delivery adapter 按 envelope 执行 direct thread send，并用 send/readback 的 delivery-run 证据证明已投递；目标窗口完成后回填 `TargetResultEnvelope`，并按 `DispatchGroup.controllerWindow` / `DispatchGroup.returnPolicy` 通过 controller-return 回调原发起总控。
 
-总控完成 direct-thread send、readback 和 delivery-run 记录后，该派发动作即完成；总控不应为已派发任务创建 heartbeat、自唤醒或人工工作态来占住自己。子窗口回调是下一次进入该任务的入口。
+回调线路和策略是 dispatch group 的一等协议。总控创建 group 时选择 `controller-window` 和 `return-policy`：`controller-window` 固定接收回调的原发起总控；`group-ready` 表示所有预期窗口都有结果后只回调一次；`per-target` 表示每个已完成窗口都可以唤醒总控，但回跳信封必须携带 completed / blocked / missing 的 group snapshot，不能让总控误判整组完成。
+
+总控完成 direct-thread send、readback 和 delivery-run 记录后，该派发动作即完成；总控释放当前路口，等待子窗口通过结果信封和 controller-return 回调进入下一次验收。
 
 这个闭环面向长时间无人值守运行，但始终可被人接管。开发者在场时，手动修正、代码修改和范围裁决优先于下一次自动跳转；Mac 空闲无人看守时，总控可以复核 result envelope、拉取原始证据、接受或打回、创建下一阶段任务包并继续派发，直到用户最终目标完成、出现硬门禁，或没有可领取 TODO。
 

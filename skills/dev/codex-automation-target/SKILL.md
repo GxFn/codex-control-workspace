@@ -19,9 +19,10 @@ Target wakeups should be task-first and compact:
 变量：
 - currentWindow: <window>
 - taskId: <taskId>
+- controllerWindow: <controller>
 - controlPlan: <path>
 - dispatchGroup: <group>
-- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；结果齐件且 returnRoute=controller 时执行一次总控回跳（build + send/readback + record）。
+- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；按 dispatch group returnPolicy 和 controllerWindow 判断是否执行一次总控回跳（build + send/readback + record）。
 ```
 
 Do not require the prompt to repeat command manuals. Derive commands from the
@@ -71,12 +72,24 @@ node scripts/codex-automation-loop.mjs submit-result --target-window <currentWin
 node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --json
 ```
 
-   - If the decision is `wait`, stop; another target has not reported yet.
-   - If the decision is `blocked` or `needs-controller-review`, build one
-     controller-return envelope:
+   - Read `returnPolicy.mode`, `groupStatus`, `readyResults`,
+     `missingResults`, `blockedResults`, and `groupSnapshot`.
+   - For `returnPolicy.mode=group-ready`, build controller-return only when the
+     group has all expected target results (`groupStatus=ready` or `blocked`).
+     If the group is still `waiting` or `partially-ready`, stop; another target
+     has not reported yet.
+   - For `returnPolicy.mode=per-target`, build controller-return when this
+     target's own result is present. The return prompt must still include the
+     remaining / missing group snapshot so total control does not confuse a
+     single result with whole-group completion.
+   - If policy allows return, build one controller-return envelope. Do not
+     choose the controller ad hoc; `build-controller-return` defaults to the
+     dispatch group's stored `controllerWindow`, so automation started by
+     controller A returns to controller A. Use `--controller-window` only for
+     legacy groups that do not yet store the field.
 
 ```text
-node scripts/codex-automation-loop.mjs build-controller-return --group <dispatchGroup> --last-completed-target <currentWindow> --last-task-id <taskId> --control-plan <controlPlan> --return-reason result-ready --require-thread --write --json
+node scripts/codex-automation-loop.mjs build-controller-return --group <dispatchGroup> --trigger-target <currentWindow> --trigger-task-id <taskId> --control-plan <controlPlan> --return-reason result-ready --require-thread --write --json
 ```
 
    - Building the envelope is not a controller return. The return is complete
@@ -101,8 +114,9 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <cont
 
 - A `TargetResultEnvelope` is a report, not acceptance.
 - Target windows do not create target-window next-hop deliveries by default.
-  Controller return is allowed only through `build-controller-return` after
-  `review-results` says the group is ready for total-control review.
+  Controller return is allowed only through `build-controller-return`, and only
+  according to the dispatch group's stored `controllerWindow` and
+  `returnPolicy`.
 - A `ControllerReturnEnvelope` file is only a pending delivery. It is not a
   real callback until a matching `DirectThreadDeliveryRun` has status `sent`
   and `readback.ok=true`.

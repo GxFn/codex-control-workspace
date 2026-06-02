@@ -21,6 +21,7 @@ const keepLiveVersion = 1;
 
 const dirs = {
   packets: path.join(stateDir, "dispatch-packets"),
+  groups: path.join(stateDir, "dispatch-groups"),
   deliveries: path.join(stateDir, "delivery-envelopes"),
   deliveryRuns: path.join(stateDir, "delivery-runs"),
   results: path.join(stateDir, "target-results"),
@@ -35,17 +36,19 @@ Codex automation closed-loop contract manager
 Usage:
   node scripts/codex-automation-loop.mjs status [--json]
   node scripts/codex-automation-loop.mjs register-thread --window <name> --thread-id <id> [--role target|controller|test-target|design|observer] [--cwd <path>] [--responsibility-root <path>] [--display-title <title>] [--write-boundary <path>...] [--canonical-use <text>] [--supersedes-window <name>...] --write [--json]
-  node scripts/codex-automation-loop.mjs build-window-config --window <name> [--busy-policy append-if-steerable|fail-if-busy] [--require-thread] --write [--json]
-  node scripts/codex-automation-loop.mjs create-dispatch --target-window <name> --task-id <id> --control-plan <path> --objective <text> [--prompt <text>|--prompt-file <path>] [--group <id>] [--context-policy assumed-current|refresh-if-missing|force-refresh] [--scope <text>...] [--forbidden <text>...] [--evidence <text>...] [--write] [--json]
-  node scripts/codex-automation-loop.mjs build-delivery --packet-file <path> [--delivery-id <id>] [--return-route controller|none] [--busy-policy append-if-steerable|fail-if-busy] [--automation-enabled] [--require-thread] [--write] [--json]
-  node scripts/codex-automation-loop.mjs build-controller-return --group <id> --last-completed-target <window> --last-task-id <taskId> --control-plan <path> [--controller-window <name>] [--return-reason result-ready|blocked|smoke] [--busy-policy append-if-steerable|fail-if-busy] [--automation-enabled] [--require-thread] [--write] [--json]
-  node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <path> --status sent|blocked|failed [--host-method send_message_to_thread] [--host-mode new-turn|append-to-active-turn|unknown] [--readback-ok true|false] [--evidence <text>] [--error <text>] --write [--json]
+  node scripts/codex-automation-loop.mjs build-window-config --window <name> [--require-thread] --write [--json]
+  node scripts/codex-automation-loop.mjs create-dispatch --target-window <name> --task-id <id> --control-plan <path> --objective <text> [--controller-window <name>] [--group <id>] [--return-policy group-ready|per-target] [--context-policy assumed-current|refresh-if-missing|force-refresh] [--scope <text>...] [--forbidden <text>...] [--evidence <text>...] [--write] [--json]
+  node scripts/codex-automation-loop.mjs build-delivery --packet-file <path> [--delivery-id <id>] [--return-route controller|none] [--automation-enabled] [--require-thread] [--write] [--json]
+  node scripts/codex-automation-loop.mjs prepare-dispatch --target-window <name> --task-id <id> --control-plan <path> --objective <text> [--controller-window <name>] [--group <id>] [--return-policy group-ready|per-target] [--automation-enabled] [--require-thread] --write [--json]
+  node scripts/codex-automation-loop.mjs build-controller-return --group <id> --trigger-target <window> --trigger-task-id <taskId> --control-plan <path> [--controller-window <name>] [--return-reason result-ready|blocked] [--automation-enabled] [--require-thread] [--write] [--json]
+  node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <path> --status sent|blocked|failed [--host-method send_message_to_thread] [--host-mode new-turn|unknown] [--readback-ok true|false] [--evidence <text>] [--error <text>] --write [--json]
   node scripts/codex-automation-loop.mjs start-keep-live --automation-run-id <id> [--keep-live-command <cmd>] [--keep-live-arg <arg>...] [--no-keep-live] --write [--json]
   node scripts/codex-automation-loop.mjs stop-keep-live --automation-run-id <id> [--reason <text>] --write [--json]
   node scripts/codex-automation-loop.mjs keep-live-state --automation-run-id <id> --status running|stopped|failed [--mechanism macos-caffeinate|manual|none] [--pid <pid>] [--error <text>] --write [--json]
   node scripts/codex-automation-loop.mjs submit-result --target-window <name> --task-id <id> --status completed|blocked|needs-review [--group <id>] [--changed-repo <repo>...] [--commit <hash>...] [--evidence-ref <ref>...] [--verification <text>...] [--risk <text>...] [--next-suggestion <text>] [--write] [--json]
   node scripts/codex-automation-loop.mjs review-results (--group <id>|--task-id <id>) [--json]
-  node scripts/codex-automation-loop.mjs stop-loop --reason <text> --write [--json]
+  node scripts/codex-automation-loop.mjs review-pack (--group <id>|--task-id <id>) [--json]
+  node scripts/codex-automation-loop.mjs stop-loop --reason <text> [--automation-run-id <id>] --write [--json]
 
 Design:
   This script is the new CodexAutomationClosedLoop contract surface. It does
@@ -115,18 +118,20 @@ function output(payload, textLines = []) {
 
 function inferAgentNext(payload) {
   if (!payload.ok) return "Stop and inspect the reported closed-loop contract issue.";
-  if (payload.command === "create-dispatch") return "Build a delivery envelope from the dispatch packet or queue it for the delivery adapter.";
+  if (payload.command === "create-dispatch") return "Build a delivery envelope from the dispatch packet when direct thread send is allowed.";
+  if (payload.command === "prepare-dispatch") return payload.threadReady ? "Send the prepared prompt with the host thread tool, then record a delivery run." : "Register the target thread before direct-thread delivery.";
   if (payload.command === "register-thread") return "Build or refresh the local window config, then build delivery envelopes when total control decides to dispatch.";
   if (payload.command === "build-window-config") return "Use this child-window config when creating direct-thread delivery envelopes.";
   if (payload.command === "build-delivery") return payload.threadReady ? "Send the prompt with the host thread tool, then record a delivery run." : "Register the target thread before direct-thread delivery.";
   if (payload.command === "build-controller-return") return payload.threadReady ? "Send the controller-return prompt with the host thread tool, then record a delivery run." : "Register the controller thread before unattended return.";
   if (payload.command === "record-delivery-run") return payload.status === "sent" ? "Wait for the target result envelope or run review-results when ready." : "Return to total control judgment for the delivery block.";
   if (payload.command === "start-keep-live") return payload.keepLive?.active ? "Continue unattended direct-thread dispatch; keep-live is active." : "Treat keep-live as an automation readiness risk before claiming unattended reliability.";
-  if (payload.command === "stop-keep-live") return payload.keepLive?.active ? "Inspect and stop the recorded keep-live process before claiming shutdown is clean." : "Keep-live is stopped; continue only by total-control judgment.";
+  if (payload.command === "stop-keep-live") return payload.keepLive?.retainedByOtherRuns ? "Keep-live is retained by other active automation runs." : payload.keepLive?.active ? "Inspect and stop the recorded keep-live process before claiming shutdown is clean." : "Keep-live is stopped; continue only by total-control judgment.";
   if (payload.command === "keep-live-state") return "Continue or stop unattended automation according to the current plan and keep-live status.";
   if (payload.command === "submit-result") return "Wake total control or run review-results; the result is not an acceptance verdict.";
   if (payload.command === "review-results") return payload.decision === "wait" ? "Wait for missing target result envelopes." : "Total control must pull raw evidence and make the verdict.";
-  if (payload.command === "stop-loop") return "Closed-loop delivery is stopped; do not create new deliveries.";
+  if (payload.command === "review-pack") return payload.decision === "wait" ? "Wait for missing target result envelopes." : "Use this review pack to pull raw evidence, then make a total-control verdict.";
+  if (payload.command === "stop-loop") return payload.keepLive?.retainedByOtherRuns ? "Closed-loop delivery is stopped for this run; keep-live remains active for other runs." : "Closed-loop delivery is stopped; do not create new deliveries.";
   return "Continue by total-control judgment.";
 }
 
@@ -181,6 +186,10 @@ function packetFileFor(packetId) {
   return path.join(dirs.packets, `${slug(packetId)}.json`);
 }
 
+function groupFileFor(groupId) {
+  return path.join(dirs.groups, `${slug(groupId)}.json`);
+}
+
 function deliveryFileFor(deliveryId) {
   return path.join(dirs.deliveries, `${slug(deliveryId)}.json`);
 }
@@ -217,6 +226,178 @@ function listJsonFiles(dir) {
     .map((name) => path.join(dir, name));
 }
 
+function loadDispatchGroup(groupId) {
+  if (!groupId) return null;
+  const file = groupFileFor(groupId);
+  if (!existsSync(file)) return null;
+  const group = readJson(file, "dispatch group");
+  if (group.kind !== "DispatchGroup" || group.groupId !== groupId) {
+    fail(`Invalid dispatch group state for ${groupId}.`);
+  }
+  return group;
+}
+
+function targetDescriptor({ targetWindow, taskId, packetId }) {
+  return {
+    targetWindow,
+    taskId,
+    packetId,
+  };
+}
+
+function sameTargetDescriptor(left, right) {
+  return left.targetWindow === right.targetWindow && left.taskId === right.taskId;
+}
+
+function targetKey({ targetWindow, taskId }) {
+  return `${targetWindow}\u0000${taskId}`;
+}
+
+function orderResultsByGroup({ groupRecord, results }) {
+  const expectedTargets = Array.isArray(groupRecord?.expectedTargets) ? groupRecord.expectedTargets : [];
+  const order = new Map(expectedTargets.map((target, index) => [targetKey(target), index]));
+  return [...results].sort((left, right) => {
+    const leftOrder = order.get(targetKey(left.packet)) ?? Number.MAX_SAFE_INTEGER;
+    const rightOrder = order.get(targetKey(right.packet)) ?? Number.MAX_SAFE_INTEGER;
+    if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+    return String(left.packet.id).localeCompare(String(right.packet.id));
+  });
+}
+
+function upsertDispatchGroup({ groupId, controlPlan, controllerWindow = "", returnPolicyMode, targetWindow, taskId, packetId }) {
+  if (!groupId) return null;
+  const existing = loadDispatchGroup(groupId);
+  const mode = existing?.returnPolicy?.mode || validateReturnPolicyMode(returnPolicyMode || "group-ready");
+  if (returnPolicyMode && existing?.returnPolicy?.mode && existing.returnPolicy.mode !== returnPolicyMode) {
+    fail(`Dispatch group ${groupId} already uses return policy ${existing.returnPolicy.mode}; cannot change to ${returnPolicyMode}.`);
+  }
+  if (existing?.controlPlan && existing.controlPlan !== controlPlan) {
+    fail(`Dispatch group ${groupId} already belongs to control plan ${existing.controlPlan}.`);
+  }
+  const existingControllerWindow = existing?.controllerWindow || "";
+  if (controllerWindow && existingControllerWindow && existingControllerWindow !== controllerWindow) {
+    fail(`Dispatch group ${groupId} already returns to controller ${existingControllerWindow}; cannot change to ${controllerWindow}.`);
+  }
+  const groupControllerWindow = existingControllerWindow || controllerWindow || undefined;
+
+  const expectedTargets = [...(Array.isArray(existing?.expectedTargets) ? existing.expectedTargets : [])];
+  const descriptor = targetDescriptor({ targetWindow, taskId, packetId });
+  const index = expectedTargets.findIndex((item) => sameTargetDescriptor(item, descriptor));
+  if (index >= 0) {
+    expectedTargets[index] = { ...expectedTargets[index], packetId };
+  } else {
+    expectedTargets.push(descriptor);
+  }
+
+  return {
+    kind: "DispatchGroup",
+    version,
+    groupId,
+    controlPlan,
+    controllerWindow: groupControllerWindow,
+    expectedTargets,
+    returnPolicy: {
+      mode,
+    },
+    createdAt: existing?.createdAt || nowIso(),
+    updatedAt: nowIso(),
+  };
+}
+
+function groupFromPackets({ groupId = "", packets = [] }) {
+  if (!groupId) return null;
+  const existing = loadDispatchGroup(groupId);
+  if (existing) return existing;
+  const firstPacket = packets[0] || {};
+  return {
+    kind: "DispatchGroup",
+    version,
+    groupId,
+    controlPlan: firstPacket.controlPlan,
+    controllerWindow: firstPacket.controllerWindow,
+    expectedTargets: packets.map((packet) => targetDescriptor({
+      targetWindow: packet.targetWindow,
+      taskId: packet.taskId,
+      packetId: packet.id,
+    })),
+    returnPolicy: firstPacket.returnPolicy || { mode: "group-ready" },
+    reconstructedFromPackets: true,
+    createdAt: firstPacket.createdAt,
+    updatedAt: firstPacket.createdAt,
+  };
+}
+
+function resultSummary(item) {
+  return {
+    packetId: item.packet.id,
+    targetWindow: item.packet.targetWindow,
+    taskId: item.packet.taskId,
+    status: item.result?.status || "missing",
+    resultFile: item.result ? path.relative(workspaceRoot, item.file) : undefined,
+  };
+}
+
+function uniqueTargetNames(items) {
+  return [...new Set(items.map((item) => item.packet.targetWindow))];
+}
+
+function formatPromptTargetList(targets) {
+  const uniqueTargets = [...new Set((targets || []).filter(Boolean))];
+  return uniqueTargets.length > 0 ? uniqueTargets.join("、") : "无";
+}
+
+function buildGroupSnapshot({ groupRecord, results }) {
+  const expectedResults = results.map(resultSummary);
+  const ready = results.filter((item) => item.result && item.result.status !== "blocked");
+  const blocked = results.filter((item) => item.result?.status === "blocked");
+  const missing = results.filter((item) => !item.result);
+  const completed = ready.filter((item) => item.result?.status === "completed");
+  const needsReview = ready.filter((item) => item.result?.status === "needs-review");
+  const allResultsPresent = missing.length === 0;
+  const groupStatus = allResultsPresent
+    ? blocked.length > 0
+      ? "blocked"
+      : "ready"
+    : ready.length > 0 || blocked.length > 0
+      ? "partially-ready"
+      : "waiting";
+
+  return {
+    groupId: groupRecord?.groupId,
+    controllerWindow: groupRecord?.controllerWindow,
+    returnPolicy: groupRecord?.returnPolicy || { mode: "group-ready" },
+    groupStatus,
+    expected: expectedResults,
+    completed: completed.map(resultSummary),
+    ready: ready.map(resultSummary),
+    blocked: blocked.map(resultSummary),
+    missing: missing.map(resultSummary),
+    needsReview: needsReview.map(resultSummary),
+    expectedTargets: uniqueTargetNames(results),
+    completedTargets: uniqueTargetNames(completed),
+    readyTargets: uniqueTargetNames(ready),
+    blockedTargets: uniqueTargetNames(blocked),
+    missingTargets: uniqueTargetNames(missing),
+    allResultsPresent,
+    reconstructedFromPackets: Boolean(groupRecord?.reconstructedFromPackets),
+  };
+}
+
+function validateControllerReturnAllowed({ review, triggerTarget, triggerTaskId }) {
+  const trigger = review.results.find((item) => item.packet.targetWindow === triggerTarget && item.packet.taskId === triggerTaskId);
+  if (!trigger) {
+    fail(`Trigger target ${triggerTarget} / ${triggerTaskId} is not part of dispatch group ${review.group}.`);
+  }
+  if (!trigger.result) {
+    fail(`Cannot build controller return before trigger target result exists: ${triggerTarget} / ${triggerTaskId}.`);
+  }
+  const mode = review.returnPolicy.mode;
+  if (mode === "group-ready" && !review.groupSnapshot.allResultsPresent) {
+    fail(`Cannot build group-ready controller return while dispatch group has missing results: ${review.groupSnapshot.missing.map((item) => item.packetId).join(", ")}`);
+  }
+  return trigger;
+}
+
 function requireValue(name) {
   const value = getValue(name, "");
   if (!value.trim()) fail(`${name} is required.`);
@@ -248,9 +429,17 @@ function validateReturnRoute(value) {
 }
 
 function validateReturnReason(value) {
-  const allowed = new Set(["result-ready", "blocked", "smoke"]);
+  const allowed = new Set(["result-ready", "blocked"]);
   if (!allowed.has(value)) {
     fail(`--return-reason must be one of: ${[...allowed].join(", ")}`);
+  }
+  return value;
+}
+
+function validateReturnPolicyMode(value) {
+  const allowed = new Set(["group-ready", "per-target"]);
+  if (!allowed.has(value)) {
+    fail(`--return-policy must be one of: ${[...allowed].join(", ")}`);
   }
   return value;
 }
@@ -279,14 +468,6 @@ function normalizeLegacyRole(value) {
   return "target";
 }
 
-function validateBusyPolicy(value) {
-  const allowed = new Set(["append-if-steerable", "fail-if-busy"]);
-  if (!allowed.has(value)) {
-    fail(`--busy-policy must be one of: ${[...allowed].join(", ")}`);
-  }
-  return value;
-}
-
 function validateDeliveryRunStatus(value) {
   const allowed = new Set(["sent", "blocked", "failed"]);
   if (!allowed.has(value)) {
@@ -296,7 +477,7 @@ function validateDeliveryRunStatus(value) {
 }
 
 function validateHostMode(value) {
-  const allowed = new Set(["new-turn", "append-to-active-turn", "unknown"]);
+  const allowed = new Set(["new-turn", "unknown"]);
   if (!allowed.has(value)) {
     fail(`--host-mode must be one of: ${[...allowed].join(", ")}`);
   }
@@ -391,11 +572,15 @@ function normalizeKeepLiveState(state = {}) {
   const args = Array.isArray(state.args) && state.args.every((item) => typeof item === "string") ? state.args : keepLiveArgs();
   const workerPid = Number.isInteger(Number(state.workerPid)) ? Number(state.workerPid) : Number(state.pid) || 0;
   const childPid = Number.isInteger(Number(state.childPid)) ? Number(state.childPid) : 0;
+  const leases = normalizeKeepLiveLeases(state.leases, state.automationRunId, state);
   return {
     kind: "AutomationKeepLiveState",
     version: keepLiveVersion,
     enabled: keepLiveEnabled(),
     automationRunId: state.automationRunId || "",
+    leases,
+    activeAutomationRunIds: Object.keys(leases).sort(),
+    activeRunCount: Object.keys(leases).length,
     mechanism: state.mechanism || keepLiveMechanism(commandName),
     strategy: state.strategy || "watcher",
     platform: process.platform,
@@ -411,6 +596,67 @@ function normalizeKeepLiveState(state = {}) {
     stopReason: state.stopReason || "",
     lastCheckedAt: nowIso(),
     error: state.error || null,
+  };
+}
+
+function normalizeKeepLiveLeases(rawLeases, legacyAutomationRunId = "", state = {}) {
+  const leases = {};
+  if (rawLeases && typeof rawLeases === "object" && !Array.isArray(rawLeases)) {
+    for (const [rawId, rawLease] of Object.entries(rawLeases)) {
+      const automationRunId = String(rawId || "").trim();
+      if (!automationRunId) continue;
+      const lease = rawLease && typeof rawLease === "object" ? rawLease : {};
+      leases[automationRunId] = {
+        automationRunId,
+        startedAt: typeof lease.startedAt === "string" ? lease.startedAt : nowIso(),
+        lastSeenAt: typeof lease.lastSeenAt === "string" ? lease.lastSeenAt : nowIso(),
+      };
+    }
+  }
+  const legacyId = String(legacyAutomationRunId || "").trim();
+  const legacyStateIsRunning = state.status === "running" || state.active === true;
+  if (legacyId && legacyStateIsRunning && Object.keys(leases).length === 0) {
+    leases[legacyId] = {
+      automationRunId: legacyId,
+      startedAt: nowIso(),
+      lastSeenAt: nowIso(),
+    };
+  }
+  return leases;
+}
+
+function keepLiveLeaseIds(leases = {}) {
+  return Object.keys(leases).sort();
+}
+
+function touchKeepLiveLease(leases, automationRunId) {
+  const id = String(automationRunId || "").trim();
+  if (!id) fail("--automation-run-id is required for keep-live lease ownership.");
+  const now = nowIso();
+  return {
+    ...leases,
+    [id]: {
+      automationRunId: id,
+      startedAt: leases[id]?.startedAt || now,
+      lastSeenAt: now,
+    },
+  };
+}
+
+function releaseKeepLiveLease(leases, automationRunId) {
+  const ids = keepLiveLeaseIds(leases);
+  if (ids.length === 0) return { leases, releasedAutomationRunId: "", remainingIds: [] };
+  const id = String(automationRunId || "").trim();
+  const releaseId = id || (ids.length === 1 ? ids[0] : "");
+  if (!releaseId || !leases[releaseId]) {
+    return { leases, releasedAutomationRunId: "", remainingIds: ids };
+  }
+  const nextLeases = { ...leases };
+  delete nextLeases[releaseId];
+  return {
+    leases: nextLeases,
+    releasedAutomationRunId: releaseId,
+    remainingIds: keepLiveLeaseIds(nextLeases),
   };
 }
 
@@ -478,18 +724,28 @@ function startKeepLive({ automationRunId }) {
     command: keepLiveCommand(),
     args: keepLiveArgs(),
   });
+  const leases = touchKeepLiveLease(current.leases, automationRunId);
   if (!current.enabled) {
-    const state = { ...current, active: false, status: "stopped", stopReason: "disabled", pid: 0, workerPid: 0, childPid: 0 };
+    const state = { ...current, leases: {}, activeAutomationRunIds: [], activeRunCount: 0, active: false, status: "stopped", stopReason: "disabled", pid: 0, workerPid: 0, childPid: 0 };
     writeKeepLiveState(state);
     return { ...state, message: "disabled" };
   }
   if (current.platform !== "darwin") {
-    const state = { ...current, active: false, status: "stopped", stopReason: "non-darwin", pid: 0, workerPid: 0, childPid: 0 };
+    const state = { ...current, leases: {}, activeAutomationRunIds: [], activeRunCount: 0, active: false, status: "stopped", stopReason: "non-darwin", pid: 0, workerPid: 0, childPid: 0 };
     writeKeepLiveState(state);
     return { ...state, message: "macOS only" };
   }
   if (current.active) {
-    const state = { ...current, automationRunId, status: "running" };
+    const activeAutomationRunIds = keepLiveLeaseIds(leases);
+    const state = {
+      ...current,
+      automationRunId: current.automationRunId || automationRunId,
+      requestedAutomationRunId: automationRunId,
+      leases,
+      activeAutomationRunIds,
+      activeRunCount: activeAutomationRunIds.length,
+      status: "running",
+    };
     writeKeepLiveState(state);
     return { ...state, message: "already running" };
   }
@@ -535,6 +791,9 @@ function startKeepLive({ automationRunId }) {
       active: true,
       workerActive: true,
       childActive: Number(control.childPid) > 0,
+      leases,
+      activeAutomationRunIds: keepLiveLeaseIds(leases),
+      activeRunCount: keepLiveLeaseIds(leases).length,
       status: "running",
       token,
       pid: worker.pid,
@@ -567,10 +826,16 @@ function startKeepLive({ automationRunId }) {
 function stopKeepLive({ automationRunId = "", reason = "" } = {}) {
   const current = keepLiveStatus();
   const stopReason = reason || "stopped";
+  const release = releaseKeepLiveLease(current.leases, automationRunId);
+  const remainingIds = release.remainingIds;
   if (!current.active) {
     const state = {
       ...current,
       automationRunId: automationRunId || current.automationRunId,
+      requestedAutomationRunId: automationRunId || undefined,
+      leases: {},
+      activeAutomationRunIds: [],
+      activeRunCount: 0,
       active: false,
       workerActive: false,
       childActive: false,
@@ -585,6 +850,27 @@ function stopKeepLive({ automationRunId = "", reason = "" } = {}) {
     };
     writeKeepLiveState(state);
     return { ...state, message: current.status === "missing" ? "not started" : "not running" };
+  }
+
+  if (remainingIds.length > 0) {
+    const state = {
+      ...current,
+      requestedAutomationRunId: automationRunId || undefined,
+      releasedAutomationRunId: release.releasedAutomationRunId,
+      leases: release.leases,
+      activeAutomationRunIds: remainingIds,
+      activeRunCount: remainingIds.length,
+      active: true,
+      status: "running",
+      stopReason: `released ${release.releasedAutomationRunId || "no matching lease"}: ${stopReason}`,
+      lastCheckedAt: nowIso(),
+    };
+    writeKeepLiveState(state);
+    return {
+      ...state,
+      message: release.releasedAutomationRunId ? "lease released; keep-live still needed" : "keep-live still needed",
+      retainedByOtherRuns: true,
+    };
   }
 
   if (current.strategy === "watcher" && current.token) {
@@ -608,6 +894,10 @@ function stopKeepLive({ automationRunId = "", reason = "" } = {}) {
       active: workerActive || childActive,
       workerActive,
       childActive,
+      leases: {},
+      activeAutomationRunIds: [],
+      activeRunCount: 0,
+      releasedAutomationRunId: release.releasedAutomationRunId,
       status: workerActive || childActive ? "failed" : "stopped",
       pid: workerActive ? current.workerPid : 0,
       workerPid: workerActive ? current.workerPid : 0,
@@ -636,6 +926,10 @@ function stopKeepLive({ automationRunId = "", reason = "" } = {}) {
   const state = {
     ...current,
     automationRunId: automationRunId || current.automationRunId,
+    leases: {},
+    activeAutomationRunIds: [],
+    activeRunCount: 0,
+    releasedAutomationRunId: release.releasedAutomationRunId,
     active,
     workerActive: active,
     childActive: false,
@@ -806,44 +1100,53 @@ function repositoryForWindow(windowName) {
   };
 }
 
-function formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup }) {
+function formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup, controllerWindow }) {
   return [
     `继续当前窗口任务：${targetWindow} / ${taskId}。`,
     "",
     "变量：",
     `- currentWindow: ${targetWindow}`,
     `- taskId: ${taskId}`,
+    ...(controllerWindow ? [`- controllerWindow: ${controllerWindow}`] : []),
     `- controlPlan: ${controlPlan}`,
     ...(dispatchGroup ? [`- dispatchGroup: ${dispatchGroup}`] : []),
-    "- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；结果齐件且 returnRoute=controller 时执行一次总控回跳（build + send/readback + record）。",
+    "- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；按 dispatch group returnPolicy 和 controllerWindow 判断是否执行一次总控回跳（build + send/readback + record）。",
     "- skill: ../codex-control-workspace/skills/dev/codex-automation-target/SKILL.md",
   ].join("\n");
 }
 
-function formatControllerReturnPrompt({ dispatchGroup, lastCompletedTarget, lastTaskId, controlPlan }) {
+function formatControllerReturnPrompt({ dispatchGroup, controllerWindow, triggerTarget, triggerTaskId, controlPlan, returnPolicy, reviewScope, groupSnapshot }) {
+  const returnedTargets = [
+    ...(groupSnapshot.readyTargets || []),
+    ...(groupSnapshot.blockedTargets || []),
+  ];
+  const titleTargets = reviewScope === "group"
+    ? formatPromptTargetList(returnedTargets)
+    : triggerTarget;
+  const title = reviewScope === "group"
+    ? `继续总控验收：${titleTargets} 回填。`
+    : `继续总控验收：${triggerTarget} 回填。`;
+  const blockedTargets = formatPromptTargetList(groupSnapshot.blockedTargets);
+  const remainingTargets = formatPromptTargetList(groupSnapshot.missingTargets);
+  const hasBlockedTargets = Array.isArray(groupSnapshot.blockedTargets) && groupSnapshot.blockedTargets.length > 0;
+  const hasRemainingTargets = Array.isArray(groupSnapshot.missingTargets) && groupSnapshot.missingTargets.length > 0;
   return [
-    `继续总控验收：${lastCompletedTarget} 回填。`,
+    title,
     "",
     "变量：",
     `- dispatchGroup: ${dispatchGroup}`,
-    `- lastCompletedTarget: ${lastCompletedTarget}`,
-    `- lastTaskId: ${lastTaskId}`,
+    `- controllerWindow: ${controllerWindow}`,
+    `- triggerTarget: ${triggerTarget}`,
+    `- triggerTaskId: ${triggerTaskId}`,
+    `- returnPolicy: ${returnPolicy.mode}`,
+    `- reviewScope: ${reviewScope}`,
+    `- groupStatus: ${groupSnapshot.groupStatus}`,
+    ...(hasBlockedTargets ? [`- blockedTargets: ${blockedTargets}`] : []),
+    ...(hasRemainingTargets ? [`- remainingTargets: ${remainingTargets}`] : []),
     `- controlPlan: ${controlPlan}`,
-    "- rules: 用完即弃；review-results；证据通过且目标未完成且存在 eligible task 时才创建下一批 dispatch；没有任务、目标完成或需要用户裁决时停止，不创建下一跳；禁止为回跳本身再次回跳。",
+    "- rules: 用完即弃；review-results；按 groupSnapshot 判断单个回填、继续等待或整组验收；证据通过且目标未完成且存在 eligible task 时才创建下一批 dispatch；没有任务、目标完成或需要用户裁决时停止，不创建下一跳；禁止为回跳本身再次回跳。",
     "- skill: codex-control-workspace/skills/dev/codex-automation-controller/SKILL.md",
   ].join("\n");
-}
-
-function readDispatchPrompt({ promptArg, promptFileArg, targetWindow, taskId, controlPlan, dispatchGroup }) {
-  if (promptFileArg) return readFileSync(resolveInputPath(promptFileArg, "--prompt-file"), "utf8").trim();
-  if (!promptArg) return formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup });
-
-  const prompt = promptArg.trim();
-  if (!prompt) return formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup });
-  if (prompt.startsWith("继续当前窗口任务：") && !prompt.includes("\n变量：")) {
-    return formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup });
-  }
-  return prompt;
 }
 
 function commandRegisterThread() {
@@ -942,8 +1245,13 @@ function deliveryRunStatusForEnvelope(envelope) {
     deliveryId: envelope.deliveryId,
     kind: envelope.kind,
     targetWindow: envelope.targetWindow || envelope.targetThread?.windowName,
-    taskId: envelope.taskId || envelope.lastTaskId,
+    taskId: envelope.taskId || envelope.triggerTaskId,
     dispatchGroup: envelope.dispatchGroup,
+    triggerTarget: envelope.triggerTarget,
+    triggerTaskId: envelope.triggerTaskId,
+    reviewScope: envelope.reviewScope,
+    returnPolicy: envelope.returnPolicy,
+    groupStatus: envelope.groupSnapshot?.groupStatus,
     status,
     sent: Boolean(sentRun),
     readbackOk: Boolean(sentRun?.run.readback?.ok),
@@ -1005,7 +1313,102 @@ function controllerReturnDeliveryStatusForGroup(dispatchGroup) {
   };
 }
 
-function buildWindowConfig(windowName, { busyPolicy = "append-if-steerable", requireThread = false } = {}) {
+function targetDeliveryStatusesForPacket(packetId) {
+  return listJsonFiles(dirs.deliveries)
+    .map((file) => ({
+      file,
+      envelope: readJson(file, "delivery envelope"),
+    }))
+    .filter((item) => item.envelope.kind === "DeliveryEnvelope" && item.envelope.sourcePacketId === packetId)
+    .map((item) => ({
+      file: path.relative(workspaceRoot, item.file),
+      ...deliveryRunStatusForEnvelope(item.envelope),
+    }));
+}
+
+function evidenceRefSummary(ref) {
+  const text = String(ref ?? "");
+  const looksLikePath = text.includes("/") || /\.(json|md|log|txt|png|jpg|jpeg|webp|html|csv)$/i.test(text);
+  const resolvedPath = looksLikePath ? (path.isAbsolute(text) ? text : path.resolve(workspaceRoot, text)) : "";
+  return {
+    ref: text,
+    looksLikePath,
+    exists: Boolean(resolvedPath && existsSync(resolvedPath)),
+    path: resolvedPath && existsSync(resolvedPath) ? path.relative(workspaceRoot, resolvedPath) : undefined,
+  };
+}
+
+function targetResultReviewEntry(item) {
+  const result = item.result;
+  const evidenceRefs = Array.isArray(result?.evidenceRefs) ? result.evidenceRefs : [];
+  const verificationSummary = Array.isArray(result?.verificationSummary) ? result.verificationSummary : [];
+  const commits = Array.isArray(result?.commits) ? result.commits : [];
+  return {
+    packetId: item.packet.id,
+    targetWindow: item.packet.targetWindow,
+    taskId: item.packet.taskId,
+    resultStatus: result?.status || "missing",
+    resultFile: result ? path.relative(workspaceRoot, item.file) : undefined,
+    changedRepos: Array.isArray(result?.changedRepos) ? result.changedRepos : [],
+    commits,
+    evidenceRefs,
+    evidenceRefSummaries: evidenceRefs.map(evidenceRefSummary),
+    verificationSummary,
+    riskSummary: Array.isArray(result?.riskSummary) ? result.riskSummary : [],
+    nextSuggestion: result?.nextSuggestion,
+    reportedAt: result?.reportedAt,
+    hasControllerReviewEvidence: commits.length > 0 || evidenceRefs.length > 0 || verificationSummary.length > 0,
+    targetDeliveries: targetDeliveryStatusesForPacket(item.packet.id),
+  };
+}
+
+function buildReviewPack(review) {
+  const returnGroup = review.group || (review.packets.length === 1 ? review.packets[0].dispatchGroup : "");
+  const controllerReturnDelivery = controllerReturnDeliveryStatusForGroup(returnGroup);
+  const results = review.results.map(targetResultReviewEntry);
+  const reviewReady = review.decision !== "wait";
+  const rawEvidenceRequired = results
+    .filter((item) => item.resultStatus !== "missing")
+    .map((item) => ({
+      targetWindow: item.targetWindow,
+      taskId: item.taskId,
+      resultStatus: item.resultStatus,
+      commits: item.commits,
+      evidenceRefs: item.evidenceRefs,
+      verificationSummary: item.verificationSummary,
+      hasControllerReviewEvidence: item.hasControllerReviewEvidence,
+    }));
+  const gates = {
+    controllerReviewReady: reviewReady,
+    waitForMissingResults: review.decision === "wait",
+    blockedResultsPresent: review.blocked.length > 0,
+    controllerReturnSent: controllerReturnDelivery.status === "sent",
+    rawEvidencePullRequired: reviewReady,
+    totalControlVerdictRequired: reviewReady,
+  };
+  return {
+    kind: "ControllerReviewPack",
+    version,
+    dispatchGroup: review.group || undefined,
+    taskId: review.taskId || undefined,
+    decision: review.decision,
+    returnPolicy: review.returnPolicy,
+    groupStatus: review.groupStatus,
+    groupSnapshot: review.groupSnapshot,
+    controllerReturnDelivery,
+    targetResults: results,
+    rawEvidenceRequired,
+    gates,
+    nextAction: review.decision === "wait"
+      ? "wait-for-target-result-envelope"
+      : review.decision === "blocked"
+        ? "pull-block-evidence-and-classify"
+        : "pull-raw-evidence-and-make-total-control-verdict",
+    generatedAt: nowIso(),
+  };
+}
+
+function buildWindowConfig(windowName, { requireThread = false } = {}) {
   const registration = loadThreadRegistration(windowName);
   if (requireThread && !registration) fail(`No registered thread for window: ${windowName}`);
   const { config, repository } = repositoryForWindow(windowName);
@@ -1031,7 +1434,6 @@ function buildWindowConfig(windowName, { busyPolicy = "append-if-steerable", req
     delivery: {
       transport: "direct-thread",
       requireThread: true,
-      busyPolicy,
       missingThread: "fail-closed",
       readbackRequired: true,
     },
@@ -1054,6 +1456,7 @@ function commandStatus() {
     return;
   }
   const packetCount = listJsonFiles(dirs.packets).length;
+  const groupCount = listJsonFiles(dirs.groups).length;
   const deliveryCount = listJsonFiles(dirs.deliveries).length;
   const deliveryRunCount = listJsonFiles(dirs.deliveryRuns).length;
   const resultCount = listJsonFiles(dirs.results).length;
@@ -1067,6 +1470,7 @@ function commandStatus() {
       command: "status",
       stateDir,
       packetCount,
+      groupCount,
       deliveryCount,
       deliveryRunCount,
       resultCount,
@@ -1079,6 +1483,7 @@ function commandStatus() {
       "Codex automation closed-loop status",
       `State: ${path.relative(workspaceRoot, stateDir) || "."}`,
       `Dispatch packets: ${packetCount}`,
+      `Dispatch groups: ${groupCount}`,
       `Delivery envelopes: ${deliveryCount}`,
       `Delivery runs: ${deliveryRunCount}`,
       `Target results: ${resultCount}`,
@@ -1091,8 +1496,7 @@ function commandStatus() {
 
 function commandBuildWindowConfig() {
   const windowName = requireValue("--window");
-  const busyPolicy = validateBusyPolicy(getValue("--busy-policy", "append-if-steerable"));
-  const config = buildWindowConfig(windowName, { busyPolicy, requireThread: hasFlag("--require-thread") });
+  const config = buildWindowConfig(windowName, { requireThread: hasFlag("--require-thread") });
   const configFile = windowConfigFileFor(windowName);
   if (write) {
     ensureStateDirs();
@@ -1115,18 +1519,36 @@ function commandBuildWindowConfig() {
   );
 }
 
-function commandCreateDispatch() {
-  const targetWindow = requireValue("--target-window");
-  const taskId = requireValue("--task-id");
-  const controlPlan = requireValue("--control-plan");
-  const objective = requireValue("--objective");
-  const promptArg = getValue("--prompt", "");
-  const promptFileArg = getValue("--prompt-file", "");
-  const dispatchGroup = getValue("--group", "");
-  const prompt = readDispatchPrompt({ promptArg, promptFileArg, targetWindow, taskId, controlPlan, dispatchGroup });
+function buildDispatchArtifacts({
+  contextPolicy,
+  controlPlan,
+  controllerWindow = "",
+  dispatchGroup = "",
+  evidenceRequired = [],
+  forbidden = [],
+  objective,
+  returnPolicyMode = "",
+  scope = [],
+  targetWindow,
+  taskId,
+}) {
+  if (returnPolicyMode && !dispatchGroup) fail("--return-policy requires --group.");
+  if (returnPolicyMode) validateReturnPolicyMode(returnPolicyMode);
+  const prompt = formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup, controllerWindow });
   if (!prompt) fail("Prompt cannot be empty.");
 
   const id = [dispatchGroup, targetWindow, taskId].filter(Boolean).map(slug).join("__");
+  const dispatchGroupRecord = dispatchGroup
+    ? upsertDispatchGroup({
+        groupId: dispatchGroup,
+        controlPlan,
+        controllerWindow,
+        returnPolicyMode,
+        targetWindow,
+        taskId,
+        packetId: id,
+      })
+    : null;
   const packet = {
     kind: "ControllerDispatchPacket",
     version,
@@ -1134,21 +1556,53 @@ function commandCreateDispatch() {
     targetWindow,
     taskId,
     dispatchGroup: dispatchGroup || undefined,
+    controllerWindow: controllerWindow || undefined,
     controlPlan,
     objective,
-    scope: getAllValues("--scope"),
-    forbidden: getAllValues("--forbidden"),
-    evidenceRequired: getAllValues("--evidence"),
+    scope,
+    forbidden,
+    evidenceRequired,
     resultContract: "target-result-envelope-v1",
-    contextPolicy: validateContextPolicy(getValue("--context-policy", "refresh-if-missing")),
+    returnPolicy: dispatchGroupRecord?.returnPolicy,
+    contextPolicy: validateContextPolicy(contextPolicy || "refresh-if-missing"),
     prompt,
     createdAt: nowIso(),
   };
 
   const packetFile = packetFileFor(packet.id);
+  return { dispatchGroupRecord, packet, packetFile };
+}
+
+function writeDispatchArtifacts({ dispatchGroup = "", dispatchGroupRecord, packet, packetFile }) {
+  ensureStateDirs();
+  if (dispatchGroupRecord && dispatchGroup) {
+    atomicWriteJson(groupFileFor(dispatchGroup), dispatchGroupRecord);
+  }
+  atomicWriteJson(packetFile, packet);
+}
+
+function commandCreateDispatch() {
+  const targetWindow = requireValue("--target-window");
+  const taskId = requireValue("--task-id");
+  const controlPlan = requireValue("--control-plan");
+  const objective = requireValue("--objective");
+  const controllerWindow = getValue("--controller-window", "");
+  const dispatchGroup = getValue("--group", "");
+  const { dispatchGroupRecord, packet, packetFile } = buildDispatchArtifacts({
+    contextPolicy: getValue("--context-policy", "refresh-if-missing"),
+    controlPlan,
+    controllerWindow,
+    dispatchGroup,
+    evidenceRequired: getAllValues("--evidence"),
+    forbidden: getAllValues("--forbidden"),
+    objective,
+    returnPolicyMode: getValue("--return-policy", ""),
+    scope: getAllValues("--scope"),
+    targetWindow,
+    taskId,
+  });
   if (write) {
-    ensureStateDirs();
-    atomicWriteJson(packetFile, packet);
+    writeDispatchArtifacts({ dispatchGroup, dispatchGroupRecord, packet, packetFile });
   }
   output(
     {
@@ -1156,7 +1610,9 @@ function commandCreateDispatch() {
       command: "create-dispatch",
       wrote: write,
       packet,
+      dispatchGroup: dispatchGroupRecord,
       packetFile: write ? path.relative(workspaceRoot, packetFile) : "",
+      dispatchGroupFile: write && dispatchGroupRecord ? path.relative(workspaceRoot, groupFileFor(dispatchGroup)) : "",
     },
     [
       `${write ? "Created" : "Would create"} dispatch packet ${packet.id}.`,
@@ -1166,29 +1622,34 @@ function commandCreateDispatch() {
   );
 }
 
-function commandBuildDelivery() {
-  const packetFile = resolveInputPath(requireValue("--packet-file"), "--packet-file");
-  const packet = readJson(packetFile, "dispatch packet");
+function buildDeliveryArtifacts({
+  automationEnabled = false,
+  deliveryId = "",
+  packet,
+  requireThread = false,
+  returnRoute = "controller",
+  windowConfig = null,
+}) {
   if (packet.kind !== "ControllerDispatchPacket") fail("Packet file must contain a ControllerDispatchPacket.");
   if (!packet.targetWindow || !packet.prompt || !packet.taskId) fail("Dispatch packet is missing targetWindow, taskId, or prompt.");
 
-  const deliveryId = getValue("--delivery-id", `delivery-${packet.id}`);
-  const busyPolicy = validateBusyPolicy(getValue("--busy-policy", "append-if-steerable"));
-  const automationEnabled = hasFlag("--automation-enabled");
   const registration = loadThreadRegistration(packet.targetWindow);
-  if (hasFlag("--require-thread") && !registration) fail(`No registered thread for target window: ${packet.targetWindow}`);
-  const windowConfig = buildWindowConfig(packet.targetWindow, { busyPolicy });
+  if (requireThread && !registration) fail(`No registered thread for target window: ${packet.targetWindow}`);
+  const resolvedWindowConfig = windowConfig || buildWindowConfig(packet.targetWindow);
+  const resolvedDeliveryId = deliveryId || `delivery-${packet.id}`;
   const envelope = {
     kind: "DeliveryEnvelope",
     version: deliveryEnvelopeVersion,
-    deliveryId,
+    deliveryId: resolvedDeliveryId,
     sourcePacketId: packet.id,
     targetWindow: packet.targetWindow,
     taskId: packet.taskId,
     dispatchGroup: packet.dispatchGroup,
+    controllerWindow: packet.controllerWindow,
     controlPlan: packet.controlPlan,
     prompt: packet.prompt,
-    returnRoute: validateReturnRoute(getValue("--return-route", "controller")),
+    returnPolicy: packet.returnPolicy,
+    returnRoute: validateReturnRoute(returnRoute),
     oneShot: true,
     correlationId: packet.dispatchGroup || packet.id,
     targetThread: registration
@@ -1204,7 +1665,6 @@ function commandBuildDelivery() {
     transport: {
       kind: "direct-thread",
       threadRegistryFile: path.relative(stateDir, threadFileFor(packet.targetWindow)),
-      busyPolicy,
       readbackRequired: true,
       missingThread: "fail-closed",
     },
@@ -1214,11 +1674,24 @@ function commandBuildDelivery() {
       keepLive: automationEnabled,
       keepLiveStateFile: automationEnabled ? path.relative(stateDir, keepLiveStateFile()) : undefined,
     },
-    windowConfig,
+    windowConfig: resolvedWindowConfig,
     createdAt: nowIso(),
   };
 
   const deliveryFile = deliveryFileFor(envelope.deliveryId);
+  return { deliveryFile, envelope, registration };
+}
+
+function commandBuildDelivery() {
+  const packetFile = resolveInputPath(requireValue("--packet-file"), "--packet-file");
+  const packet = readJson(packetFile, "dispatch packet");
+  const { deliveryFile, envelope, registration } = buildDeliveryArtifacts({
+    automationEnabled: hasFlag("--automation-enabled"),
+    deliveryId: getValue("--delivery-id", `delivery-${packet.id}`),
+    packet,
+    requireThread: hasFlag("--require-thread"),
+    returnRoute: getValue("--return-route", "controller"),
+  });
   if (write) {
     ensureStateDirs();
     atomicWriteJson(deliveryFile, envelope);
@@ -1234,7 +1707,7 @@ function commandBuildDelivery() {
       threadIdRedacted: Boolean(registration),
     },
     [
-      `${write ? "Created" : "Would create"} delivery envelope ${deliveryId}.`,
+      `${write ? "Created" : "Would create"} delivery envelope ${envelope.deliveryId}.`,
       `Target: ${envelope.targetWindow}`,
       `Return route: ${envelope.returnRoute}`,
       `Thread: ${registration ? "registered" : "missing"}`,
@@ -1242,32 +1715,120 @@ function commandBuildDelivery() {
   );
 }
 
+function commandPrepareDispatch() {
+  const targetWindow = requireValue("--target-window");
+  const taskId = requireValue("--task-id");
+  const controlPlan = requireValue("--control-plan");
+  const objective = requireValue("--objective");
+  const controllerWindow = getValue("--controller-window", "");
+  const dispatchGroup = getValue("--group", "");
+  const automationEnabled = hasFlag("--automation-enabled");
+  const requireThread = hasFlag("--require-thread");
+  const windowConfig = buildWindowConfig(targetWindow, { requireThread });
+  const { dispatchGroupRecord, packet, packetFile } = buildDispatchArtifacts({
+    contextPolicy: getValue("--context-policy", "refresh-if-missing"),
+    controlPlan,
+    controllerWindow,
+    dispatchGroup,
+    evidenceRequired: getAllValues("--evidence"),
+    forbidden: getAllValues("--forbidden"),
+    objective,
+    returnPolicyMode: getValue("--return-policy", ""),
+    scope: getAllValues("--scope"),
+    targetWindow,
+    taskId,
+  });
+  const { deliveryFile, envelope, registration } = buildDeliveryArtifacts({
+    automationEnabled,
+    deliveryId: getValue("--delivery-id", `delivery-${packet.id}`),
+    packet,
+    requireThread,
+    returnRoute: getValue("--return-route", "controller"),
+    windowConfig,
+  });
+
+  let keepLive = null;
+  if (write) {
+    ensureStateDirs();
+    if (automationEnabled) {
+      keepLive = startKeepLive({ automationRunId: dispatchGroup || packet.id });
+    }
+    atomicWriteJson(windowConfigFileFor(targetWindow), windowConfig);
+    writeDispatchArtifacts({ dispatchGroup, dispatchGroupRecord, packet, packetFile });
+    atomicWriteJson(deliveryFile, envelope);
+  }
+
+  output(
+    {
+      ok: true,
+      command: "prepare-dispatch",
+      wrote: write,
+      keepLive,
+      windowName: targetWindow,
+      windowConfig,
+      configFile: write ? path.relative(workspaceRoot, windowConfigFileFor(targetWindow)) : "",
+      packet,
+      dispatchGroup: dispatchGroupRecord,
+      packetFile: write ? path.relative(workspaceRoot, packetFile) : "",
+      dispatchGroupFile: write && dispatchGroupRecord ? path.relative(workspaceRoot, groupFileFor(dispatchGroup)) : "",
+      envelope: redactDeliveryEnvelope(envelope),
+      deliveryFile: write ? path.relative(workspaceRoot, deliveryFile) : "",
+      threadReady: Boolean(registration),
+      threadIdRedacted: Boolean(registration),
+    },
+    [
+      `${write ? "Prepared" : "Would prepare"} dispatch + delivery for ${targetWindow} / ${taskId}.`,
+      `Thread: ${registration ? "registered" : "missing"}`,
+      `Delivery: ${path.relative(workspaceRoot, deliveryFile)}`,
+      `Next: send prompt with host thread tool, then record-delivery-run.`,
+    ],
+  );
+}
+
 function commandBuildControllerReturn() {
   const dispatchGroup = requireValue("--group");
-  const lastCompletedTarget = requireValue("--last-completed-target");
-  const lastTaskId = requireValue("--last-task-id");
+  const triggerTarget = requireValue("--trigger-target");
+  const triggerTaskId = requireValue("--trigger-task-id");
   const controlPlan = requireValue("--control-plan");
   const config = readWorkspaceConfig();
-  const controllerWindow = getValue("--controller-window", config.controlWindow || config.workspaceName || "ControlWorkspace");
+  const explicitControllerWindow = getValue("--controller-window", "");
   const returnReason = validateReturnReason(getValue("--return-reason", "result-ready"));
-  const busyPolicy = validateBusyPolicy(getValue("--busy-policy", "append-if-steerable"));
   const automationEnabled = hasFlag("--automation-enabled");
+  const review = computeReviewResults({ group: dispatchGroup });
+  const storedControllerWindow = review.groupRecord?.controllerWindow
+    || review.packets.find((packet) => packet.controllerWindow)?.controllerWindow
+    || "";
+  if (explicitControllerWindow && storedControllerWindow && explicitControllerWindow !== storedControllerWindow) {
+    fail(`Dispatch group ${dispatchGroup} returns to controller ${storedControllerWindow}; cannot override with ${explicitControllerWindow}.`);
+  }
+  const controllerWindow = explicitControllerWindow || storedControllerWindow || config.controlWindow || config.workspaceName || "ControlWorkspace";
   const registration = loadThreadRegistration(controllerWindow);
   if (hasFlag("--require-thread") && !registration) fail(`No registered controller thread for window: ${controllerWindow}`);
-  const review = computeReviewResults({ group: dispatchGroup });
-  if (review.decision === "wait") {
-    fail(`Cannot build controller return while dispatch group has missing results: ${review.missing.join(", ")}`);
-  }
-  const windowConfig = buildWindowConfig(controllerWindow, { busyPolicy });
+  validateControllerReturnAllowed({ review, triggerTarget, triggerTaskId });
+  const windowConfig = buildWindowConfig(controllerWindow);
+  const reviewScope = review.returnPolicy.mode === "group-ready" ? "group" : "single-target";
 
-  const prompt = formatControllerReturnPrompt({ dispatchGroup, lastCompletedTarget, lastTaskId, controlPlan });
+  const prompt = formatControllerReturnPrompt({
+    dispatchGroup,
+    controllerWindow,
+    triggerTarget,
+    triggerTaskId,
+    controlPlan,
+    returnPolicy: review.returnPolicy,
+    reviewScope,
+    groupSnapshot: review.groupSnapshot,
+  });
   const envelope = {
     kind: "ControllerReturnEnvelope",
     version: deliveryEnvelopeVersion,
-    deliveryId: `controller-return-${slug(dispatchGroup)}__${slug(lastCompletedTarget)}__${slug(lastTaskId)}`,
+    deliveryId: `controller-return-${slug(dispatchGroup)}__${slug(triggerTarget)}__${slug(triggerTaskId)}`,
     dispatchGroup,
-    lastCompletedTarget,
-    lastTaskId,
+    controllerWindow,
+    triggerTarget,
+    triggerTaskId,
+    returnPolicy: review.returnPolicy,
+    groupSnapshot: review.groupSnapshot,
+    reviewScope,
     controlPlan,
     prompt,
     oneShot: true,
@@ -1284,7 +1845,6 @@ function commandBuildControllerReturn() {
     transport: {
       kind: "direct-thread",
       threadRegistryFile: path.relative(stateDir, threadFileFor(controllerWindow)),
-      busyPolicy,
       readbackRequired: true,
       missingThread: "fail-closed",
     },
@@ -1303,7 +1863,11 @@ function commandBuildControllerReturn() {
     loopGuard: {
       returnReason,
       reviewDecision: review.decision,
-      deliveryAllowedOnlyFor: ["result-ready", "blocked", "smoke"],
+      groupStatus: review.groupStatus,
+      controllerWindow,
+      returnPolicy: review.returnPolicy,
+      reviewScope,
+      deliveryAllowedOnlyFor: ["result-ready", "blocked"],
       controllerReviewRequired: true,
       noEligibleTaskAction: "stop-without-next-delivery",
       repeatControllerReturnForbidden: true,
@@ -1368,8 +1932,11 @@ function commandRecordDeliveryRun() {
     deliveryRunId,
     deliveryId: envelope.deliveryId,
     targetWindow: envelope.targetWindow || envelope.targetThread?.windowName,
-    taskId: envelope.taskId || envelope.lastTaskId,
+    taskId: envelope.taskId || envelope.triggerTaskId,
     dispatchGroup: envelope.dispatchGroup,
+    triggerTarget: envelope.triggerTarget,
+    triggerTaskId: envelope.triggerTaskId,
+    reviewScope: envelope.reviewScope,
     transport: "direct-thread",
     status,
     thread: {
@@ -1440,7 +2007,7 @@ function commandStopKeepLive() {
   const keepLive = stopKeepLive({ automationRunId, reason });
   output(
     {
-      ok: !keepLive.active,
+      ok: keepLive.status !== "failed",
       command: "stop-keep-live",
       wrote: true,
       keepLive,
@@ -1552,7 +2119,8 @@ function loadPacketsForScope({ group = "", taskId = "" } = {}) {
 function computeReviewResults({ group = "", taskId = "" } = {}) {
   const { packets } = loadPacketsForScope({ group, taskId });
   if (packets.length === 0) fail("No matching dispatch packets found for review.");
-  const results = packets.map((packet) => {
+  const groupRecord = groupFromPackets({ groupId: group || packets[0]?.dispatchGroup || "", packets });
+  const unorderedResults = packets.map((packet) => {
     const file = resultFileFor(packet.targetWindow, packet.taskId);
     return {
       packet,
@@ -1560,11 +2128,37 @@ function computeReviewResults({ group = "", taskId = "" } = {}) {
       result: existsSync(file) ? readJson(file, "target result") : null,
     };
   });
-  const missing = results.filter((item) => !item.result).map((item) => item.packet.id);
-  const blocked = results.filter((item) => item.result?.status === "blocked").map((item) => item.packet.id);
-  const needsReview = results.filter((item) => item.result && item.result.status !== "blocked").map((item) => item.packet.id);
-  const decision = missing.length > 0 ? "wait" : blocked.length > 0 ? "blocked" : "needs-controller-review";
-  return { group, taskId, packets, missing, blocked, needsReview, decision };
+  const results = orderResultsByGroup({ groupRecord, results: unorderedResults });
+  const groupSnapshot = buildGroupSnapshot({ groupRecord, results });
+  const missing = groupSnapshot.missing.map((item) => item.packetId);
+  const blocked = groupSnapshot.blocked.map((item) => item.packetId);
+  const needsReview = groupSnapshot.ready.map((item) => item.packetId);
+  const mode = groupSnapshot.returnPolicy.mode;
+  const decision = mode === "per-target"
+    ? groupSnapshot.groupStatus === "waiting"
+      ? "wait"
+      : groupSnapshot.blocked.length > 0 && groupSnapshot.ready.length === 0
+        ? "blocked"
+        : "needs-controller-review"
+    : groupSnapshot.missing.length > 0
+      ? "wait"
+      : groupSnapshot.blocked.length > 0
+        ? "blocked"
+        : "needs-controller-review";
+  return {
+    group,
+    taskId,
+    groupRecord,
+    returnPolicy: groupSnapshot.returnPolicy,
+    groupStatus: groupSnapshot.groupStatus,
+    groupSnapshot,
+    packets,
+    results,
+    missing,
+    blocked,
+    needsReview,
+    decision,
+  };
 }
 
 function commandReviewResults() {
@@ -1581,10 +2175,17 @@ function commandReviewResults() {
       group: review.group || undefined,
       taskId: review.taskId || undefined,
       packetCount: review.packets.length,
+      returnPolicy: review.returnPolicy,
+      groupStatus: review.groupStatus,
+      groupSnapshot: review.groupSnapshot,
+      readyResults: review.groupSnapshot.ready,
+      missingResults: review.groupSnapshot.missing,
+      blockedResults: review.groupSnapshot.blocked,
       missing: review.missing,
       blocked: review.blocked,
       needsReview: review.needsReview,
       decision: review.decision,
+      controllerReturnDeliveries: controllerReturnDelivery.deliveries,
       controllerReturnDelivery,
     },
     [
@@ -1596,10 +2197,34 @@ function commandReviewResults() {
   );
 }
 
+function commandReviewPack() {
+  const group = getValue("--group", "");
+  const taskId = getValue("--task-id", "");
+  const review = computeReviewResults({ group, taskId });
+  const reviewPack = buildReviewPack(review);
+  output(
+    {
+      ok: true,
+      command: "review-pack",
+      group: review.group || undefined,
+      taskId: review.taskId || undefined,
+      decision: review.decision,
+      groupStatus: review.groupStatus,
+      reviewPack,
+    },
+    [
+      `Review pack: ${group ? `group ${group}` : `task ${taskId}`}`,
+      `Decision: ${review.decision}`,
+      `Targets: ${reviewPack.groupSnapshot.expectedTargets.join(", ") || "(none)"}`,
+      `Next: ${reviewPack.nextAction}`,
+    ],
+  );
+}
+
 function commandStopLoop() {
   if (!write) fail("stop-loop requires --write.");
   const reason = requireValue("--reason");
-  const keepLive = stopKeepLive({ automationRunId: getValue("--automation-run-id", "stop-loop"), reason });
+  const keepLive = stopKeepLive({ automationRunId: getValue("--automation-run-id", ""), reason });
   const marker = {
     kind: "CodexAutomationLoopStop",
     version,
@@ -1614,7 +2239,7 @@ function commandStopLoop() {
   atomicWriteJson(path.join(stateDir, "stop.json"), marker);
   output(
     {
-      ok: !keepLive.active,
+      ok: keepLive.status !== "failed",
       command: "stop-loop",
       wrote: true,
       markerFile: path.relative(workspaceRoot, path.join(stateDir, "stop.json")),
@@ -1645,6 +2270,9 @@ try {
     case "build-delivery":
       commandBuildDelivery();
       break;
+    case "prepare-dispatch":
+      commandPrepareDispatch();
+      break;
     case "build-controller-return":
       commandBuildControllerReturn();
       break;
@@ -1668,6 +2296,9 @@ try {
       break;
     case "review-results":
       commandReviewResults();
+      break;
+    case "review-pack":
+      commandReviewPack();
       break;
     case "stop-loop":
       commandStopLoop();

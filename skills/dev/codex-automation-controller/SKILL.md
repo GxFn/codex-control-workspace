@@ -26,12 +26,12 @@ transport and not acceptance evidence.
 
 Total control is a traffic controller, not a worker locked to one lane. After a
 target dispatch has been sent, read back, and recorded as a delivery run, that
-dispatch is complete from the controller side. Do not create a heartbeat,
-self-wakeup, recurring reminder, or artificial in-progress state just to keep
-the controller attached to that task. The target window returns by submitting a
-`TargetResultEnvelope` and, when the group is ready, sending one controller
-return. Until then, total control is free to handle other user input or parallel
-plans.
+dispatch is complete from the controller side. Release the controller for other
+workspace traffic instead of keeping an artificial in-progress state attached
+to that task. The target window returns by submitting a `TargetResultEnvelope`
+and sending a controller return according to the dispatch group's stored
+`returnPolicy`. Until then, total control is free to handle other user input or
+parallel plans.
 
 The previous `claim / finish / chain-next / start-plan / resume-plan` protocol
 is retired. Do not use it for closed-loop work.
@@ -41,18 +41,38 @@ is retired. Do not use it for closed-loop work.
 Controller wakeups should be task-first and compact:
 
 ```text
-继续总控验收：<lastCompletedTarget> 回填。
+继续总控验收：<windowA>、<windowB> 回填。
 
 变量：
 - dispatchGroup: <group>
-- lastCompletedTarget: <window>
-- lastTaskId: <task>
+- triggerTarget: <window>
+- triggerTaskId: <task>
+- returnPolicy: group-ready
+- reviewScope: group
+- groupStatus: ready
 - controlPlan: <path>
-- rules: 用完即弃；review-results；证据通过且目标未完成时创建下一批 dispatch；仅异常诊断。
+- rules: 用完即弃；review-results；按 groupSnapshot 判断单个回填、继续等待或整组验收；仅在证据通过且目标未完成时创建下一批 dispatch。
 ```
 
 Do not start the visible prompt with the automation mechanism name. Do not paste
-command manuals into the prompt.
+command manuals into the prompt. For `returnPolicy=group-ready`, the visible
+title uses the returned window names, not the dispatch group id; keep the group
+id in the variables for review and diagnostics.
+
+Keep happy-path prompt variables compact. Do not print `completedTargets`, and
+do not print empty `blockedTargets` / `missingTargets`. The full machine
+snapshot remains in `ControllerReturnEnvelope.groupSnapshot`. Only expose
+non-empty exception state in the prompt, such as:
+
+```text
+- blockedTargets: <windows>
+- remainingTargets: <windows>
+```
+
+For `returnPolicy=per-target`, the first line is
+`继续总控验收：<triggerTarget> 回填。`, but the prompt must still include the
+remaining / missing group summary so total control does not mistake a single
+target callback for whole-group completion.
 
 ## Normal Controller Flow
 
@@ -65,23 +85,40 @@ command manuals into the prompt.
      total-control cleanup rather than continuing a legacy route.
 
 2. **Review target results**
-   - Run:
+   - For the compact controller evidence surface, run:
+
+```text
+node scripts/codex-automation-loop.mjs review-pack --group <dispatchGroup> --json
+```
+
+   - Use the review pack to find result files, commits, evidence refs,
+     verification summaries, target delivery status, and controller-return
+     status. The review pack is not a verdict; total control still pulls raw
+     evidence before acceptance.
+   - When debugging readiness only, run:
 
 ```text
 node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --json
 ```
 
-   - `wait` means some target result envelopes are missing.
+   - Inspect `returnPolicy`, `groupStatus`, `readyResults`, `missingResults`,
+     `blockedResults`, `groupSnapshot`, and `controllerReturnDeliveries`.
+   - `wait` means the current return policy does not allow controller review
+     yet. For `group-ready`, this includes partially complete groups.
+   - `partially-ready` in `groupStatus` means some targets have returned and
+     some are still missing. It is reviewable only when `returnPolicy.mode` is
+     `per-target`.
    - `blocked` means at least one target reported a block; total control still
      reads the evidence before deciding whether it is a product block,
      environment block, or reporting block.
    - `needs-controller-review` means envelopes are present; pull raw evidence
      from commits, diffs, command outputs, runtime JSON, logs, reports, or
      screenshots before writing an acceptance verdict.
-   - `controllerReturnDelivery.status` describes only the return transport.
+   - `controllerReturnDelivery.status` and `controllerReturnDeliveries`
+     describe only the return transport.
      `pending-host-send` means a target built a `ControllerReturnEnvelope` but
-     did not yet perform the real direct-thread send/readback/record step.
-     Treat that as a delivery break, not as a completed callback.
+     the real direct-thread send/readback/record step has not happened yet.
+     Treat it as incomplete transport, not as a completed callback.
 
 3. **Dispatch next work**
    - If the goal still needs work, total control decides the next task package
@@ -93,25 +130,46 @@ node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --
 node scripts/codex-automation-loop.mjs register-thread --window <window> --thread-id <realThreadId> --role target --responsibility-root <repo-or-workspace-path> --write --json
 ```
 
-   - Build or refresh the target's local file config before delivery:
+   - If you only need the individual mechanical steps, build or refresh the
+     target's local file config before delivery:
 
 ```text
-node scripts/codex-automation-loop.mjs build-window-config --window <window> --busy-policy append-if-steerable --require-thread --write --json
+node scripts/codex-automation-loop.mjs build-window-config --window <window> --require-thread --write --json
 ```
 
-   - For each target, create a dispatch packet. Omit `--prompt` for the default
-     compact target prompt; use `--prompt-file` only when the current plan needs
-     a custom wakeup shape.
+   - Choose the dispatch group's return policy before creating the first
+     dispatch packet. `group-ready` creates one barrier callback after all
+     expected targets return. `per-target` lets each target wake total control
+     when its own result exists, while the group snapshot still lists remaining
+     targets.
+   - For each target, create a dispatch packet. Use the same `--group`,
+     `--controller-window`, and `--return-policy` for the whole group.
+     `--controller-window` must be this controller window's registered name,
+     so automation started by controller A returns to controller A instead of
+     the global workspace default. The script always generates the compact
+     target prompt.
 
 ```text
-node scripts/codex-automation-loop.mjs create-dispatch --target-window <window> --task-id <taskId> --group <dispatchGroup> --control-plan <path> --objective "<objective>" --evidence "<required evidence>" --write --json
+node scripts/codex-automation-loop.mjs create-dispatch --target-window <window> --task-id <taskId> --group <dispatchGroup> --controller-window <currentControllerWindow> --return-policy group-ready --control-plan <path> --objective "<objective>" --evidence "<required evidence>" --write --json
 ```
 
    - Then create a delivery envelope:
 
 ```text
-node scripts/codex-automation-loop.mjs build-delivery --packet-file <packetFile> --require-thread --busy-policy append-if-steerable --write --json
+node scripts/codex-automation-loop.mjs build-delivery --packet-file <packetFile> --require-thread --write --json
 ```
+
+   - For the common happy path, after total control has already chosen the
+     target/task/plan/objective/evidence, prefer the bundled preparation command:
+
+```text
+node scripts/codex-automation-loop.mjs prepare-dispatch --target-window <window> --task-id <taskId> --group <dispatchGroup> --controller-window <currentControllerWindow> --return-policy group-ready --control-plan <path> --objective "<objective>" --evidence "<required evidence>" --require-thread --write --json
+```
+
+     This writes the same window config, dispatch packet/group, and delivery
+     envelope, and preserves the existing prompt card shape. It stops before
+     host thread send/readback, so delivery still requires the host thread tool
+     and `record-delivery-run`.
 
    - Add `--automation-enabled` only for an explicitly unattended run. In that
      mode, start keep-live before dispatch:
@@ -120,17 +178,22 @@ node scripts/codex-automation-loop.mjs build-delivery --packet-file <packetFile>
 node scripts/codex-automation-loop.mjs start-keep-live --automation-run-id <dispatchGroup-or-runId> --write --json
 ```
 
-     The script owns a local macOS watcher and writes both state and control
-     files under ignored runtime. `keep-live-state` remains only for manual or
-     external keep-live evidence. If `start-keep-live` cannot prove an active
-     watcher, record it as an automation readiness risk; do not treat
-     keep-live as working merely because a state file exists.
+     The script owns one shared local macOS watcher and records active
+     automation-run leases under ignored runtime. Starting keep-live while the
+     watcher exists only adds / refreshes that run's lease. `keep-live-state`
+     remains only for manual or external keep-live evidence. If
+     `start-keep-live` cannot prove an active watcher, record it as an
+     automation readiness risk; do not treat keep-live as working merely
+     because a state file exists.
    - The delivery adapter or total-control operator uses direct thread delivery
      when the host capability and real thread registration are available. The
      script itself does not prove delivery. Delivery command output never emits
      raw thread ids; raw ids stay in ignored local runtime files. If the thread
      id or host send capability is unavailable, fail closed and return to
      total-control judgment.
+   - Keep the transport policy simple: the adapter either performs a direct
+     new-turn send with readback evidence or records blocked / failed evidence
+     for total-control judgment.
    - After the host send and readback, record delivery evidence:
 
 ```text
@@ -139,16 +202,17 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <deli
 
    - Once the delivery run is recorded as sent/readback-ok, the controller-side
      dispatch is done. End the current controller work for that task unless
-     there is a separate ready result to review. Do not schedule controller
-     heartbeat or self-wakeup work; the target's result envelope plus
-     controller-return is the next re-entry point.
+     there is a separate ready result to review. The target's result envelope
+     plus controller-return is the next re-entry point.
    - For unattended return, register the controller thread once with role
      `controller`. Target windows may only create a controller-return delivery
-     through `build-controller-return` after `review-results` says the group is
-     ready; they still must send that controller-return through the host
-     thread tool, confirm readback, and record the delivery run before the
-     callback is complete. They still must not create another target-window
-     hop.
+     through `build-controller-return` according to the dispatch group's stored
+     `controllerWindow` and `returnPolicy`: `group-ready` requires all expected
+     results, while `per-target` allows this target's result to wake total
+     control with a partial group snapshot. They still must send that
+     controller-return through the host thread tool, confirm readback, and
+     record the delivery run before the callback is complete. They still must
+     not create another target-window hop.
    - Controller return is not a loop trigger by itself. When total control is
      woken by a controller-return envelope, it reviews the group and either:
      creates the next dispatch only when the current plan still has an eligible
@@ -161,12 +225,13 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <deli
      automation-eligible work:
 
 ```text
-node scripts/codex-automation-loop.mjs stop-loop --reason "<reason>" --write --json
+node scripts/codex-automation-loop.mjs stop-loop --automation-run-id <dispatchGroup-or-runId> --reason "<reason>" --write --json
 ```
 
-   - `stop-loop` also stops the local keep-live watcher. Use
-     `stop-keep-live --automation-run-id <id> --reason "<reason>" --write --json`
-     only when closing keep-live without closing the delivery loop.
+   - `stop-loop` releases this run's keep-live lease. The watcher stops only
+     when no other automation run still holds a lease. Use `stop-keep-live
+     --automation-run-id <id> --reason "<reason>" --write --json` only when
+     closing keep-live without closing the delivery loop.
 
 ## Hard Gates
 

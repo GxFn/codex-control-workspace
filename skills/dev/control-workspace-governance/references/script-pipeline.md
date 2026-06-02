@@ -22,6 +22,8 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
   `node scripts/workspace-control.mjs loop create-dispatch --write --json`
   `node scripts/workspace-control.mjs loop build-delivery --write --json`
   `node scripts/workspace-control.mjs loop review-results --json`
+  `node scripts/codex-automation-loop.mjs prepare-dispatch --write --json`
+  `node scripts/codex-automation-loop.mjs review-pack --json`
 - General pre-acceptance:
   `node scripts/verify-control-center.mjs`
 - Dispatch plans with TODO and task packages:
@@ -60,7 +62,9 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
 | Archive completed control docs and shrink historical indexes | `archive-workspace-docs.mjs`, `compact-workspace-index.mjs`, `archive-global-todo-board.mjs`, `generate-archive-topic-summaries.mjs` | Dry-run first; apply only after current status no longer points at the archived item. |
 | Prove the governance scripts work as a chain | `run-workspace-pipeline-e2e.mjs` | Uses a temporary fixture workspace and runs write/apply modes without touching product repositories. |
 | Keep script catalog and tests from drifting | `check-script-docs.mjs` | Runs inside `verify-control-center`; add tests to `--with-script-tests`. |
-| Manage Codex Automation Closed Loop contracts | `codex-automation-loop.mjs`, `workspace-control.mjs loop ...` | Runtime files stay under ignored `.workspace-local/codex-automation-loop/`; the script creates dispatch packets, delivery envelopes, target result envelopes, group readiness summaries, and stop markers. It never calls Codex automation APIs, parses current plans, accepts evidence, selects TODOs, or writes product repositories. Read [codex-automation-loop.md](codex-automation-loop.md) for the full operating map. |
+| Manage Codex Automation Closed Loop contracts | `codex-automation-loop.mjs`, `workspace-control.mjs loop ...` | Runtime files stay under ignored `.workspace-local/codex-automation-loop/`; the script creates dispatch packets, delivery envelopes, target result envelopes, group readiness summaries, review packs, and stop markers. It never calls Codex automation APIs, parses current plans, accepts evidence, selects TODOs, or writes product repositories. Read [codex-automation-loop.md](codex-automation-loop.md) for the full operating map. |
+| Reduce repeated controller dispatch preparation | `codex-automation-loop.mjs prepare-dispatch` | Use only after total control has chosen the target, task id, control plan, objective, and evidence requirement. It writes the window config, dispatch packet, dispatch group, and delivery envelope in one step, then stops before host thread send. It does not change the target prompt shape. |
+| Reduce repeated callback review setup | `codex-automation-loop.mjs review-pack` | Read-only. It wraps `review-results` with target result evidence pointers, delivery-run status, and controller-return status so total control can pull raw evidence without manually opening every local envelope first. It is not an acceptance verdict. |
 | Manage direct-thread child-window config and delivery evidence | `codex-automation-loop.mjs build-window-config`, `record-delivery-run`, `keep-live-state` | Child-window config, delivery-run evidence, and keep-live state stay under ignored local runtime. They describe sendability and transport evidence only; total control still owns the current plan, delivery decision, evidence pull, and acceptance verdict. |
 
 ## When To Extract A New Script

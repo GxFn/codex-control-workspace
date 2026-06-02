@@ -29,7 +29,7 @@ function run(root, args) {
   });
 }
 
-function seedCompletedResult(root, { targetWindow = "Alembic", taskId = "TASK-RETURN", group = "GROUP-RETURN" } = {}) {
+function seedCompletedResult(root, { targetWindow = "Alembic", taskId = "TASK-RETURN", group = "GROUP-RETURN", controllerWindow = "" } = {}) {
   const dispatch = run(root, [
     "create-dispatch",
     "--target-window",
@@ -38,10 +38,11 @@ function seedCompletedResult(root, { targetWindow = "Alembic", taskId = "TASK-RE
     taskId,
     "--group",
     group,
+    ...(controllerWindow ? ["--controller-window", controllerWindow] : []),
     "--control-plan",
     ".workspace-active/workspace/current/plan.md",
     "--objective",
-    "Return smoke fixture",
+    "Return fixture",
     "--write",
   ]);
   assert.equal(dispatch.status, 0, dispatch.stderr || dispatch.stdout);
@@ -76,8 +77,6 @@ test("creates dispatch packet and delivery envelope without parsing current plan
     ".workspace-active/workspace/current/plan.md",
     "--objective",
     "Implement fixture",
-    "--prompt-file",
-    "prompt.md",
     "--evidence",
     "commit",
     "--write",
@@ -87,7 +86,11 @@ test("creates dispatch packet and delivery envelope without parsing current plan
   assert.equal(dispatchPayload.ok, true);
   assert.equal(dispatchPayload.packet.targetWindow, "Alembic");
   assert.equal(dispatchPayload.packet.prompt.startsWith("继续当前窗口任务"), true);
+  assert.deepEqual(dispatchPayload.packet.returnPolicy, { mode: "group-ready" });
+  assert.deepEqual(dispatchPayload.dispatchGroup.returnPolicy, { mode: "group-ready" });
+  assert.equal(dispatchPayload.dispatchGroup.expectedTargets[0].targetWindow, "Alembic");
   assert.equal(dispatchPayload.packetFile.endsWith("GROUP-1__Alembic__TASK-1.json"), true);
+  assert.equal(dispatchPayload.dispatchGroupFile.endsWith("dispatch-groups/GROUP-1.json"), true);
 
   const delivery = run(root, [
     "build-delivery",
@@ -102,11 +105,60 @@ test("creates dispatch packet and delivery envelope without parsing current plan
   assert.equal(deliveryPayload.envelope.prompt, dispatchPayload.packet.prompt);
   assert.equal(deliveryPayload.envelope.oneShot, true);
   assert.equal(deliveryPayload.envelope.returnRoute, "controller");
+  assert.deepEqual(deliveryPayload.envelope.returnPolicy, { mode: "group-ready" });
   assert.equal(deliveryPayload.envelope.version, 2);
   assert.equal(deliveryPayload.envelope.transport.kind, "direct-thread");
-  assert.equal(deliveryPayload.envelope.transport.busyPolicy, "append-if-steerable");
   assert.equal(deliveryPayload.envelope.schedule, undefined);
   assert.equal(deliveryPayload.envelope.codexAutomation, undefined);
+});
+
+test("prepare-dispatch writes window config, packet, and delivery without changing prompt shape", () => {
+  const root = makeFixture();
+  const register = run(root, [
+    "register-thread",
+    "--window",
+    "Alembic",
+    "--thread-id",
+    "0192fac-real-thread",
+    "--role",
+    "target",
+    "--write",
+  ]);
+  assert.equal(register.status, 0, register.stderr || register.stdout);
+
+  const prepared = run(root, [
+    "prepare-dispatch",
+    "--target-window",
+    "Alembic",
+    "--task-id",
+    "TASK-PREPARE",
+    "--group",
+    "GROUP-PREPARE",
+    "--controller-window",
+    "AlembicWorkspace",
+    "--return-policy",
+    "group-ready",
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+    "--objective",
+    "Prepared fixture",
+    "--evidence",
+    "commit",
+    "--require-thread",
+    "--write",
+  ]);
+  assert.equal(prepared.status, 0, prepared.stderr || prepared.stdout);
+  const payload = JSON.parse(prepared.stdout);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.packet.targetWindow, "Alembic");
+  assert.equal(payload.threadReady, true);
+  assert.equal(payload.windowConfig.threadRegistered, true);
+  assert.equal(payload.envelope.sourcePacketId, payload.packet.id);
+  assert.equal(payload.envelope.prompt, payload.packet.prompt);
+  assert.match(payload.envelope.prompt, /^继续当前窗口任务：Alembic \/ TASK-PREPARE。/);
+  assert.match(payload.envelope.prompt, /\n\n变量：\n- currentWindow: Alembic\n- taskId: TASK-PREPARE/);
+  assert.doesNotMatch(prepared.stdout, /0192fac-real-thread/);
+  assert.doesNotMatch(readFileSync(path.join(root, payload.deliveryFile), "utf8"), /0192fac-real-thread/);
 });
 
 test("creates a readable default target prompt", () => {
@@ -119,6 +171,8 @@ test("creates a readable default target prompt", () => {
     "TASK-DEFAULT-PROMPT",
     "--group",
     "GROUP-PROMPT",
+    "--controller-window",
+    "AlembicWorkspace-Aux",
     "--control-plan",
     ".workspace-active/workspace/current/plan.md",
     "--objective",
@@ -129,35 +183,13 @@ test("creates a readable default target prompt", () => {
   const payload = JSON.parse(dispatch.stdout);
   assert.match(payload.packet.prompt, /^继续当前窗口任务：Alembic \/ TASK-DEFAULT-PROMPT。/);
   assert.match(payload.packet.prompt, /\n\n变量：\n- currentWindow: Alembic\n- taskId: TASK-DEFAULT-PROMPT/);
+  assert.match(payload.packet.prompt, /\n- controllerWindow: AlembicWorkspace-Aux\n/);
   assert.match(payload.packet.prompt, /\n- dispatchGroup: GROUP-PROMPT\n/);
   assert.match(payload.packet.prompt, /不创建子窗口下一跳/);
-  assert.match(payload.packet.prompt, /returnRoute=controller/);
+  assert.match(payload.packet.prompt, /dispatch group returnPolicy/);
   assert.match(payload.packet.prompt, /\n- skill: \.\.\/codex-control-workspace\/skills\/dev\/codex-automation-target\/SKILL\.md$/);
-});
-
-test("normalizes one-line target prompts into the readable shape", () => {
-  const root = makeFixture();
-  const dispatch = run(root, [
-    "create-dispatch",
-    "--target-window",
-    "AlembicAgent",
-    "--task-id",
-    "TASK-INLINE",
-    "--group",
-    "GROUP-INLINE",
-    "--control-plan",
-    ".workspace-active/workspace/current/plan.md",
-    "--objective",
-    "Implement fixture",
-    "--prompt",
-    "继续当前窗口任务：AlembicAgent / TASK-INLINE。变量：currentWindow=AlembicAgent；taskId=TASK-INLINE；rules=用完即弃。",
-    "--write",
-  ]);
-  assert.equal(dispatch.status, 0, dispatch.stderr || dispatch.stdout);
-  const payload = JSON.parse(dispatch.stdout);
-  assert.match(payload.packet.prompt, /^继续当前窗口任务：AlembicAgent \/ TASK-INLINE。/);
-  assert.doesNotMatch(payload.packet.prompt, /变量：currentWindow=/);
-  assert.match(payload.packet.prompt, /\n变量：\n- currentWindow: AlembicAgent\n- taskId: TASK-INLINE/);
+  assert.equal(payload.packet.controllerWindow, "AlembicWorkspace-Aux");
+  assert.equal(payload.dispatchGroup.controllerWindow, "AlembicWorkspace-Aux");
 });
 
 test("registers target threads locally and redacts thread ids in delivery output", () => {
@@ -192,8 +224,6 @@ test("registers target threads locally and redacts thread ids in delivery output
       ".workspace-active/workspace/current/plan.md",
       "--objective",
       "Implement fixture",
-      "--prompt-file",
-      "prompt.md",
       "--write",
     ]).stdout,
   );
@@ -310,9 +340,9 @@ test("builds controller-return envelopes from registered controller threads", ()
     "build-controller-return",
     "--group",
     "GROUP-RETURN",
-    "--last-completed-target",
+    "--trigger-target",
     "Alembic",
-    "--last-task-id",
+    "--trigger-task-id",
     "TASK-RETURN",
     "--control-plan",
     ".workspace-active/workspace/current/plan.md",
@@ -327,6 +357,11 @@ test("builds controller-return envelopes from registered controller threads", ()
   assert.equal(payload.threadIdRedacted, true);
   assert.equal(payload.envelope.kind, "ControllerReturnEnvelope");
   assert.equal(payload.envelope.version, 2);
+  assert.equal(payload.envelope.triggerTarget, "Alembic");
+  assert.equal(payload.envelope.triggerTaskId, "TASK-RETURN");
+  assert.deepEqual(payload.envelope.returnPolicy, { mode: "group-ready" });
+  assert.equal(payload.envelope.reviewScope, "group");
+  assert.equal(payload.envelope.groupSnapshot.groupStatus, "ready");
   assert.equal(payload.envelope.transport.kind, "direct-thread");
   assert.equal(payload.envelope.loopGuard.returnReason, "blocked");
   assert.equal(payload.envelope.loopGuard.noEligibleTaskAction, "stop-without-next-delivery");
@@ -338,6 +373,11 @@ test("builds controller-return envelopes from registered controller threads", ()
   assert.equal(payload.deliveryCompletionRequired, true);
   assert.equal(payload.envelope.codexAutomation, undefined);
   assert.match(payload.envelope.prompt, /^继续总控验收：Alembic 回填。/);
+  assert.match(payload.envelope.prompt, /\n- triggerTarget: Alembic\n/);
+  assert.doesNotMatch(payload.envelope.prompt, /\n- completedTargets:/);
+  assert.doesNotMatch(payload.envelope.prompt, /\n- blockedTargets: 无\n/);
+  assert.doesNotMatch(payload.envelope.prompt, /\n- missingTargets: 无\n/);
+  assert.doesNotMatch(payload.envelope.prompt, /\n- remainingTargets: 无\n/);
   assert.match(payload.envelope.prompt, /没有任务、目标完成或需要用户裁决时停止，不创建下一跳/);
   assert.match(payload.envelope.prompt, /\n- dispatchGroup: GROUP-RETURN\n/);
   assert.doesNotMatch(readFileSync(path.join(root, payload.returnFile), "utf8"), /0192fac-controller-thread/);
@@ -345,6 +385,102 @@ test("builds controller-return envelopes from registered controller threads", ()
   const review = JSON.parse(run(root, ["review-results", "--group", "GROUP-RETURN"]).stdout);
   assert.equal(review.controllerReturnDelivery.status, "pending-host-send");
   assert.equal(review.controllerReturnDelivery.envelopeCount, 1);
+});
+
+test("controller-return defaults to the dispatch group's originating controller", () => {
+  const root = makeFixture();
+  writeFile(
+    path.join(root, ".workspace-local/workspace.config.json"),
+    JSON.stringify({ controlWindow: "AlembicWorkspace" }, null, 2),
+  );
+  seedCompletedResult(root, { group: "GROUP-AUX", taskId: "TASK-AUX", controllerWindow: "AlembicWorkspace-Aux" });
+  const registerMain = run(root, [
+    "register-thread",
+    "--window",
+    "AlembicWorkspace",
+    "--thread-id",
+    "0192fac-main-controller-thread",
+    "--role",
+    "controller",
+    "--write",
+  ]);
+  assert.equal(registerMain.status, 0, registerMain.stderr || registerMain.stdout);
+  const registerAux = run(root, [
+    "register-thread",
+    "--window",
+    "AlembicWorkspace-Aux",
+    "--thread-id",
+    "0192fac-aux-controller-thread",
+    "--role",
+    "controller",
+    "--write",
+  ]);
+  assert.equal(registerAux.status, 0, registerAux.stderr || registerAux.stdout);
+
+  const result = run(root, [
+    "build-controller-return",
+    "--group",
+    "GROUP-AUX",
+    "--trigger-target",
+    "Alembic",
+    "--trigger-task-id",
+    "TASK-AUX",
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+    "--require-thread",
+    "--write",
+  ]);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.envelope.controllerWindow, "AlembicWorkspace-Aux");
+  assert.equal(payload.envelope.targetThread.windowName, "AlembicWorkspace-Aux");
+  assert.equal(payload.envelope.targetThread.threadRegistryFile, "thread-registry/AlembicWorkspace-Aux.json");
+  assert.equal(payload.envelope.transport.threadRegistryFile, "thread-registry/AlembicWorkspace-Aux.json");
+  assert.equal(payload.envelope.groupSnapshot.controllerWindow, "AlembicWorkspace-Aux");
+  assert.equal(payload.envelope.loopGuard.controllerWindow, "AlembicWorkspace-Aux");
+  assert.match(payload.envelope.prompt, /\n- controllerWindow: AlembicWorkspace-Aux\n/);
+  assert.doesNotMatch(readFileSync(path.join(root, payload.returnFile), "utf8"), /0192fac-aux-controller-thread/);
+  assert.doesNotMatch(readFileSync(path.join(root, payload.returnFile), "utf8"), /0192fac-main-controller-thread/);
+});
+
+test("dispatch groups reject mixed originating controllers", () => {
+  const root = makeFixture();
+  const first = run(root, [
+    "create-dispatch",
+    "--target-window",
+    "Alembic",
+    "--task-id",
+    "TASK-1",
+    "--group",
+    "GROUP-MIXED-CONTROLLER",
+    "--controller-window",
+    "AlembicWorkspace-Aux",
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+    "--objective",
+    "Fixture",
+    "--write",
+  ]);
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+
+  const second = run(root, [
+    "create-dispatch",
+    "--target-window",
+    "AlembicAgent",
+    "--task-id",
+    "TASK-2",
+    "--group",
+    "GROUP-MIXED-CONTROLLER",
+    "--controller-window",
+    "AlembicWorkspace",
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+    "--objective",
+    "Fixture",
+    "--write",
+  ]);
+  assert.notEqual(second.status, 0);
+  assert.match(second.stdout, /already returns to controller AlembicWorkspace-Aux/);
 });
 
 test("controller-return never embeds raw ids in v2 envelopes", () => {
@@ -370,9 +506,9 @@ test("controller-return never embeds raw ids in v2 envelopes", () => {
     "build-controller-return",
     "--group",
     "GROUP-RETURN",
-    "--last-completed-target",
+    "--trigger-target",
     "Alembic",
-    "--last-task-id",
+    "--trigger-task-id",
     "TASK-RETURN",
     "--control-plan",
     ".workspace-active/workspace/current/plan.md",
@@ -390,13 +526,14 @@ test("controller-return never embeds raw ids in v2 envelopes", () => {
 
 test("controller-return requires registered controller thread when requested", () => {
   const root = makeFixture();
+  seedCompletedResult(root);
   const result = run(root, [
     "build-controller-return",
     "--group",
     "GROUP-RETURN",
-    "--last-completed-target",
+    "--trigger-target",
     "Alembic",
-    "--last-task-id",
+    "--trigger-task-id",
     "TASK-RETURN",
     "--control-plan",
     ".workspace-active/workspace/current/plan.md",
@@ -416,9 +553,9 @@ test("controller-return can be built as a dry-run without thread registration", 
     "build-controller-return",
     "--group",
     "GROUP-RETURN",
-    "--last-completed-target",
+    "--trigger-target",
     "Alembic",
-    "--last-task-id",
+    "--trigger-task-id",
     "TASK-RETURN",
     "--control-plan",
     ".workspace-active/workspace/current/plan.md",
@@ -468,9 +605,9 @@ test("controller-return fails closed when group still has missing results", () =
     "build-controller-return",
     "--group",
     "GROUP-MISSING",
-    "--last-completed-target",
+    "--trigger-target",
     "Alembic",
-    "--last-task-id",
+    "--trigger-task-id",
     "TASK-MISSING",
     "--control-plan",
     ".workspace-active/workspace/current/plan.md",
@@ -480,7 +617,7 @@ test("controller-return fails closed when group still has missing results", () =
     "--write",
   ]);
   assert.notEqual(result.status, 0);
-  assert.match(result.stdout, /Cannot build controller return while dispatch group has missing results/);
+  assert.match(result.stdout, /Cannot build controller return before trigger target result exists/);
 });
 
 test("controller-return is only complete after host send readback is recorded", () => {
@@ -506,9 +643,9 @@ test("controller-return is only complete after host send readback is recorded", 
       "build-controller-return",
       "--group",
       "GROUP-RETURN",
-      "--last-completed-target",
+      "--trigger-target",
       "Alembic",
-      "--last-task-id",
+      "--trigger-task-id",
       "TASK-RETURN",
       "--control-plan",
       ".workspace-active/workspace/current/plan.md",
@@ -603,6 +740,55 @@ test("records direct-thread delivery run evidence", () => {
   assert.doesNotMatch(readFileSync(path.join(root, payload.runFile), "utf8"), /0192fac-real-thread/);
 });
 
+test("delivery run evidence rejects unsupported host mode", () => {
+  const root = makeFixture();
+  run(root, [
+    "register-thread",
+    "--window",
+    "Alembic",
+    "--thread-id",
+    "0192fac-real-thread",
+    "--role",
+    "target",
+    "--write",
+  ]);
+  const dispatch = JSON.parse(run(root, [
+    "create-dispatch",
+    "--target-window",
+    "Alembic",
+    "--task-id",
+    "TASK-NO-GUIDE",
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+    "--objective",
+    "Implement fixture",
+    "--write",
+  ]).stdout);
+  const delivery = JSON.parse(run(root, [
+    "build-delivery",
+    "--packet-file",
+    dispatch.packetFile,
+    "--require-thread",
+    "--write",
+  ]).stdout);
+  const result = run(root, [
+    "record-delivery-run",
+    "--delivery-file",
+    delivery.deliveryFile,
+    "--status",
+    "sent",
+    "--host-mode",
+    "unsupported-mode",
+    "--readback-ok",
+    "true",
+    "--evidence",
+    "thread showed requested change",
+    "--write",
+  ]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout, /--host-mode must be one of: new-turn, unknown/);
+});
+
 test("records keep-live state for unattended automation", () => {
   const root = makeFixture();
   const result = run(root, [
@@ -624,6 +810,25 @@ test("records keep-live state for unattended automation", () => {
   assert.equal(payload.state.status, "running");
   assert.equal(payload.state.pid, 12345);
   assert.match(readFileSync(path.join(root, payload.stateFile), "utf8"), /GROUP-RUN/);
+});
+
+test("stopped keep-live state does not retain a legacy automation lease", () => {
+  const root = makeFixture();
+  const result = run(root, [
+    "keep-live-state",
+    "--automation-run-id",
+    "OLD-RUN",
+    "--status",
+    "stopped",
+    "--mechanism",
+    "macos-caffeinate",
+    "--write",
+  ]);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const status = JSON.parse(run(root, ["status"]).stdout);
+  assert.equal(status.keepLive.active, false);
+  assert.equal(status.keepLive.activeRunCount, 0);
+  assert.deepEqual(status.keepLive.activeAutomationRunIds, []);
 });
 
 test(
@@ -654,6 +859,40 @@ test(
       const status = JSON.parse(run(root, ["status"]).stdout);
       assert.equal(status.keepLive.active, true);
       assert.equal(status.keepLive.status, "running");
+      assert.deepEqual(status.keepLive.activeAutomationRunIds, ["WATCH-RUN"]);
+
+      const secondStart = run(root, [
+        "start-keep-live",
+        "--automation-run-id",
+        "WATCH-RUN-2",
+        "--keep-live-command",
+        process.execPath,
+        "--keep-live-arg=-e",
+        "--keep-live-arg",
+        "setInterval(() => {}, 1000)",
+        "--write",
+      ]);
+      assert.equal(secondStart.status, 0, secondStart.stderr || secondStart.stdout);
+      const secondStartPayload = JSON.parse(secondStart.stdout);
+      assert.equal(secondStartPayload.ready, true);
+      assert.equal(secondStartPayload.keepLive.message, "already running");
+      assert.equal(secondStartPayload.keepLive.workerPid, startPayload.keepLive.workerPid);
+      assert.deepEqual(secondStartPayload.keepLive.activeAutomationRunIds, ["WATCH-RUN", "WATCH-RUN-2"]);
+
+      const releaseSecond = run(root, [
+        "stop-loop",
+        "--automation-run-id",
+        "WATCH-RUN-2",
+        "--reason",
+        "second done",
+        "--write",
+      ]);
+      assert.equal(releaseSecond.status, 0, releaseSecond.stderr || releaseSecond.stdout);
+      const releaseSecondPayload = JSON.parse(releaseSecond.stdout);
+      assert.equal(releaseSecondPayload.ok, true);
+      assert.equal(releaseSecondPayload.keepLive.active, true);
+      assert.equal(releaseSecondPayload.keepLive.retainedByOtherRuns, true);
+      assert.deepEqual(releaseSecondPayload.keepLive.activeAutomationRunIds, ["WATCH-RUN"]);
 
       const stop = run(root, ["stop-keep-live", "--automation-run-id", "WATCH-RUN", "--reason", "test done", "--write"]);
       assert.equal(stop.status, 0, stop.stderr || stop.stdout);
@@ -703,8 +942,6 @@ test("reviews a group only after all target result envelopes exist", () => {
       ".workspace-active/workspace/current/plan.md",
       "--objective",
       `Fixture ${taskId}`,
-      "--prompt",
-      `继续当前窗口任务：${targetWindow} / ${taskId}。`,
       "--write",
     ]);
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -751,6 +988,281 @@ test("reviews a group only after all target result envelopes exist", () => {
   assert.equal(review.decision, "needs-controller-review");
   assert.deepEqual(review.missing, []);
   assert.equal(review.needsReview.length, 2);
+});
+
+test("review-pack summarizes result evidence, delivery runs, and controller-return status", () => {
+  const root = makeFixture();
+  const register = run(root, [
+    "register-thread",
+    "--window",
+    "Alembic",
+    "--thread-id",
+    "0192fac-real-thread",
+    "--role",
+    "target",
+    "--write",
+  ]);
+  assert.equal(register.status, 0, register.stderr || register.stdout);
+  const dispatch = JSON.parse(
+    run(root, [
+      "create-dispatch",
+      "--target-window",
+      "Alembic",
+      "--task-id",
+      "TASK-PACK",
+      "--group",
+      "GROUP-PACK",
+      "--control-plan",
+      ".workspace-active/workspace/current/plan.md",
+      "--objective",
+      "Review fixture",
+      "--write",
+    ]).stdout,
+  );
+  const delivery = JSON.parse(
+    run(root, [
+      "build-delivery",
+      "--packet-file",
+      dispatch.packetFile,
+      "--require-thread",
+      "--write",
+    ]).stdout,
+  );
+  const record = run(root, [
+    "record-delivery-run",
+    "--delivery-file",
+    delivery.deliveryFile,
+    "--status",
+    "sent",
+    "--host-method",
+    "send_message_to_thread",
+    "--host-mode",
+    "new-turn",
+    "--readback-ok",
+    "true",
+    "--evidence",
+    "readback ok",
+    "--write",
+  ]);
+  assert.equal(record.status, 0, record.stderr || record.stdout);
+  const reportFile = path.join(root, "reports/result.md");
+  writeFile(reportFile, "# report\n");
+  const submit = run(root, [
+    "submit-result",
+    "--target-window",
+    "Alembic",
+    "--task-id",
+    "TASK-PACK",
+    "--group",
+    "GROUP-PACK",
+    "--status",
+    "completed",
+    "--commit",
+    "abc123",
+    "--evidence-ref",
+    "reports/result.md",
+    "--verification",
+    "npm test PASS",
+    "--write",
+  ]);
+  assert.equal(submit.status, 0, submit.stderr || submit.stdout);
+
+  const packed = run(root, ["review-pack", "--group", "GROUP-PACK"]);
+  assert.equal(packed.status, 0, packed.stderr || packed.stdout);
+  const payload = JSON.parse(packed.stdout);
+  assert.equal(payload.command, "review-pack");
+  assert.equal(payload.reviewPack.decision, "needs-controller-review");
+  assert.equal(payload.reviewPack.gates.rawEvidencePullRequired, true);
+  assert.equal(payload.reviewPack.targetResults[0].commits[0], "abc123");
+  assert.equal(payload.reviewPack.targetResults[0].evidenceRefSummaries[0].exists, true);
+  assert.equal(payload.reviewPack.targetResults[0].targetDeliveries[0].status, "sent");
+  assert.equal(payload.reviewPack.controllerReturnDelivery.status, "not-built");
+  assert.doesNotMatch(packed.stdout, /0192fac-real-thread/);
+});
+
+test("group-ready controller-return title lists returned windows instead of group id", () => {
+  const root = makeFixture();
+  for (const [targetWindow, taskId] of [
+    ["Alembic", "TASK-1"],
+    ["AlembicCore", "TASK-2"],
+  ]) {
+    const result = run(root, [
+      "create-dispatch",
+      "--target-window",
+      targetWindow,
+      "--task-id",
+      taskId,
+      "--group",
+      "GROUP-MULTI-TITLE",
+      "--control-plan",
+      ".workspace-active/workspace/current/plan.md",
+      "--objective",
+      `Fixture ${taskId}`,
+      "--write",
+    ]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const submit = run(root, [
+      "submit-result",
+      "--target-window",
+      targetWindow,
+      "--task-id",
+      taskId,
+      "--group",
+      "GROUP-MULTI-TITLE",
+      "--status",
+      "completed",
+      "--commit",
+      `${targetWindow}-commit`,
+      "--write",
+    ]);
+    assert.equal(submit.status, 0, submit.stderr || submit.stdout);
+  }
+
+  const controllerReturn = run(root, [
+    "build-controller-return",
+    "--group",
+    "GROUP-MULTI-TITLE",
+    "--trigger-target",
+    "AlembicCore",
+    "--trigger-task-id",
+    "TASK-2",
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+  ]);
+  assert.equal(controllerReturn.status, 0, controllerReturn.stderr || controllerReturn.stdout);
+  const payload = JSON.parse(controllerReturn.stdout);
+  assert.match(payload.envelope.prompt, /^继续总控验收：Alembic、AlembicCore 回填。/);
+  assert.doesNotMatch(payload.envelope.prompt, /^继续总控验收：GROUP-MULTI-TITLE/);
+  assert.match(payload.envelope.prompt, /\n- dispatchGroup: GROUP-MULTI-TITLE\n/);
+  assert.doesNotMatch(payload.envelope.prompt, /\n- completedTargets:/);
+  assert.doesNotMatch(payload.envelope.prompt, /\n- blockedTargets: 无\n/);
+  assert.doesNotMatch(payload.envelope.prompt, /\n- missingTargets: 无\n/);
+  assert.doesNotMatch(payload.envelope.prompt, /\n- remainingTargets: 无\n/);
+});
+
+test("per-target return policy allows one completed result to wake total control", () => {
+  const root = makeFixture();
+  for (const [index, [targetWindow, taskId]] of [
+    ["Alembic", "TASK-1"],
+    ["AlembicAgent", "TASK-2"],
+  ].entries()) {
+    const result = run(root, [
+      "create-dispatch",
+      "--target-window",
+      targetWindow,
+      "--task-id",
+      taskId,
+      "--group",
+      "GROUP-PER-TARGET",
+      ...(index === 0 ? ["--return-policy", "per-target"] : []),
+      "--control-plan",
+      ".workspace-active/workspace/current/plan.md",
+      "--objective",
+      `Fixture ${taskId}`,
+      "--write",
+    ]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  }
+
+  const submitOne = run(root, [
+    "submit-result",
+    "--target-window",
+    "Alembic",
+    "--task-id",
+    "TASK-1",
+    "--group",
+    "GROUP-PER-TARGET",
+    "--status",
+    "completed",
+    "--commit",
+    "abc123",
+    "--write",
+  ]);
+  assert.equal(submitOne.status, 0, submitOne.stderr || submitOne.stdout);
+
+  const review = JSON.parse(run(root, ["review-results", "--group", "GROUP-PER-TARGET"]).stdout);
+  assert.equal(review.decision, "needs-controller-review");
+  assert.equal(review.groupStatus, "partially-ready");
+  assert.deepEqual(review.returnPolicy, { mode: "per-target" });
+  assert.equal(review.readyResults.length, 1);
+  assert.equal(review.missingResults.length, 1);
+  assert.deepEqual(review.groupSnapshot.missingTargets, ["AlembicAgent"]);
+
+  const controllerReturn = run(root, [
+    "build-controller-return",
+    "--group",
+    "GROUP-PER-TARGET",
+    "--trigger-target",
+    "Alembic",
+    "--trigger-task-id",
+    "TASK-1",
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+  ]);
+  assert.equal(controllerReturn.status, 0, controllerReturn.stderr || controllerReturn.stdout);
+  const payload = JSON.parse(controllerReturn.stdout);
+  assert.equal(payload.envelope.reviewScope, "single-target");
+  assert.deepEqual(payload.envelope.returnPolicy, { mode: "per-target" });
+  assert.equal(payload.envelope.groupSnapshot.groupStatus, "partially-ready");
+  assert.match(payload.envelope.prompt, /^继续总控验收：Alembic 回填。/);
+  assert.match(payload.envelope.prompt, /\n- remainingTargets: AlembicAgent\n/);
+  assert.doesNotMatch(payload.envelope.prompt, /\n- completedTargets:/);
+});
+
+test("group-ready return policy waits for every target before controller return", () => {
+  const root = makeFixture();
+  for (const [targetWindow, taskId] of [
+    ["Alembic", "TASK-1"],
+    ["AlembicAgent", "TASK-2"],
+  ]) {
+    const result = run(root, [
+      "create-dispatch",
+      "--target-window",
+      targetWindow,
+      "--task-id",
+      taskId,
+      "--group",
+      "GROUP-BARRIER",
+      "--control-plan",
+      ".workspace-active/workspace/current/plan.md",
+      "--objective",
+      `Fixture ${taskId}`,
+      "--write",
+    ]);
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+  }
+  const submitOne = run(root, [
+    "submit-result",
+    "--target-window",
+    "Alembic",
+    "--task-id",
+    "TASK-1",
+    "--group",
+    "GROUP-BARRIER",
+    "--status",
+    "completed",
+    "--commit",
+    "abc123",
+    "--write",
+  ]);
+  assert.equal(submitOne.status, 0, submitOne.stderr || submitOne.stdout);
+  const review = JSON.parse(run(root, ["review-results", "--group", "GROUP-BARRIER"]).stdout);
+  assert.equal(review.decision, "wait");
+  assert.equal(review.groupStatus, "partially-ready");
+
+  const controllerReturn = run(root, [
+    "build-controller-return",
+    "--group",
+    "GROUP-BARRIER",
+    "--trigger-target",
+    "Alembic",
+    "--trigger-task-id",
+    "TASK-1",
+    "--control-plan",
+    ".workspace-active/workspace/current/plan.md",
+  ]);
+  assert.notEqual(controllerReturn.status, 0);
+  assert.match(controllerReturn.stdout, /Cannot build group-ready controller return while dispatch group has missing results/);
 });
 
 test("completed result requires evidence", () => {

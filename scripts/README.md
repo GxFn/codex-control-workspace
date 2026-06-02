@@ -91,18 +91,25 @@ Current scripts:
   gates. Use `--print` to inspect the exact commands before running them.
 - `codex-automation-loop.mjs`: new CodexAutomationClosedLoop contract
   surface. It creates explicit controller dispatch packets, turns a packet
-  into a delivery envelope, records target result envelopes, reviews whether a
-  dispatch group is ready for total-control evidence pull, stores local thread
-  registrations under `.workspace-local/codex-automation-loop/`, and writes an
-  explicit stop marker. The direct-thread design adds local child-window config,
-  delivery-run evidence, and macOS keep-live watcher state/control files under
-  the same ignored runtime root; tracked docs only describe the schema and must
-  not contain raw thread ids. `start-keep-live` / `stop-keep-live` manage the
-  local watcher for unattended runs, while `stop-loop` closes future delivery
-  intent and stops keep-live. The script does not parse current plans, decide
-  sendable windows, claim target work, create legacy automations, or accept
-  evidence. Total control owns planning and review, delivery adapters consume
-  envelopes, and target windows return result envelopes.
+  into a delivery envelope, records target result envelopes, stores
+  dispatch-group return policy, reviews ready / missing / blocked group state,
+  emits review packs that gather result envelopes, target delivery evidence,
+  controller-return status, and raw evidence pointers for total-control
+  judgment, stores local thread registrations under
+  `.workspace-local/codex-automation-loop/`, and writes an explicit stop marker.
+  The direct-thread design adds local child-window config, delivery-run
+  evidence, controller-return envelopes, and macOS keep-live watcher
+  state/control files under the same ignored runtime root; tracked docs only
+  describe the schema and must not contain raw thread ids. `start-keep-live` /
+  `stop-keep-live` manage the local watcher for unattended runs, while
+  `stop-loop` closes future delivery intent and stops keep-live.
+  `prepare-dispatch` bundles the mechanical preparation of window config,
+  dispatch packet, and delivery envelope after total control has already chosen
+  the target; it deliberately stops before host thread send. The script does not
+  parse current plans, decide sendable windows, claim target work, create legacy
+  automations, send Codex thread messages, or accept evidence. Total control
+  owns planning and review, delivery adapters consume envelopes, and target
+  windows return result envelopes.
 - `control-workspace-install.mjs`: sibling-directory installation helper for
   GitHub-distributed control workspaces. It discovers repositories next to the
   control repo, writes user-confirmed `workspace.config.json` repository scope,
