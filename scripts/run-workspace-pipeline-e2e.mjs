@@ -14,6 +14,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { renderState } from "./lib/status-machine.mjs";
 
 const args = process.argv.slice(2);
 const keepFixture = args.includes("--keep");
@@ -23,6 +24,10 @@ const repoRoot = path.dirname(scriptsDir);
 const fixtureParentRoot = mkdtempSync(path.join(os.tmpdir(), "control-workspace-pipeline-e2e-"));
 const fixtureRoot = path.join(fixtureParentRoot, "codex-control-workspace");
 const steps = [];
+
+function st(id, note = "") {
+  return renderState({ id, note });
+}
 
 function writeFile(file, content) {
   mkdirSync(path.dirname(file), { recursive: true });
@@ -118,33 +123,34 @@ function writeDesignHandoffFixture() {
 
 function dispatchRows({ completed }) {
   if (completed) {
-    return `| \`BaseWindow\`<br>无任务 | fixture 不改后端。 |
-| \`CoreWindow\`<br>无任务 | fixture 无共享 contract。 |
-| \`AgentWindow\`<br>无任务 | fixture 不改 Agent。 |
-| \`DashboardWindow\`<br>已完成 | E2E fixture 实现窗口已回填。 |
-| \`PluginWindow\`<br>无任务 | fixture 不改 Plugin。 |
-| \`DesignWindow\`<br>已完成 | E2E fixture 需求设计 handoff 已导入。 |
-| \`TestWindow\`<br>已完成 | E2E fixture 测试单已回填通过。 |
-| \`RealTestProject\`<br>无任务 | 不触碰真实项目。 |`;
+    return `| \`BaseWindow\`<br>${st("none")} | fixture 不改后端。 |
+| \`CoreWindow\`<br>${st("none")} | fixture 无共享 contract。 |
+| \`AgentWindow\`<br>${st("none")} | fixture 不改 Agent。 |
+| \`DashboardWindow\`<br>${st("completed")} | E2E fixture 实现窗口已回填。 |
+| \`PluginWindow\`<br>${st("none")} | fixture 不改 Plugin。 |
+| \`DesignWindow\`<br>${st("completed")} | E2E fixture 需求设计 handoff 已导入。 |
+| \`TestWindow\`<br>${st("completed")} | E2E fixture 测试单已回填通过。 |
+| \`RealTestProject\`<br>${st("none")} | 不触碰真实项目。 |`;
   }
 
-  return `| \`BaseWindow\`<br>观察中 | 等 Dashboard fixture 回填。 |
-| \`CoreWindow\`<br>无任务 | fixture 无共享 contract。 |
-| \`AgentWindow\`<br>无任务 | fixture 不改 Agent。 |
-| \`DashboardWindow\`<br>待启动 | 承接 E2E fixture 实现窗口。 |
-| \`PluginWindow\`<br>无任务 | fixture 不改 Plugin。 |
-| \`DesignWindow\`<br>已完成 | E2E fixture 需求设计 handoff 已导入。 |
-| \`TestWindow\`<br>阻塞 | 等 Dashboard fixture 回填后测试。 |
-| \`RealTestProject\`<br>无任务 | 不触碰真实项目。 |`;
+  return `| \`BaseWindow\`<br>${st("observing")} | 等 Dashboard fixture 回填。 |
+| \`CoreWindow\`<br>${st("none")} | fixture 无共享 contract。 |
+| \`AgentWindow\`<br>${st("none")} | fixture 不改 Agent。 |
+| \`DashboardWindow\`<br>${st("pending")} | 承接 E2E fixture 实现窗口。 |
+| \`PluginWindow\`<br>${st("none")} | fixture 不改 Plugin。 |
+| \`DesignWindow\`<br>${st("completed")} | E2E fixture 需求设计 handoff 已导入。 |
+| \`TestWindow\`<br>${st("blocked")} | 等 Dashboard fixture 回填后测试。 |
+| \`RealTestProject\`<br>${st("none")} | 不触碰真实项目。 |`;
 }
 
 function planContent({ completed = false } = {}) {
-  const status = completed ? "已完成" : "执行中";
+  const stateId = completed ? "completed" : "running";
+  const status = st(stateId);
   const sendLine = completed ? "发送给：无" : "发送给：`DashboardWindow`";
-  const todoStatus = completed ? "已完成" : "执行中";
+  const todoStatus = st(completed ? "completed" : "running");
   return `# E2E Workspace Plan
 
-状态：${status}
+状态：<!-- workspace-state:plan -->${status}<!-- /workspace-state:plan -->
 
 ## 总控决策记录
 
@@ -180,14 +186,14 @@ function planContent({ completed = false } = {}) {
 
 | 窗口 | 调度 | 是否发送 | 原因 |
 | --- | --- | --- | --- |
-| \`BaseWindow\` | 观察 | 否 | fixture 不改后端。 |
-| \`CoreWindow\` | 无任务 | 否 | fixture 无共享 contract。 |
-| \`AgentWindow\` | 无任务 | 否 | fixture 不改 Agent。 |
-| \`DashboardWindow\` | ${completed ? "已完成" : "主线任务"} | ${completed ? "否" : "是"} | ${completed ? "已回填" : "当前可推进"}。 |
-| \`PluginWindow\` | 无任务 | 否 | fixture 不改 Plugin。 |
-| \`DesignWindow\` | 已完成 | 否 | fixture Design handoff 已导入。 |
-| \`TestWindow\` | ${completed ? "已完成" : "阻塞"} | 否 | ${completed ? "测试已通过" : "等待上游"}。 |
-| \`RealTestProject\` | 无任务 | 否 | fixture 不触碰真实项目。 |
+| \`BaseWindow\` | ${st("observing")} | 否 | fixture 不改后端。 |
+| \`CoreWindow\` | ${st("none")} | 否 | fixture 无共享 contract。 |
+| \`AgentWindow\` | ${st("none")} | 否 | fixture 不改 Agent。 |
+| \`DashboardWindow\` | ${completed ? st("completed") : "mainline"} | ${completed ? "否" : "是"} | ${completed ? "已回填" : "当前可推进"}。 |
+| \`PluginWindow\` | ${st("none")} | 否 | fixture 不改 Plugin。 |
+| \`DesignWindow\` | ${st("completed")} | 否 | fixture Design handoff 已导入。 |
+| \`TestWindow\` | ${completed ? st("completed") : st("blocked")} | 否 | ${completed ? "测试已通过" : "等待上游"}。 |
+| \`RealTestProject\` | ${st("none")} | 否 | fixture 不触碰真实项目。 |
 
 ## 窗口分派
 
@@ -204,7 +210,7 @@ ${sendLine}
 \`\`\`text
 继续当前总控任务：E2E workspace plan。
 
-先读：AGENTS.md、docs/workspace/index.md、docs/workspace/current/e2e-workspace-plan-2026-05-25.md，以及本窗口/目标仓库 AGENTS.md。
+先读：AGENTS.md、.workspace-active/workspace/index.md、.workspace-active/workspace/current/e2e-workspace-plan-2026-05-25.md，以及本窗口/目标仓库 AGENTS.md。
 
 定位：声明当前窗口和本轮仓库职责。
 
@@ -219,7 +225,7 @@ ${sendLine}
 
 <!-- workspace-sync
 {
-  "status": "${status}",
+  "state": { "id": "${stateId}" },
   "indexPlanDescription": "E2E fixture：需求到测试结束归档脚本全链。",
   "indexStatusDescription": "E2E fixture 当前状态，由 sync-current-plan 生成。",
   "currentIndexType": "当前计划",
@@ -227,15 +233,15 @@ ${sendLine}
   "indexRows": [
     {
       "type": "E2E Design Handoff Inbox",
-      "doc": "docs/workspace/current/design-handoff-inbox.md",
-      "status": "维护中",
+      "doc": ".workspace-active/workspace/current/design-handoff-inbox.md",
+      "state": { "id": "maintained" },
       "description": "由 import-design-handoffs 生成的 fixture inbox。",
       "insertAfter": "当前状态"
     },
     {
       "type": "E2E 需求设计",
       "doc": "docs/requirement-designs/e2e-flow/requirement-design-2026-05-25.md",
-      "status": "已完成",
+      "state": { "id": "completed" },
       "description": "fixture 需求设计入口，用于 compact-workspace-index 验证。",
       "insertAfter": "E2E Design Handoff Inbox"
     }
@@ -243,7 +249,7 @@ ${sendLine}
   "currentIndexRows": [
     {
       "type": "E2E Test Exchange",
-      "doc": "docs/workspace/current/test-exchange.md",
+      "doc": ".workspace-active/workspace/current/test-exchange.md",
       "description": "fixture 测试交流入口。",
       "insertAfter": "当前计划"
     }
@@ -254,9 +260,10 @@ ${sendLine}
 }
 
 function idlePlanContent() {
+  const stateId = "idle";
   return `# E2E Idle Control
 
-状态：空闲
+状态：<!-- workspace-state:plan -->${st(stateId)}<!-- /workspace-state:plan -->
 
 ## 总控决策记录
 
@@ -273,14 +280,14 @@ function idlePlanContent() {
 
 | 窗口 / 状态 | 任务 |
 | --- | --- |
-| \`BaseWindow\`<br>无任务 | fixture 已归档。 |
-| \`CoreWindow\`<br>无任务 | fixture 已归档。 |
-| \`AgentWindow\`<br>无任务 | fixture 已归档。 |
-| \`DashboardWindow\`<br>无任务 | fixture 已归档。 |
-| \`PluginWindow\`<br>无任务 | fixture 已归档。 |
-| \`DesignWindow\`<br>已完成 | fixture 需求设计 handoff 已归档。 |
-| \`TestWindow\`<br>已完成 | fixture 测试已完成。 |
-| \`RealTestProject\`<br>无任务 | fixture 不触碰真实项目。 |
+| \`BaseWindow\`<br>${st("none")} | fixture 已归档。 |
+| \`CoreWindow\`<br>${st("none")} | fixture 已归档。 |
+| \`AgentWindow\`<br>${st("none")} | fixture 已归档。 |
+| \`DashboardWindow\`<br>${st("none")} | fixture 已归档。 |
+| \`PluginWindow\`<br>${st("none")} | fixture 已归档。 |
+| \`DesignWindow\`<br>${st("completed")} | fixture 需求设计 handoff 已归档。 |
+| \`TestWindow\`<br>${st("completed")} | fixture 测试已完成。 |
+| \`RealTestProject\`<br>${st("none")} | fixture 不触碰真实项目。 |
 
 ## 可复制提示词
 
@@ -296,7 +303,7 @@ function idlePlanContent() {
 
 <!-- workspace-sync
 {
-  "status": "空闲",
+  "state": { "id": "${stateId}" },
   "indexPlanDescription": "E2E fixture 归档后的空闲控制入口。",
   "indexStatusDescription": "E2E fixture 归档后当前状态。",
   "currentIndexType": "当前计划",
@@ -325,8 +332,8 @@ function writeWorkspaceFixture() {
         requiredDispatchWindows: ["BaseWindow", "CoreWindow", "AgentWindow", "DashboardWindow", "PluginWindow", "DesignWindow", "TestWindow", "RealTestProject"],
         repoNames: ["BaseWindow", "CoreWindow", "AgentWindow", "DashboardWindow", "PluginWindow"],
         designHandoffBoard: "../DesignWindow/docs/current/workspace-handoff-board.md",
-        designHandoffInbox: "docs/workspace/current/design-handoff-inbox.md",
-        testExchangePath: "docs/workspace/current/test-exchange.md",
+        designHandoffInbox: ".workspace-active/workspace/current/design-handoff-inbox.md",
+        testExchangePath: ".workspace-active/workspace/current/test-exchange.md",
         repositories: [
           { windowName: "BaseWindow", path: "../BaseWindow", role: "Base runtime", managedAgents: true, mode: "external" },
           { windowName: "CoreWindow", path: "../CoreWindow", role: "Core runtime", managedAgents: true, mode: "external" },
@@ -334,7 +341,7 @@ function writeWorkspaceFixture() {
           { windowName: "DashboardWindow", path: "../DashboardWindow", role: "Dashboard UI", managedAgents: true, mode: "external" },
           { windowName: "PluginWindow", path: "../PluginWindow", role: "Plugin entry", managedAgents: true, mode: "external" },
           { windowName: "DesignWindow", path: "../DesignWindow", role: "Requirement design and handoff", managedAgents: true, mode: "external" },
-          { windowName: "TestWindow", path: "docs/workspace/testing", role: "Internal test coordination workspace", managedAgents: false, mode: "internal" }
+          { windowName: "TestWindow", path: ".workspace-active/workspace/testing", role: "Internal test coordination workspace", managedAgents: false, mode: "internal" }
         ]
       },
       null,
@@ -342,48 +349,50 @@ function writeWorkspaceFixture() {
     ),
   );
   writeFile(path.join(fixtureRoot, "docs/requirement-designs/e2e-flow/requirement-design-2026-05-25.md"), designDoc("Workspace Requirement Design Copy"));
-  writeFile(path.join(fixtureRoot, "docs/workspace/current/e2e-workspace-plan-2026-05-25.md"), planContent());
-  writeFile(path.join(fixtureRoot, "docs/workspace/current/e2e-idle-control-2026-05-25.md"), idlePlanContent());
+  writeFile(path.join(fixtureRoot, ".workspace-active/workspace/current/e2e-workspace-plan-2026-05-25.md"), planContent());
+  writeFile(path.join(fixtureRoot, ".workspace-active/workspace/current/e2e-idle-control-2026-05-25.md"), idlePlanContent());
   writeFile(
-    path.join(fixtureRoot, "docs/workspace/index.md"),
+    path.join(fixtureRoot, ".workspace-active/workspace/index.md"),
     `# Workspace Index
 
 ## 当前总控入口
 
 | 类型 | 文档 | 状态 | 说明 |
 | --- | --- | --- | --- |
-| 当前计划 | [current/e2e-workspace-plan-2026-05-25.md](current/e2e-workspace-plan-2026-05-25.md) | 执行中 | E2E fixture 当前计划。 |
-| 当前状态 | [current/workspace-current-status.md](current/workspace-current-status.md) | 执行中 | E2E fixture 当前状态。 |
-| 当前短期工作区 | [current/](current/) | 短期入口 | fixture current 区。 |
-| 长期记录地图 | [workspace-record-map.md](workspace-record-map.md) | 长期地图 | fixture 记录地图。 |
+| 当前计划 | [current/e2e-workspace-plan-2026-05-25.md](current/e2e-workspace-plan-2026-05-25.md) | ${st("running")} | E2E fixture 当前计划。 |
+| 当前状态 | [current/workspace-current-status.md](current/workspace-current-status.md) | ${st("running")} | E2E fixture 当前状态。 |
+| 当前短期工作区 | [current/](current/) | short-term | fixture current 区。 |
+| 长期记录地图 | [workspace-record-map.md](workspace-record-map.md) | long-term-map | fixture 记录地图。 |
 
 ## 窗口覆盖状态
 
 | 窗口 / 状态 | 任务 |
 | --- | --- |
-| \`BaseWindow\`<br>观察中 | fixture。 |
-| \`CoreWindow\`<br>无任务 | fixture。 |
-| \`AgentWindow\`<br>无任务 | fixture。 |
-| \`DashboardWindow\`<br>待启动 | fixture。 |
-| \`PluginWindow\`<br>无任务 | fixture。 |
-| \`DesignWindow\`<br>已完成 | fixture handoff 已导入。 |
-| \`TestWindow\`<br>阻塞 | fixture。 |
-| \`RealTestProject\`<br>无任务 | fixture。 |
+| \`BaseWindow\`<br>${st("observing")} | fixture。 |
+| \`CoreWindow\`<br>${st("none")} | fixture。 |
+| \`AgentWindow\`<br>${st("none")} | fixture。 |
+| \`DashboardWindow\`<br>${st("pending")} | fixture。 |
+| \`PluginWindow\`<br>${st("none")} | fixture。 |
+| \`DesignWindow\`<br>${st("completed")} | fixture handoff 已导入。 |
+| \`TestWindow\`<br>${st("blocked")} | fixture。 |
+| \`RealTestProject\`<br>${st("none")} | fixture。 |
 
 ## 状态枚举
 
-- 待启动
-- 执行中
-- 待验收
-- 阻塞
-- 已完成
-- 暂停
-- 观察中
-- 无任务
+- pending -> ${st("pending")}
+- running -> ${st("running")}
+- delivered -> ${st("delivered")}
+- review -> ${st("review")}
+- blocked -> ${st("blocked")}
+- completed -> ${st("completed")}
+- paused -> ${st("paused")}
+- observing -> ${st("observing")}
+- none -> ${st("none")}
+- idle -> ${st("idle")}
 `,
   );
   writeFile(
-    path.join(fixtureRoot, "docs/workspace/current/index.md"),
+    path.join(fixtureRoot, ".workspace-active/workspace/current/index.md"),
     `# Current Index
 
 ## 当前地图
@@ -394,10 +403,10 @@ function writeWorkspaceFixture() {
 `,
   );
   writeFile(
-    path.join(fixtureRoot, "docs/workspace/current/workspace-current-status.md"),
+    path.join(fixtureRoot, ".workspace-active/workspace/current/workspace-current-status.md"),
     `# Current Status
 
-状态：执行中
+状态：${st("running")}
 
 ## 窗口分派
 
@@ -405,7 +414,7 @@ function writeWorkspaceFixture() {
 
 | 窗口 / 状态 | 任务 |
 | --- | --- |
-| \`BaseWindow\`<br>无任务 | 等待同步。 |
+| \`BaseWindow\`<br>${st("none")} | 等待同步。 |
 
 ## 可复制提示词
 
@@ -417,15 +426,15 @@ function writeWorkspaceFixture() {
 `,
   );
   writeFile(
-    path.join(fixtureRoot, "docs/workspace/current/global-todo-board.md"),
+    path.join(fixtureRoot, ".workspace-active/workspace/current/global-todo-board.md"),
     `# Global TODO Board
 
 ## 全局 TODO
 
 | ID | 状态 | 类型 | 优先级 | 归属 | 事项 / 目标 | 影响复测 / 派发 | 依赖 / 触发 | 推荐窗口 | 当前挂载 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| GTODO-E2E-001 | 已完成 | fixture | P1 | Workspace | E2E 全链已完成 | 否 | E2E-FLOW-2026-05-25 | DashboardWindow | e2e plan |
-| GTODO-E2E-002 | 观察中 | fixture | P3 | Workspace | 保留观察项 | 否 | 无 | ControlWorkspace | global |
+| GTODO-E2E-001 | ${st("completed")} | fixture | P1 | Workspace | E2E 全链已完成 | 否 | E2E-FLOW-2026-05-25 | DashboardWindow | e2e plan |
+| GTODO-E2E-002 | ${st("observing")} | fixture | P3 | Workspace | 保留观察项 | 否 | 无 | ControlWorkspace | global |
 
 ## 最近同步记录
 
@@ -434,17 +443,17 @@ function writeWorkspaceFixture() {
 `,
   );
   writeFile(
-    path.join(fixtureRoot, "docs/workspace/current/test-exchange.md"),
+    path.join(fixtureRoot, ".workspace-active/workspace/current/test-exchange.md"),
     `# Test Exchange
 
 ## Test-2026-05-25-E2E
 
-状态：已完成
+状态：${st("completed")}
 结论：fixture 通过。
 `,
   );
   writeFile(
-    path.join(fixtureRoot, "docs/workspace/workspace-record-map.md"),
+    path.join(fixtureRoot, ".workspace-active/workspace/workspace-record-map.md"),
     `# Workspace Record Map
 
 ## Archive Topics
@@ -456,23 +465,23 @@ function writeWorkspaceFixture() {
 }
 
 function switchToCompletedPlan() {
-  writeFile(path.join(fixtureRoot, "docs/workspace/current/e2e-workspace-plan-2026-05-25.md"), planContent({ completed: true }));
+  writeFile(path.join(fixtureRoot, ".workspace-active/workspace/current/e2e-workspace-plan-2026-05-25.md"), planContent({ completed: true }));
 }
 
 function switchToIdleControl() {
-  const indexPath = path.join(fixtureRoot, "docs/workspace/index.md");
+  const indexPath = path.join(fixtureRoot, ".workspace-active/workspace/index.md");
   const previous = readFile(indexPath);
   const withIdleCurrent = previous
     .replace(
-      "| 当前计划 | [current/e2e-workspace-plan-2026-05-25.md](current/e2e-workspace-plan-2026-05-25.md) | 已完成 | E2E fixture：需求到测试结束归档脚本全链。 |",
-      "| 当前计划 | [current/e2e-idle-control-2026-05-25.md](current/e2e-idle-control-2026-05-25.md) | 空闲 | E2E fixture 归档后的空闲控制入口。 |",
+      `| 当前计划 | [current/e2e-workspace-plan-2026-05-25.md](current/e2e-workspace-plan-2026-05-25.md) | ${st("completed")} | E2E fixture：需求到测试结束归档脚本全链。 |`,
+      `| 当前计划 | [current/e2e-idle-control-2026-05-25.md](current/e2e-idle-control-2026-05-25.md) | ${st("idle")} | E2E fixture 归档后的空闲控制入口。 |`,
     )
     .replace(
-      "| 当前状态 | [current/workspace-current-status.md](current/workspace-current-status.md) | 已完成 | E2E fixture 当前状态，由 sync-current-plan 生成。 |",
-      "| 当前状态 | [current/workspace-current-status.md](current/workspace-current-status.md) | 空闲 | E2E fixture 归档后当前状态。 |",
+      `| 当前状态 | [current/workspace-current-status.md](current/workspace-current-status.md) | ${st("completed")} | E2E fixture 当前状态，由 sync-current-plan 生成。 |`,
+      `| 当前状态 | [current/workspace-current-status.md](current/workspace-current-status.md) | ${st("idle")} | E2E fixture 归档后当前状态。 |`,
     );
   const completedRow =
-    "| E2E 已完成计划 | [current/e2e-workspace-plan-2026-05-25.md](current/e2e-workspace-plan-2026-05-25.md) | 已完成 | 待归档的 E2E fixture 计划。 |";
+    `| E2E 已完成计划 | [current/e2e-workspace-plan-2026-05-25.md](current/e2e-workspace-plan-2026-05-25.md) | ${st("completed")} | 待归档的 E2E fixture 计划。 |`;
   writeFile(
     indexPath,
     withIdleCurrent.includes(completedRow)
@@ -526,7 +535,7 @@ try {
     "--topic",
     "e2e-full-chain",
     "--file",
-    "docs/workspace/current/e2e-workspace-plan-2026-05-25.md",
+    ".workspace-active/workspace/current/e2e-workspace-plan-2026-05-25.md",
   ]);
   assert.equal(archiveDryRun.operations.length, 1);
 
@@ -534,7 +543,7 @@ try {
     "--topic",
     "e2e-full-chain",
     "--file",
-    "docs/workspace/current/e2e-workspace-plan-2026-05-25.md",
+    ".workspace-active/workspace/current/e2e-workspace-plan-2026-05-25.md",
     "--apply",
   ]);
   assert.equal(archiveApply.applied, true);

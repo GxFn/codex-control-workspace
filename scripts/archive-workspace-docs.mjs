@@ -3,6 +3,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { loadWorkspaceConfig, workspaceLedgerPaths } from "./lib/workspace-config.mjs";
+import { isCompletedState } from "./lib/status-machine.mjs";
 
 const workspaceRoot = process.cwd();
 const args = process.argv.slice(2);
@@ -131,7 +132,7 @@ function firstCurrentPlanPath(indexContent) {
     if (cells.length < 2 || cells[0] === "类型" || cells[0].startsWith("---")) {
       continue;
     }
-    if (cells[2] === "已完成") {
+    if (isCompletedState(cells[2])) {
       continue;
     }
     const match = cells[1].match(/\[[^\]]+]\(([^)]+)\)/);

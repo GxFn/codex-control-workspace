@@ -3,6 +3,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { workspaceLedgerPaths } from "./lib/workspace-config.mjs";
+import { isCompletedState, stateIdFromText } from "./lib/status-machine.mjs";
 
 const workspaceRoot = process.cwd();
 const args = process.argv.slice(2);
@@ -10,7 +11,6 @@ const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args });
 const indexPath = ledgerPaths.workspaceIndexPath;
 const json = args.includes("--json");
 const allWorkspace = args.includes("--all-workspace");
-const validStatuses = ["待启动", "执行中", "待验收", "阻塞", "已完成", "暂停", "观察中", "无任务"];
 
 function getArgValue(name) {
   const eq = args.find((arg) => arg.startsWith(`${name}=`));
@@ -188,7 +188,7 @@ function parseDispatchRows(planContent) {
     if (cells.length === 2) {
       rows.push({
         window: cells[0].match(/`([^`]+)`/)?.[1] ?? cells[0].replace(/<br\s*\/?>/gi, " ").trim(),
-        status: validStatuses.find((candidate) => cells[0].includes(candidate)) ?? "",
+        status: stateIdFromText(cells[0]) ?? "",
         docAction: "",
         savePath: "",
       });
@@ -209,7 +209,7 @@ function checkCompletedDocsExist(planContent) {
   const issues = [];
   const rows = parseDispatchRows(planContent);
   for (const row of rows) {
-    const expectsExistingDoc = row.status === "已完成" || row.docAction === "已新建";
+    const expectsExistingDoc = isCompletedState(row.status) || row.docAction === "已新建";
     const savePath = row.savePath.trim();
     if (!expectsExistingDoc || !savePath.startsWith("docs/")) {
       continue;

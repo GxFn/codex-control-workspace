@@ -42,8 +42,9 @@ test("--print scripts --tests includes script validation and all script tests", 
   const result = run(["--print", "scripts", "--tests"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /node scripts\/check-script-docs\.mjs/);
-  assert.match(result.stdout, /node --test scripts\/codex-automation-loop\.test\.mjs/);
+  assert.match(result.stdout, /node --test .*scripts\/codex-automation-loop\.test\.mjs/);
   assert.match(result.stdout, /scripts\/import-design-handoffs\.test\.mjs/);
+  assert.match(result.stdout, /scripts\/next-control-work\.test\.mjs/);
   assert.match(result.stdout, /scripts\/workspace-control\.test\.mjs/);
 });
 
@@ -51,6 +52,15 @@ test("--print loop maps to codex automation closed-loop script", () => {
   const result = run(["--print", "loop", "status", "--json"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /node scripts\/codex-automation-loop\.mjs status --json/);
+});
+
+test("--print next-work maps to the controller candidate scan script", () => {
+  const result = run(["--print", "next-work", "--id", "PLUGIN-MCP-MULTI-PROJECT-RUNTIME-2026-06-03", "--after-completion", "--source", "design", "--json"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /node scripts\/next-control-work\.mjs --id PLUGIN-MCP-MULTI-PROJECT-RUNTIME-2026-06-03 --after-completion --source design --json/,
+  );
 });
 
 test("status --json returns a machine-readable aggregate", () => {

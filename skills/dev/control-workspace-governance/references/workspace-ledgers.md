@@ -137,18 +137,29 @@ Use task packages when mainline work and same-window TODOs can be closed togethe
 执行前置硬规则：
 ```
 
-## Status Values
+## State Values
 
-Use only these task states:
+New state-machine driven docs should store state intent as machine ids and let
+workspace scripts render display labels. Do not hand-write status prose as the
+source of truth for current plan, index, current-status, TODO intake, dispatch
+eligibility, test-boundary checks, or archive decisions. Existing Chinese
+labels remain migration inputs only and are normalized by
+`scripts/lib/status-machine.mjs`.
 
-- `待启动`
-- `执行中`
-- `待验收`
-- `阻塞`
-- `已完成`
-- `暂停`
-- `观察中`
-- `无任务`
+Common ids and rendered labels:
+
+- `pending` -> `待启动`
+- `running` -> `执行中`
+- `delivered` -> `已投递`
+- `review` -> `待验收`
+- `blocked` -> `阻塞`
+- `completed` -> `已完成`
+- `paused` -> `暂停`
+- `cancelled` -> `取消`
+- `rejected` -> `不做`
+- `observing` -> `观察中`
+- `none` -> `无任务`
+- `idle` -> `空闲`
 
 ## Maintenance Commands
 

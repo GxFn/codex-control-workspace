@@ -224,6 +224,24 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <deli
      evidence that needs total-control judgment, or no useful
      automation-eligible work:
 
+   - After a demand is completed, archived, or switched to an idle current
+     control plan, scan formal Design handoffs and TODO candidates before
+     ending an unattended run:
+
+```text
+node scripts/workspace-control.mjs next-work --after-completion --json
+```
+
+     If the user has named a specific ready demand, focus the scan:
+
+```text
+node scripts/workspace-control.mjs next-work --id <DESIGN-KEY> --json
+```
+
+     This scan is not acceptance and not dispatch. Continue unattended only
+     when it returns one mechanically auto-claimable candidate inside the
+     approved automation boundary; otherwise stop for total-control choice.
+
 ```text
 node scripts/codex-automation-loop.mjs stop-loop --automation-run-id <dispatchGroup-or-runId> --reason "<reason>" --write --json
 ```

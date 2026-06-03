@@ -7,7 +7,7 @@ Copy the filled section into `.workspace-active/workspace/current/test-exchange.
 ````text
 ### Test-<编号>：<测试名称>
 
-状态：待确认 / 待启动 / 执行中 / 待验收 / 已完成 / 阻塞 / 暂停
+状态：draft / pending / running / review / completed / blocked / paused
 创建日期：YYYY-MM-DD
 总控来源：<关联总控计划或用户请求>
 执行窗口：TestWindow

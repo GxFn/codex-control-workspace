@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { loadWorkspaceConfig, resolveConfigPath, workspaceLedgerPaths } from "./lib/workspace-config.mjs";
+import { isSendEligibleState, normalizeStateId, stateIdFromText } from "./lib/status-machine.mjs";
 
 const args = process.argv.slice(2);
 const workspaceRoot = path.resolve(getValue("--root", process.cwd()));
@@ -12,8 +13,6 @@ const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args, config: workspac
 const indexPath = ledgerPaths.workspaceIndexPath;
 const testWindowName = workspaceConfig.testWindow;
 const exchangePath = resolveConfigPath(workspaceRoot, workspaceConfig.testExchangePath);
-const sendEligibleStatuses = new Set(["待启动", "执行中"]);
-const activeTestStatuses = ["待启动", "执行中"];
 const issues = [];
 const warnings = [];
 
@@ -87,9 +86,7 @@ function parseDispatchRows(planContent) {
       continue;
     }
     const windowName = cells[0].match(/`([^`]+)`/)?.[1] ?? "";
-    const status = ["待启动", "执行中", "待验收", "阻塞", "已完成", "暂停", "观察中", "无任务"].find((item) =>
-      cells[0].includes(item),
-    ) ?? "";
+    const status = stateIdFromText(cells[0]) ?? "";
     rows.push({ windowName, status, task: cells[1] });
   }
   return rows;
@@ -134,7 +131,7 @@ if (planPath && existsSync(planPath)) {
   planRelative = path.relative(workspaceRoot, planPath);
   const planContent = read(planPath);
   const dispatchRows = parseDispatchRows(planContent);
-  const testWindowRows = dispatchRows.filter((row) => row.windowName === testWindowName && sendEligibleStatuses.has(row.status));
+  const testWindowRows = dispatchRows.filter((row) => row.windowName === testWindowName && isSendEligibleState(row.status));
   testWindowSendEligible = testWindowRows.length > 0;
   testWindowNonTestOnly =
     testWindowRows.length > 0 && testWindowRows.every((row) => isNonTestTargetTask(row, planContent));
@@ -144,9 +141,7 @@ if (planPath && existsSync(planPath)) {
 
 let activeTests = [];
 if (existsSync(exchangePath)) {
-  activeTests = testBlocks(read(exchangePath)).filter((block) =>
-    activeTestStatuses.some((status) => block.status.includes(status)),
-  );
+  activeTests = testBlocks(read(exchangePath)).filter((block) => ["pending", "running"].includes(normalizeStateId(block.status)));
 } else {
   warnings.push(`${path.relative(workspaceRoot, exchangePath)} is missing.`);
 }

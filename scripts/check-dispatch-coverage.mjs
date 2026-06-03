@@ -3,6 +3,13 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { loadWorkspaceConfig, workspaceLedgerPaths } from "./lib/workspace-config.mjs";
+import {
+  isBlockedState,
+  isNoSendState,
+  isSendEligibleState,
+  normalizeStateId,
+  stateIdFromText,
+} from "./lib/status-machine.mjs";
 
 const workspaceRoot = process.cwd();
 const args = process.argv.slice(2);
@@ -12,10 +19,6 @@ const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args });
 const ledgerPaths = workspaceLedgerPaths({ workspaceRoot, args, config: workspaceConfig });
 const indexPath = ledgerPaths.workspaceIndexPath;
 const requiredWindows = workspaceConfig.requiredDispatchWindows;
-const validStatuses = new Set(["待启动", "执行中", "已投递", "待验收", "阻塞", "已完成", "暂停", "观察中", "无任务"]);
-const sendEligibleStatuses = new Set(["待启动", "执行中", "已投递"]);
-const blockedStatus = "阻塞";
-const noSendStatuses = new Set(["待验收", "已完成", "暂停", "观察中", "无任务"]);
 const maxDispatchPromptChars = 1200;
 
 function getArgValue(name) {
@@ -110,7 +113,7 @@ function parseDispatchRows(content) {
 
     if (cells.length === 2) {
       const window = cells[0].match(/`([^`]+)`/)?.[1] ?? cells[0].replace(/<br\s*\/?>/gi, " ").trim();
-      const status = [...validStatuses].find((candidate) => cells[0].includes(candidate)) ?? "";
+      const status = stateIdFromText(cells[0]) ?? "";
       rows.push({
         window,
         status,
@@ -176,29 +179,30 @@ if (planPath && existsSync(planPath)) {
 
   for (const row of rows) {
     const requiredWindow = requiredWindows.includes(row.window);
-    if (!requiredWindow && sendEligibleStatuses.has(row.status)) {
+    const stateId = normalizeStateId(row.status);
+    if (!requiredWindow && isSendEligibleState(row.status)) {
       issues.push(`unexpected send-eligible dispatch window: ${row.window}`);
-    } else if (!requiredWindow && !validStatuses.has(row.status)) {
+    } else if (!requiredWindow && !stateId) {
       warnings.push(`unexpected dispatch window: ${row.window}`);
     }
-    if (!validStatuses.has(row.status)) {
+    if (!stateId) {
       issues.push(`${row.window} has unknown status: ${row.status}`);
     }
     const looksLikePromptSending =
       /发送|提示词/.test(row.task) && !/不发送|不要发送|不再发送|当前不发送/.test(row.task);
-    if (noSendStatuses.has(row.status) && looksLikePromptSending) {
+    if (isNoSendState(row.status) && looksLikePromptSending) {
       warnings.push(`${row.window} is ${row.status}; avoid assigning prompt-sending work unless the plan explains why`);
     }
   }
 }
 
 const sendList = rows
-  .filter((row) => sendEligibleStatuses.has(row.status))
+  .filter((row) => isSendEligibleState(row.status))
   .map((row) => row.window)
   .filter((window) => window.length > 0);
-const blocked = rows.filter((row) => row.status === blockedStatus).map((row) => row.window);
+const blocked = rows.filter((row) => isBlockedState(row.status)).map((row) => row.window);
 const doNotSend = rows
-  .filter((row) => noSendStatuses.has(row.status) || row.status === blockedStatus)
+  .filter((row) => isNoSendState(row.status) || isBlockedState(row.status))
   .map((row) => row.window)
   .filter((window) => window.length > 0);
 

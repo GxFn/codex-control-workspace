@@ -15,6 +15,7 @@ const commandArgs = args.slice(1);
 const workspaceConfig = loadWorkspaceConfig({ workspaceRoot, args: rawArgs });
 
 const testScripts = [
+  "scripts/archive-global-todo-board.test.mjs",
   "scripts/codex-automation-loop.test.mjs",
   "scripts/collect-repo-status.test.mjs",
   "scripts/check-decision-preflight.test.mjs",
@@ -23,6 +24,7 @@ const testScripts = [
   "scripts/check-test-boundary.test.mjs",
   "scripts/control-workspace-install.test.mjs",
   "scripts/import-design-handoffs.test.mjs",
+  "scripts/next-control-work.test.mjs",
   "scripts/sync-current-plan.test.mjs",
   "scripts/workspace-control.test.mjs",
 ];
@@ -44,6 +46,7 @@ Commands:
   install     Discover sibling repos, configure scope, and write child AGENTS blocks.
   scripts     Check script docs, optionally including script tests.
   loop        Operate the new Codex Automation Closed Loop contract surface.
+  next-work   Scan Design handoff and TODO ledgers for the next controller-ready candidate.
   pipeline    Run the fixture governance pipeline.
   help        Show this help.
 
@@ -55,6 +58,8 @@ Common examples:
   node scripts/workspace-control.mjs design --id PCVM-2026-05-25 --json
   node scripts/workspace-control.mjs install status --json
   node scripts/workspace-control.mjs loop status --json
+  node scripts/workspace-control.mjs next-work --after-completion --json
+  node scripts/workspace-control.mjs next-work --id PLUGIN-MCP-MULTI-PROJECT-RUNTIME-2026-06-03 --json
   node scripts/workspace-control.mjs pipeline --json
 
 Safety:
@@ -279,6 +284,11 @@ function buildLoop(options) {
   return [{ label: "codex automation closed loop", ...nodeScript("codex-automation-loop.mjs", [subcommand, ...rest]) }];
 }
 
+function buildNextWork(options) {
+  assertKnownOptions(options, ["--after-completion", "--write", "--json"], ["--id", "--source", "--limit", "--board", "--todo", "--status", "--out"]);
+  return [{ label: "next control work candidate scan", ...nodeScript("next-control-work.mjs", options) }];
+}
+
 function buildPipeline(options) {
   assertKnownOptions(options, ["--keep", "--json"]);
   const out = [];
@@ -315,6 +325,8 @@ function buildSteps() {
       return buildScripts(commandArgs);
     case "loop":
       return buildLoop(commandArgs);
+    case "next-work":
+      return buildNextWork(commandArgs);
     case "pipeline":
       return buildPipeline(commandArgs);
     default:

@@ -208,6 +208,36 @@ test("--write syncs index rows, current map row, dispatch section, and prompt se
   assert.match(status, /## 可复制提示词\n\n发送给：无。/);
 });
 
+test("workspace-sync state object drives status projection and generated mirrors", () => {
+  const root = createWorkspaceFixture({
+    planStatus: "<!-- workspace-state:plan -->待脚本同步<!-- /workspace-state:plan -->",
+    planSync: `
+<!-- workspace-sync
+{
+  "state": {
+    "id": "paused",
+    "note": "等待用户确认"
+  },
+  "indexPlanDescription": "机器状态计划说明",
+  "indexStatusDescription": "机器状态状态说明",
+  "currentStatusSummary": "机器状态摘要。"
+}
+-->
+`,
+  });
+
+  runSync(root, ["--write"]);
+
+  const plan = readFile(activeFile(root, "workspace/current/example-plan.md"));
+  const index = readFile(activeFile(root, "workspace/index.md"));
+  const status = readFile(activeFile(root, "workspace/current/workspace-current-status.md"));
+
+  assert.match(plan, /^状态：<!-- workspace-state:plan -->暂停 \/ 等待用户确认<!-- \/workspace-state:plan -->$/m);
+  assert.match(index, /\| 当前计划 \| \[current\/example-plan\.md]\(current\/example-plan\.md\) \| 暂停 \/ 等待用户确认 \| 机器状态计划说明 \|/);
+  assert.match(status, /^状态：暂停 \/ 等待用户确认$/m);
+  assert.match(status, /- 机器状态摘要。/);
+});
+
 test("--check fails when generated surfaces are stale and passes after --write", () => {
   const root = createWorkspaceFixture();
 
@@ -253,7 +283,7 @@ test("workspace-sync extra rows synchronize controlled index and current-index e
   const index = readFile(activeFile(root, "workspace/index.md"));
   const currentIndex = readFile(activeFile(root, "workspace/current/index.md"));
 
-  assert.match(index, /\| Dashboard 回填 \| \[\.\.\/\.\.\/\.\.\/workspace-ledger\/AlembicDashboard\/dashboard-backfill\.md]\(\.\.\/\.\.\/\.\.\/workspace-ledger\/AlembicDashboard\/dashboard-backfill\.md\) \| 总控验收通过 \| Dashboard 回填说明 \|/);
+  assert.match(index, /\| Dashboard 回填 \| \[\.\.\/\.\.\/\.\.\/workspace-ledger\/AlembicDashboard\/dashboard-backfill\.md]\(\.\.\/\.\.\/\.\.\/workspace-ledger\/AlembicDashboard\/dashboard-backfill\.md\) \| 已完成 \| Dashboard 回填说明 \|/);
   assert.match(currentIndex, /\| Dashboard 回填 \| \[\.\.\/\.\.\/\.\.\/\.\.\/workspace-ledger\/AlembicDashboard\/dashboard-backfill\.md]\(\.\.\/\.\.\/\.\.\/\.\.\/workspace-ledger\/AlembicDashboard\/dashboard-backfill\.md\) \| 短期地图回填说明 \|/);
 });
 

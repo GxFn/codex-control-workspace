@@ -9,6 +9,7 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
 - Write-capable scripts must default to dry-run or explicit check mode, require an explicit write/apply flag, and keep writes inside workspace-owned docs unless the current control plan explicitly authorizes more.
 - Script-readable Markdown anchors are summarized in `scripts/README.md`; when creating a new current plan, start from `templates/workspace-control-plan-template.md`.
 - Keep user-facing docs scarce: the goal / stage confirmation document and the current control plan with window task packages are the main reading surface. Generated indexes, inboxes, status mirrors, archive summaries, and script format notes should stay script-owned and concise.
+- State-machine surfaces must be script-driven. New control plans should store machine state in script-readable placeholders such as `workspace-sync.state` and let scripts render status text into mirrored docs. Do not hand-author explanatory status strings as the source of truth; legacy text status is a migration input only.
 
 ## Default Command Set
 
@@ -19,6 +20,8 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
   `node scripts/workspace-control.mjs sync --write --verify --dispatch`
   `node scripts/workspace-control.mjs scripts --tests`
   `node scripts/workspace-control.mjs loop status --json`
+  `node scripts/workspace-control.mjs next-work --after-completion --json`
+  `node scripts/workspace-control.mjs next-work --id <DESIGN-KEY> --json`
   `node scripts/workspace-control.mjs loop create-dispatch --write --json`
   `node scripts/workspace-control.mjs loop build-delivery --write --json`
   `node scripts/workspace-control.mjs loop review-results --json`
@@ -63,6 +66,7 @@ Use this reference when auditing ControlWorkspace scripts, choosing validation c
 | Prove the governance scripts work as a chain | `run-workspace-pipeline-e2e.mjs` | Uses a temporary fixture workspace and runs write/apply modes without touching product repositories. |
 | Keep script catalog and tests from drifting | `check-script-docs.mjs` | Runs inside `verify-control-center`; add tests to `--with-script-tests`. |
 | Manage Codex Automation Closed Loop contracts | `codex-automation-loop.mjs`, `workspace-control.mjs loop ...` | Runtime files stay under ignored `.workspace-local/codex-automation-loop/`; the script creates dispatch packets, delivery envelopes, target result envelopes, group readiness summaries, review packs, and stop markers. It never calls Codex automation APIs, parses current plans, accepts evidence, selects TODOs, or writes product repositories. Read [codex-automation-loop.md](codex-automation-loop.md) for the full operating map. |
+| Scan next controller-ready demand after completion | `next-control-work.mjs`, `workspace-control.mjs next-work ...` | Read-only by default. It combines Design ready handoffs and global TODO candidates into a ranked candidate list, but never creates a current plan, accepts a candidate, dispatches windows, or changes Design / TODO state. Use after archive / sync only when the current state is completed or idle. Use `--id <DESIGN-KEY>` when the user names a specific ready demand. Design `Handoff` links are optional when the requirement design carries the handoff content; original-plan and requirement-design links remain required. |
 | Reduce repeated controller dispatch preparation | `codex-automation-loop.mjs prepare-dispatch` | Use only after total control has chosen the target, task id, control plan, objective, and evidence requirement. It writes the window config, dispatch packet, dispatch group, and delivery envelope in one step, then stops before host thread send. It does not change the target prompt shape. |
 | Reduce repeated callback review setup | `codex-automation-loop.mjs review-pack` | Read-only. It wraps `review-results` with target result evidence pointers, delivery-run status, and controller-return status so total control can pull raw evidence without manually opening every local envelope first. It is not an acceptance verdict. |
 | Manage direct-thread child-window config and delivery evidence | `codex-automation-loop.mjs build-window-config`, `record-delivery-run`, `keep-live-state` | Child-window config, delivery-run evidence, and keep-live state stay under ignored local runtime. They describe sendability and transport evidence only; total control still owns the current plan, delivery decision, evidence pull, and acceptance verdict. |

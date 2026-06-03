@@ -3,6 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { workspaceLedgerPaths } from "./lib/workspace-config.mjs";
+import { isCompletedState } from "./lib/status-machine.mjs";
 
 const workspaceRoot = process.cwd();
 const args = process.argv.slice(2);
@@ -146,11 +147,11 @@ if (issues.length === 0) {
   if (issues.length === 0) {
     const todoSection = content.slice(todoRange.start, todoRange.end);
     const todoLines = todoSection.split("\n");
-    const completedCandidates = todoLines.filter((line) => todoRowStatus(line) === "已完成");
+    const completedCandidates = todoLines.filter((line) => isCompletedState(todoRowStatus(line)));
     const keepCompletedRows = keepCompleted > 0 ? completedCandidates.slice(-keepCompleted) : [];
     const keepCompletedSet = new Set(keepCompletedRows);
     completedRows = completedCandidates.filter((line) => !keepCompletedSet.has(line));
-    const nextTodoLines = todoLines.filter((line) => todoRowStatus(line) !== "已完成" || keepCompletedSet.has(line));
+    const nextTodoLines = todoLines.filter((line) => !isCompletedState(todoRowStatus(line)) || keepCompletedSet.has(line));
 
     const syncSection = syncRange ? content.slice(syncRange.start, syncRange.end) : "";
     const syncLines = syncSection ? syncSection.split("\n") : [];

@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { workspaceLedgerPaths } from "./lib/workspace-config.mjs";
+import { renderState, validateStateSpec } from "./lib/status-machine.mjs";
 
 const args = process.argv.slice(2);
 const write = args.includes("--write");
@@ -33,9 +34,10 @@ const syncStringFields = new Set([
   "currentIndexDescription",
   "currentStatusSummary",
 ]);
+const syncObjectFields = new Set(["state"]);
 const syncArrayFields = new Set(["indexRows", "currentIndexRows"]);
-const syncKeys = new Set([...syncStringFields, ...syncArrayFields]);
-const rowKeys = new Set(["type", "doc", "status", "description", "insertAfter"]);
+const syncKeys = new Set([...syncStringFields, ...syncObjectFields, ...syncArrayFields]);
+const rowKeys = new Set(["type", "doc", "status", "state", "description", "insertAfter"]);
 
 function read(file) {
   return readFileSync(file, "utf8");
@@ -236,6 +238,9 @@ function validateSyncBlock(sync) {
       issues.push(`workspace-sync.${key} must be a string`);
     }
   }
+  if (sync.state !== undefined) {
+    issues.push(...validateStateSpec(sync.state, "workspace-sync.state"));
+  }
   for (const key of syncArrayFields) {
     if (sync[key] !== undefined && !Array.isArray(sync[key])) {
       issues.push(`workspace-sync.${key} must be an array`);
@@ -265,10 +270,29 @@ function validateSyncRow(row, label, hasStatus) {
   if (hasStatus && row.status !== undefined && typeof row.status !== "string") {
     issues.push(`workspace-sync.${label}.status must be a string`);
   }
+  if (hasStatus && row.state !== undefined) {
+    issues.push(...validateStateSpec(row.state, `workspace-sync.${label}.state`));
+  }
   if (row.insertAfter !== undefined && typeof row.insertAfter !== "string") {
     issues.push(`workspace-sync.${label}.insertAfter must be a string`);
   }
   return issues;
+}
+
+function statusForSyncRow(row, fallbackStatus) {
+  return renderState(row.state ?? row.status ?? fallbackStatus, fallbackStatus);
+}
+
+function replacePlanStatusProjection(content, status) {
+  const markerPattern =
+    /状态[：:]\s*<!--\s*workspace-state:plan\s*-->([\s\S]*?)<!--\s*\/workspace-state:plan\s*-->/;
+  if (markerPattern.test(content)) {
+    return content.replace(markerPattern, `状态：<!-- workspace-state:plan -->${status}<!-- /workspace-state:plan -->`);
+  }
+  if (/^状态[：:].*$/m.test(content)) {
+    return content.replace(/^状态[：:].*$/m, `状态：${status}`);
+  }
+  return `${content.replace(/\s*$/, "\n\n")}状态：${status}\n`;
 }
 
 function resolveWorkspaceDocTarget(rawDoc, label) {
@@ -410,19 +434,20 @@ if (!planPath || !existsSync(planPath)) {
 
 if (issues.length === 0) {
   try {
-    const planContent = read(planPath);
+    const originalPlanContent = read(planPath);
+    let planContent = originalPlanContent;
     issues.push(...validateSyncBlockPlacement(planContent));
     const sync = parseSyncBlock(planContent);
     issues.push(...validateSyncBlock(sync));
     const planTitle = parseTitle(planContent);
-    const planStatus = sync.status ?? parseLine(planContent, "状态");
+    const planStatus = renderState(sync.state ?? sync.status ?? parseLine(planContent, "状态"));
     const planDocLink = normalizeRelative(indexPath, planPath);
     const currentPlanLink = normalizeRelative(currentIndexPath, planPath);
     const statusPlanLink = normalizeRelative(currentStatusPath, planPath);
     const statusDocLink = normalizeRelative(indexPath, currentStatusPath);
 
     if (!planStatus) {
-      issues.push("plan is missing a `状态：...` line or workspace-sync.status");
+      issues.push("plan is missing a `状态：...` line, workspace-sync.status, or workspace-sync.state");
     }
 
     const planDescription =
@@ -435,6 +460,12 @@ if (issues.length === 0) {
     const currentStatusSummary = sync.currentStatusSummary ?? "";
 
     if (issues.length === 0) {
+      if (sync.state) {
+        planContent = replacePlanStatusProjection(planContent, planStatus);
+        outputs.push({ path: planPath, content: planContent });
+        changes.push(summarizeChanged(originalPlanContent, planContent, relativeToWorkspace(planPath)));
+      }
+
       // 这里只同步总控已经写进当前计划的机械重复信息；验收、TODO 和派发决策仍由总控文档先表达。
       let indexContent = read(indexPath);
       const originalIndexContent = indexContent;
@@ -463,7 +494,7 @@ if (issues.length === 0) {
           indexContent,
           "当前总控入口",
           row.type,
-          `| ${row.type} | [${link}](${link}) | ${row.status ?? planStatus} | ${row.description} |`,
+          `| ${row.type} | [${link}](${link}) | ${statusForSyncRow(row, planStatus)} | ${row.description} |`,
           row.insertAfter ?? "当前状态",
         );
       }

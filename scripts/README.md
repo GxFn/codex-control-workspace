@@ -45,9 +45,16 @@ Script-readable document format:
 - Current plans that drive `sync-current-plan.mjs` may include:
 
 ```md
+状态：<!-- workspace-state:plan -->待脚本同步<!-- /workspace-state:plan -->
+
+...
+
 <!-- workspace-sync
 {
-  "status": "<current status>",
+  "state": {
+    "id": "paused",
+    "note": "<optional display note>"
+  },
   "indexPlanDescription": "<index current-plan row summary>",
   "indexStatusDescription": "<index current-status row summary>",
   "currentIndexType": "当前计划",
@@ -61,6 +68,11 @@ Script-readable document format:
 
 - `workspace-sync` is mechanical metadata only. It must not decide readiness,
   TODO priority, Design acceptance, window acceptance, or product scope.
+- New state-machine driven plans should use `workspace-sync.state` and the
+  `workspace-state:plan` placeholder instead of hand-editing displayed status
+  text. The script renders human-readable status text into the plan, index, and
+  status mirror. Legacy `workspace-sync.status` remains readable only for
+  migration.
 - Keep `workspace-sync` after `## 回填区`, near the end of the current plan.
   `sync-current-plan.mjs` fails closed if this script metadata is placed above
   human-facing plan content.
@@ -85,8 +97,8 @@ Current scripts:
 
 - `workspace-control.mjs`: command-style aggregator for common control-center
   workflows. It maps friendly subcommands such as `status`, `verify`,
-  `sync`, `dispatch`, `design`, `runtime`, `install`, `scripts`, `loop`, and
-  `pipeline`
+  `sync`, `dispatch`, `design`, `runtime`, `install`, `scripts`, `loop`,
+  `next-work`, and `pipeline`
   onto the existing workspace scripts without replacing their dry-run / write
   gates. Use `--print` to inspect the exact commands before running them.
 - `codex-automation-loop.mjs`: new CodexAutomationClosedLoop contract
@@ -232,6 +244,16 @@ Current scripts:
 - `archive-global-todo-board.mjs`: dry-run by default; moves completed global
   TODO rows and old sync records from `.workspace-active/workspace/current/global-todo-board.md` to
   `../workspace-ledger/workspace/archive/YYYY-MM/global-todo/`, keeping the active board small.
+- `next-control-work.mjs`: read-only by default; scans the configured Design
+  handoff board and global TODO board for controller-ready candidates after a
+  demand completes. It reports ranked candidates, blockers, and whether a
+  single candidate is mechanically auto-claimable. It never creates a current
+  plan, accepts evidence, dispatches windows, or changes TODO / Design status;
+  use `--id <Design/TODO Key>` when the user names a specific ready demand.
+  Design `Handoff` links are optional when the requirement design itself
+  carries the handoff content; original-plan and requirement-design links
+  remain required. Use `--write` only to store the local candidate scan under
+  ignored runtime.
 - `import-design-handoffs.mjs`: imports the configured `DesignWindow` handoff
   board into the active Design inbox and validates ready rows. It supports the
   forward-compatible enum columns `用户确认状态`, `主线关系状态`, and `优先级枚举`
@@ -255,11 +277,12 @@ Current scripts:
 Workspace script tests:
 
 Run them through `node scripts/workspace-control.mjs scripts --tests`. The
-current set is `codex-automation-loop.test.mjs`,
-`collect-repo-status.test.mjs`, `check-decision-preflight.test.mjs`,
-`check-dispatch-coverage.test.mjs`, `check-script-docs.test.mjs`,
-`check-test-boundary.test.mjs`, `control-workspace-install.test.mjs`,
-`import-design-handoffs.test.mjs`, `check-repository-residue.test.mjs`,
+current set is `archive-global-todo-board.test.mjs`,
+`codex-automation-loop.test.mjs`, `collect-repo-status.test.mjs`,
+`check-decision-preflight.test.mjs`, `check-dispatch-coverage.test.mjs`,
+`check-script-docs.test.mjs`, `check-test-boundary.test.mjs`,
+`control-workspace-install.test.mjs`, `import-design-handoffs.test.mjs`,
+`check-repository-residue.test.mjs`, `next-control-work.test.mjs`,
 `sync-current-plan.test.mjs`, and `workspace-control.test.mjs`.
 
 ## Common Routes
@@ -279,6 +302,8 @@ command catalog and selection table, read
 | Script docs plus script tests | `node scripts/workspace-control.mjs scripts --tests` |
 | Runtime residue read-only check | `node scripts/workspace-control.mjs runtime` |
 | Codex Automation Closed Loop contract commands | `node scripts/workspace-control.mjs loop <subcommand> ...` |
+| Scan next controller-ready candidate after completion | `node scripts/workspace-control.mjs next-work --after-completion --json` |
+| Focus a named Design/TODO candidate for total-control claim | `node scripts/workspace-control.mjs next-work --id <DESIGN-KEY> --json` |
 | Sibling install / child AGENTS scope writes | `node scripts/workspace-control.mjs install <subcommand> ...` |
 | Child window access profile view | `node scripts/workspace-control.mjs install access-profiles --json` |
 | Full governance fixture pipeline | `node scripts/workspace-control.mjs pipeline` |

@@ -1,9 +1,10 @@
 # <Workspace Control Plan Title>
 
 日期：YYYY-MM-DD
-状态：暂停 / 待启动 / 执行中 / 待验收 / 已完成
+状态：<!-- workspace-state:plan -->待脚本同步<!-- /workspace-state:plan -->
 发送给：无
 总控定位：本文件是 ControlWorkspace 当前总控计划；只承载目标裁决、窗口分派、TODO 归口、测试交接和验收回填，不承载产品实现。
+状态机说明：状态源写入 `workspace-sync.state` 或行级 machine state；展示文字由脚本渲染，旧中文状态文字只作为迁移输入。
 
 ## 目标判断
 
@@ -61,7 +62,7 @@
 
 | 任务包 ID | 窗口 | 摘要 | 状态 |
 | --- | --- | --- | --- |
-| PKG-1 | `Repo` |  | 待启动 |
+| PKG-1 | `Repo` |  | `pending` |
 
 ### PKG-1：<任务包名称>
 
@@ -119,20 +120,20 @@
 
 | ID | 状态 | 类型 | 优先级 | 归属 | 事项 / 目标 | 影响复测 / 派发 | 依赖 / 触发 | 推荐窗口 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TODO-1 | 观察中 |  | P2 | Workspace |  | 否 |  | ControlWorkspace |
+| TODO-1 | `observing` |  | P2 | Workspace |  | 否 |  | ControlWorkspace |
 
 ## 空闲窗口调度
 
 | 窗口 | 调度 | 是否发送 | 原因 |
 | --- | --- | --- | --- |
-| `BaseWindow` | 观察 / 无任务 / 主线任务 | 否 |  |
-| `CoreWindow` | 观察 / 无任务 / 主线任务 | 否 |  |
-| `AgentWindow` | 观察 / 无任务 / 主线任务 | 否 |  |
-| `DashboardWindow` | 观察 / 无任务 / 主线任务 | 否 |  |
-| `PluginWindow` | 观察 / 无任务 / 主线任务 | 否 |  |
-| `DesignWindow` | 无任务 / 观察 / 需求设计 | 否 | 只有需要需求讨论、signal 判断或 handoff 草案时才发送。 |
-| `TestWindow` | 阻塞 / 待启动 / 无任务 | 否 |  |
-| `RealTestProject` | 无任务 / 观察 | 否 | 真实项目只作为受保护测试目标，不直接派发。 |
+| `BaseWindow` | `observing` / `none` / mainline | 否 |  |
+| `CoreWindow` | `observing` / `none` / mainline | 否 |  |
+| `AgentWindow` | `observing` / `none` / mainline | 否 |  |
+| `DashboardWindow` | `observing` / `none` / mainline | 否 |  |
+| `PluginWindow` | `observing` / `none` / mainline | 否 |  |
+| `DesignWindow` | `none` / `observing` / design | 否 | 只有需要需求讨论、signal 判断或 handoff 草案时才发送。 |
+| `TestWindow` | `blocked` / `pending` / `none` | 否 |  |
+| `RealTestProject` | `none` / `observing` | 否 | 真实项目只作为受保护测试目标，不直接派发。 |
 
 ## 窗口分派
 
@@ -140,14 +141,14 @@
 
 | 窗口 / 状态 | 任务 |
 | --- | --- |
-| `BaseWindow`<br>无任务 |  |
-| `CoreWindow`<br>无任务 |  |
-| `AgentWindow`<br>无任务 |  |
-| `DashboardWindow`<br>无任务 |  |
-| `PluginWindow`<br>无任务 |  |
-| `DesignWindow`<br>无任务 |  |
-| `TestWindow`<br>无任务 |  |
-| `RealTestProject`<br>无任务 | 不改真实项目源码。 |
+| `BaseWindow`<br>`none` |  |
+| `CoreWindow`<br>`none` |  |
+| `AgentWindow`<br>`none` |  |
+| `DashboardWindow`<br>`none` |  |
+| `PluginWindow`<br>`none` |  |
+| `DesignWindow`<br>`none` |  |
+| `TestWindow`<br>`none` |  |
+| `RealTestProject`<br>`none` | 不改真实项目源码。 |
 
 ## 可复制提示词
 
@@ -187,7 +188,10 @@
 
 <!-- workspace-sync
 {
-  "status": "<当前计划状态>",
+  "state": {
+    "id": "paused",
+    "note": "<可选状态说明>"
+  },
   "indexPlanDescription": "<写入 .workspace-active/workspace/index.md 当前计划行的说明>",
   "indexStatusDescription": "<写入 .workspace-active/workspace/index.md 当前状态行的说明>",
   "currentIndexType": "当前计划",
