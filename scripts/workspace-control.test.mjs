@@ -16,20 +16,21 @@ function run(args) {
 }
 
 test("--print verify maps friendly flags to verify-control-center flags", () => {
-  const result = run(["--print", "verify", "--dispatch", "--runtime", "--script-tests"]);
+  const result = run(["--print", "verify", "--runtime", "--script-tests"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(
     result.stdout,
-    /node scripts\/verify-control-center\.mjs --require-todo --require-task-packages --with-runtime --with-script-tests/,
+    /node scripts\/verify-control-center\.mjs --with-runtime --with-script-tests/,
   );
 });
 
-test("--print sync write keeps explicit write gate and post-check", () => {
-  const result = run(["--print", "sync", "--write", "--verify", "--dispatch"]);
+test("--print sync renders controller state progress documents", () => {
+  const result = run(["--print", "sync", "--state-root", ".workspace-active/workspace/current/example-demand", "--write", "--json"]);
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /node scripts\/sync-current-plan\.mjs --write/);
-  assert.match(result.stdout, /node scripts\/sync-current-plan\.mjs --check/);
-  assert.match(result.stdout, /node scripts\/verify-control-center\.mjs --require-todo --require-task-packages/);
+  assert.match(
+    result.stdout,
+    /node scripts\/render-progress-doc\.mjs --state-root \.workspace-active\/workspace\/current\/example-demand --write --json/,
+  );
 });
 
 test("--print design preserves focused handoff validation arguments", () => {
@@ -71,8 +72,26 @@ test("status --json returns a machine-readable aggregate", () => {
   assert.equal(payload.command, "status");
   assert.deepEqual(
     payload.checks.map((check) => check.key),
-    ["repoStatus", "currentPlanSync", "dispatchCoverage"],
+    ["repoStatus", "closedLoopStatus"],
   );
+});
+
+test("sync without state root fails closed instead of using legacy Markdown state", () => {
+  const result = run(["--print", "sync", "--write"]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /sync requires --state-root/);
+});
+
+test("legacy-sync command is not accepted", () => {
+  const result = run(["--print", "legacy-sync", "--write"]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Unknown workspace-control command: legacy-sync/);
+});
+
+test("dispatch command is not accepted", () => {
+  const result = run(["--print", "dispatch"]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Unknown workspace-control command: dispatch/);
 });
 
 test("--print install maps to control workspace install script", () => {

@@ -47,10 +47,11 @@ Controller wakeups should be task-first and compact:
 - dispatchGroup: <group>
 - triggerTarget: <window>
 - triggerTaskId: <task>
+- stateRoot: <path>
+- humanContextRef: <path>
 - returnPolicy: group-ready
 - reviewScope: group
 - groupStatus: ready
-- controlPlan: <path>
 - rules: 用完即弃；review-results；按 groupSnapshot 判断单个回填、继续等待或整组验收；仅在证据通过且目标未完成时创建下一批 dispatch。
 ```
 
@@ -77,8 +78,9 @@ target callback for whole-group completion.
 ## Normal Controller Flow
 
 1. **Orient**
-   - Read workspace `AGENTS.md`, workspace index/status, the current control
-     plan, and this skill.
+   - Read workspace `AGENTS.md`, workspace index/status, the current
+     state-root `developer-progress.md` / `controller-state.json`, and this
+     skill.
    - State that this is the total-control window.
    - Direct thread delivery has no automation cleanup step. If a previous local
      automation is still present, treat it as stale runtime state and stop for
@@ -122,7 +124,26 @@ node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --
 
 3. **Dispatch next work**
    - If the goal still needs work, total control decides the next task package
-     and writes/refines the current plan first.
+     and writes it into the controller state root first. The developer progress
+     document is only the human context/projection, not automation authority.
+     Create or update the task package with:
+
+```text
+node scripts/controller-state.mjs add-task-package --state-root <stateRoot> --task-package-id <taskPackageId> --summary "<summary>" --source-ref "<sourceRef>" --target-window <window> --target-task-id <taskId> --write --json
+```
+
+   - Append the human-readable task package entry only as a timestamped log:
+
+```text
+node scripts/append-progress-log.mjs --state-root <stateRoot> --type task-package --task-package-id <taskPackageId> --summary "<summary>" --source-ref "<sourceRef>" --write --json
+```
+
+   - Refresh only the generated `Unified Status` block when the projection is
+     stale:
+
+```text
+node scripts/render-progress-doc.mjs --state-root <stateRoot> --write --json
+```
    - Ensure each target window has a local thread registration. Register a real
      thread id only in local runtime:
 
@@ -142,34 +163,20 @@ node scripts/codex-automation-loop.mjs build-window-config --window <window> --r
      expected targets return. `per-target` lets each target wake total control
      when its own result exists, while the group snapshot still lists remaining
      targets.
-   - For each target, create a dispatch packet. Use the same `--group`,
-     `--controller-window`, and `--return-policy` for the whole group.
-     `--controller-window` must be this controller window's registered name,
-     so automation started by controller A returns to controller A instead of
-     the global workspace default. The script always generates the compact
-     target prompt.
+   - For the state-machine happy path, prepare dispatch from the state root.
+     Use the same `--group`, `--controller-window`, and `--return-policy` for
+     the whole group. `--controller-window` must be this controller window's
+     registered name, so automation started by controller A returns to
+     controller A instead of the global workspace default.
 
 ```text
-node scripts/codex-automation-loop.mjs create-dispatch --target-window <window> --task-id <taskId> --group <dispatchGroup> --controller-window <currentControllerWindow> --return-policy group-ready --control-plan <path> --objective "<objective>" --evidence "<required evidence>" --write --json
-```
-
-   - Then create a delivery envelope:
-
-```text
-node scripts/codex-automation-loop.mjs build-delivery --packet-file <packetFile> --require-thread --write --json
-```
-
-   - For the common happy path, after total control has already chosen the
-     target/task/plan/objective/evidence, prefer the bundled preparation command:
-
-```text
-node scripts/codex-automation-loop.mjs prepare-dispatch --target-window <window> --task-id <taskId> --group <dispatchGroup> --controller-window <currentControllerWindow> --return-policy group-ready --control-plan <path> --objective "<objective>" --evidence "<required evidence>" --require-thread --write --json
+node scripts/codex-automation-loop.mjs prepare-dispatch-from-state --state-root <stateRoot> --target-task-id <taskId> --group <dispatchGroup> --controller-window <currentControllerWindow> --return-policy group-ready --human-context-ref <stateRoot>/developer-progress.md --require-thread --write --json
 ```
 
      This writes the same window config, dispatch packet/group, and delivery
-     envelope, and preserves the existing prompt card shape. It stops before
-     host thread send/readback, so delivery still requires the host thread tool
-     and `record-delivery-run`.
+     envelope with `stateRef` / `humanContextRef`, and preserves the compact
+     prompt card shape. It stops before host thread send/readback, so delivery
+     still requires the host thread tool and `record-delivery-run`.
 
    - Add `--automation-enabled` only for an explicitly unattended run. In that
      mode, start keep-live before dispatch:
@@ -215,9 +222,9 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <deli
      not create another target-window hop.
    - Controller return is not a loop trigger by itself. When total control is
      woken by a controller-return envelope, it reviews the group and either:
-     creates the next dispatch only when the current plan still has an eligible
-     unfinished task, or stops without another delivery when the goal is done,
-     no task remains, or a user decision is needed.
+     creates the next dispatch only when the controller state root still has an
+     eligible unfinished task, or stops without another delivery when the goal
+     is done, no task remains, or a user decision is needed.
 
 4. **Stop**
    - Stop only for explicit user stop, hard gate, final archive, missing
@@ -255,14 +262,14 @@ node scripts/codex-automation-loop.mjs stop-loop --automation-run-id <dispatchGr
 
 Stop and report when any applies:
 
-- The wakeup cannot be tied to the current user goal, current plan, legal group,
+- The wakeup cannot be tied to the current user goal, state root, legal group,
   target task, or real thread.
 - A result envelope has no raw evidence pointer.
 - Evidence is contradictory or only natural-language assertion.
 - The next step changes the approved goal, removes scope, downgrades capability,
   or touches a protected real test project without written boundary.
 - A target window tried to do another window's work, handle `TestWindow`, or
-  create its own next-hop without explicit current-plan authorization.
+  create its own next-hop without explicit state-root authorization.
 - Two automated retries fail on the same issue.
 
 Do not stop merely because a phase completed or a plan refresh is needed when

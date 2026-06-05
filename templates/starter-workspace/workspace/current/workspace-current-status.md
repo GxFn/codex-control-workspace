@@ -2,13 +2,14 @@
 
 Updated: 2026-05-27
 Control window: ControlWorkspace
-Status: draft
+Status: idle / no active demand
 
 ## Status Summary
 
-- 当前计划：[example-control-plan.md](example-control-plan.md)。
+- Active demand: none.
 - This repository is a freshly extracted control workspace template.
-- Visible Dispatch mode is disabled by default.
+- Create a real active demand with `node scripts/controller-state.mjs init --write`; then read the generated `developer-progress.md`.
+- Unattended automation is disabled by default.
 
 ## Current Ledgers
 

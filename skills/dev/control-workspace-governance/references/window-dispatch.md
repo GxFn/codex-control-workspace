@@ -17,7 +17,8 @@ Use this reference when preparing a wave, task package, window coverage table, p
 - 制定分派表时必须区分“最终覆盖窗口”和“当前可派发窗口”：最终会参与某条链路的仓库可以写入覆盖表，但只有当前无上游依赖、发送后能直接推进的窗口才能标为 `待启动` 并进入提示词发送名单。
 - 每次分派前必须先判断 producer / consumer 依赖链：产出 contract、类型、artifact、API、schema、发布物或迁移证据的窗口是上游；消费这些结果的窗口在上游完成前必须标为 `阻塞` 或 `观察中`，不得为了并行而提前派发。
 - 依赖上游提交、接口或文档证据的窗口，只有在上游回填提交 hash、完成范围和验证结果后，才能由总控改为 `待启动`。不要让下游窗口猜字段、复制临时 contract、提前做 fallback 或空跑验证。
-- 发送 `TestWindow` 前必须先做自测排除判断：`TestWindow` 不再是默认测试窗口。脚本测试、文档校验、状态机验证、targeted unit / probe、轻量集成验证和可构造最小验证必须由总控自己做；只有需要真实项目环境、cold-start / rescan、Dashboard 手动观察、运行时监控、真实项目复现 / 回归或跨仓库集成环境证据时，才把 `TestWindow` 标为 `待启动`，并写清总控不能自测的理由。
+- 发送测试窗口前必须先做自测排除判断：`TestWindow` 不再是默认测试窗口。脚本测试、文档校验、状态机验证、targeted unit / probe、轻量集成验证和可构造最小验证必须由总控自己做；只有需要真实项目环境、cold-start / rescan、Dashboard 手动观察、运行时监控、真实项目复现 / 回归或跨仓库集成环境证据时，才把 `TestWindow` 标为 `待启动`，并写清总控不能自测的理由。
+- Codex Plugin、Codex host MCP、Codex 会话 / 本地环境、installed / packaged Plugin runtime smoke、direct-thread / IDE 投递读回等测试不发送给真实项目 `TestWindow`；如果 workspace config 有 `ideTestWindow`，发送给该窗口，例如 `AlembicTest-IDE`。BiliDili / AlembicWorkspace cold-start / rescan / AI/provider 测试仍发送给 `TestWindow`，例如 `AlembicTest`。
 
 ## Task Package Requirements
 
@@ -65,10 +66,10 @@ Rules:
 
 - 具体当前总控文档名、执行窗口列表和观察窗口判断，不写入 `AGENTS.md`。这些 wave 级信息必须写在 `.workspace-active/workspace/index.md` 和当前总控文档的“可复制分派提示词 / 分派表”章节中。
 - 存在 `待启动` 窗口时，最终回复必须给出对应可复制提示词；没有可发送窗口时，必须明确说明无提示词需要发送。
-- 每次输出可复制提示词前，必须同时人工核对 `发送给` 名单与 producer / consumer 依赖链是否一致；`check-dispatch-coverage` 可以检查覆盖、状态和提示词是否包含 `AGENTS.md` / 定位硬规则，但不能替代总控对先后顺序的判断。
+- 每次输出可复制提示词前，必须同时人工核对 `发送给` 名单与 producer / consumer 依赖链是否一致；状态机和任务包只能提供机器事实，不能替代总控对先后顺序的判断。
 - 每次输出可复制提示词前，必须检查提示词正文是否同时包含 `AGENTS.md` 和“定位”要求；缺任一项时不得发送，必须先修当前计划或提示词。
 - 提示词应短而可执行。它只承载导航、定位、任务领取和回填入口；当前总控文档已经写清的目标、边界、风险、禁止事项、验证命令、详细回填字段和测试推论边界，不要在提示词里重复铺开。
-- `check-dispatch-coverage` 会拦截超长提示词；除非加 `<!-- dispatch-prompt-long-ok -->` 并写明特殊原因，任务细节应留在任务包正文、目标仓库 `AGENTS.md` 和对应 skill / reference 中。
+- 提示词过长时应先缩回任务包、目标仓库 `AGENTS.md` 和对应 skill / reference；不要把详细任务书复制进唤醒提示词。
 - 子 agent 授权默认由 `AGENTS.md` 和任务包承载，不必每次写入提示词；只有当前任务包特别需要提醒执行窗口可拆分工作时，才用一句话轻量补充。
 - 统一提示词只发给当前总控文档中有实际任务、且现在发送后能够推进工作的窗口。不要建议用户给纯观察窗口、等待上游的阻塞窗口或没有本轮动作的窗口发送提示词。
 - 统一提示词是默认路径，不是限制。如果某个窗口存在特殊边界、特殊风险、特殊前置顺序、需要强调不要误删 / 不要回退 / 不要触碰某目录，或当前总控文档中的通用提示词不足以覆盖该窗口任务，总控可以为该窗口单独提供特制提示词。

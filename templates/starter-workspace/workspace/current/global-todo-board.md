@@ -1,6 +1,6 @@
 # Global TODO Board
 
-This board records cross-plan TODO items. It does not replace the current control plan or final completion definition.
+This board records cross-plan TODO items. It does not replace the active controller state root, developer progress document, or final completion definition.
 
 | ID | Status | Type | Priority | Owner | Goal | Retest / Dispatch Impact | Dependency / Trigger | Recommended Window | Evidence |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |

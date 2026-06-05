@@ -37,25 +37,25 @@ Usage:
   node scripts/codex-automation-loop.mjs status [--json]
   node scripts/codex-automation-loop.mjs register-thread --window <name> --thread-id <id> [--role target|controller|test-target|design|observer] [--cwd <path>] [--responsibility-root <path>] [--display-title <title>] [--write-boundary <path>...] [--canonical-use <text>] [--supersedes-window <name>...] --write [--json]
   node scripts/codex-automation-loop.mjs build-window-config --window <name> [--require-thread] --write [--json]
-  node scripts/codex-automation-loop.mjs create-dispatch --target-window <name> --task-id <id> --control-plan <path> --objective <text> [--controller-window <name>] [--group <id>] [--return-policy group-ready|per-target] [--context-policy assumed-current|refresh-if-missing|force-refresh] [--scope <text>...] [--forbidden <text>...] [--evidence <text>...] [--write] [--json]
   node scripts/codex-automation-loop.mjs build-delivery --packet-file <path> [--delivery-id <id>] [--return-route controller|none] [--automation-enabled] [--require-thread] [--write] [--json]
-  node scripts/codex-automation-loop.mjs prepare-dispatch --target-window <name> --task-id <id> --control-plan <path> --objective <text> [--controller-window <name>] [--group <id>] [--return-policy group-ready|per-target] [--automation-enabled] [--require-thread] --write [--json]
-  node scripts/codex-automation-loop.mjs build-controller-return --group <id> --trigger-target <window> --trigger-task-id <taskId> --control-plan <path> [--controller-window <name>] [--return-reason result-ready|blocked] [--automation-enabled] [--require-thread] [--write] [--json]
+  node scripts/codex-automation-loop.mjs prepare-dispatch-from-state --state-root <path> --target-task-id <id> [--task-package-id <id>] [--human-context-ref <ref>] [--controller-window <name>] [--group <id>] [--return-policy group-ready|per-target] [--automation-enabled] [--require-thread] [--write] [--json]
+  node scripts/codex-automation-loop.mjs build-controller-return --group <id> --trigger-target <window> --trigger-task-id <taskId> [--human-context-ref <ref>] [--controller-window <name>] [--return-reason result-ready|blocked] [--automation-enabled] [--require-thread] [--write] [--json]
   node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <path> --status sent|blocked|failed [--host-method send_message_to_thread] [--host-mode new-turn|unknown] [--readback-ok true|false] [--evidence <text>] [--error <text>] --write [--json]
   node scripts/codex-automation-loop.mjs start-keep-live --automation-run-id <id> [--keep-live-command <cmd>] [--keep-live-arg <arg>...] [--no-keep-live] --write [--json]
   node scripts/codex-automation-loop.mjs stop-keep-live --automation-run-id <id> [--reason <text>] --write [--json]
   node scripts/codex-automation-loop.mjs keep-live-state --automation-run-id <id> --status running|stopped|failed [--mechanism macos-caffeinate|manual|none] [--pid <pid>] [--error <text>] --write [--json]
   node scripts/codex-automation-loop.mjs submit-result --target-window <name> --task-id <id> --status completed|blocked|needs-review [--group <id>] [--changed-repo <repo>...] [--commit <hash>...] [--evidence-ref <ref>...] [--verification <text>...] [--risk <text>...] [--next-suggestion <text>] [--write] [--json]
   node scripts/codex-automation-loop.mjs review-results (--group <id>|--task-id <id>) [--json]
-  node scripts/codex-automation-loop.mjs review-pack (--group <id>|--task-id <id>) [--json]
+  node scripts/codex-automation-loop.mjs review-pack (--group <id>|--task-id <id>|--state-root <path>) [--json]
   node scripts/codex-automation-loop.mjs stop-loop --reason <text> [--automation-run-id <id>] --write [--json]
 
 Design:
-  This script is the new CodexAutomationClosedLoop contract surface. It does
-  not parse current plans, decide sendable windows, claim target work, create
-  legacy Codex automations, or accept evidence. Total control creates dispatch
-  packets and later reviews raw evidence. Delivery adapters only consume the
-  delivery envelope. Target windows return result envelopes.
+  This script is the CodexAutomationClosedLoop contract surface. Dispatches
+  are state-root only. The script does not parse current plans, decide
+  sendable windows, claim target work, create legacy Codex automations, or
+  accept evidence. Total control creates dispatch packets and later reviews
+  raw evidence. Delivery adapters only consume the delivery envelope. Target
+  windows return result envelopes.
 `.trim();
 
 class CliExit extends Error {}
@@ -118,8 +118,7 @@ function output(payload, textLines = []) {
 
 function inferAgentNext(payload) {
   if (!payload.ok) return "Stop and inspect the reported closed-loop contract issue.";
-  if (payload.command === "create-dispatch") return "Build a delivery envelope from the dispatch packet when direct thread send is allowed.";
-  if (payload.command === "prepare-dispatch") return payload.threadReady ? "Send the prepared prompt with the host thread tool, then record a delivery run." : "Register the target thread before direct-thread delivery.";
+  if (payload.command === "prepare-dispatch-from-state") return payload.threadReady ? "Send the prepared prompt with the host thread tool, then record a delivery run." : "Register the target thread before direct-thread delivery.";
   if (payload.command === "register-thread") return "Build or refresh the local window config, then build delivery envelopes when total control decides to dispatch.";
   if (payload.command === "build-window-config") return "Use this child-window config when creating direct-thread delivery envelopes.";
   if (payload.command === "build-delivery") return payload.threadReady ? "Send the prompt with the host thread tool, then record a delivery run." : "Register the target thread before direct-thread delivery.";
@@ -180,6 +179,28 @@ function resolveInputPath(value, label) {
   const file = path.isAbsolute(value) ? value : path.resolve(workspaceRoot, value);
   if (!existsSync(file)) fail(`${label} does not exist: ${value}`);
   return file;
+}
+
+function resolveStateRoot(value) {
+  const stateRoot = resolveInputPath(value, "--state-root");
+  ensureInsideWorkspace(stateRoot, "state root");
+  const stateFile = path.join(stateRoot, "controller-state.json");
+  if (!existsSync(stateFile)) fail(`--state-root is missing controller-state.json: ${value}`);
+  return stateRoot;
+}
+
+function readControllerStateRoot(stateRoot) {
+  const state = readJson(path.join(stateRoot, "controller-state.json"), "controller state");
+  return {
+    state,
+    stateRootRef: path.relative(workspaceRoot, stateRoot),
+  };
+}
+
+function readTaskPackageFromStateRoot(stateRoot, taskPackageId) {
+  const file = path.join(stateRoot, "task-packages", `${slug(taskPackageId)}.json`);
+  if (!existsSync(file)) fail(`task package does not exist in state root: ${taskPackageId}`);
+  return readJson(file, "task package");
 }
 
 function packetFileFor(packetId) {
@@ -264,15 +285,25 @@ function orderResultsByGroup({ groupRecord, results }) {
   });
 }
 
-function upsertDispatchGroup({ groupId, controlPlan, controllerWindow = "", returnPolicyMode, targetWindow, taskId, packetId }) {
+function upsertDispatchGroup({
+  groupId,
+  controllerWindow = "",
+  humanContextRef = "",
+  returnPolicyMode,
+  stateRef = null,
+  targetWindow,
+  taskId,
+  packetId,
+}) {
   if (!groupId) return null;
   const existing = loadDispatchGroup(groupId);
   const mode = existing?.returnPolicy?.mode || validateReturnPolicyMode(returnPolicyMode || "group-ready");
   if (returnPolicyMode && existing?.returnPolicy?.mode && existing.returnPolicy.mode !== returnPolicyMode) {
     fail(`Dispatch group ${groupId} already uses return policy ${existing.returnPolicy.mode}; cannot change to ${returnPolicyMode}.`);
   }
-  if (existing?.controlPlan && existing.controlPlan !== controlPlan) {
-    fail(`Dispatch group ${groupId} already belongs to control plan ${existing.controlPlan}.`);
+  if (!stateRef) fail("Dispatch groups require stateRef from a controller state root.");
+  if (existing?.stateRef && stateRef && JSON.stringify(existing.stateRef) !== JSON.stringify(stateRef)) {
+    fail(`Dispatch group ${groupId} already belongs to a different state root.`);
   }
   const existingControllerWindow = existing?.controllerWindow || "";
   if (controllerWindow && existingControllerWindow && existingControllerWindow !== controllerWindow) {
@@ -293,7 +324,8 @@ function upsertDispatchGroup({ groupId, controlPlan, controllerWindow = "", retu
     kind: "DispatchGroup",
     version,
     groupId,
-    controlPlan,
+    humanContextRef: humanContextRef || existing?.humanContextRef || undefined,
+    stateRef: stateRef || existing?.stateRef || undefined,
     controllerWindow: groupControllerWindow,
     expectedTargets,
     returnPolicy: {
@@ -309,11 +341,15 @@ function groupFromPackets({ groupId = "", packets = [] }) {
   const existing = loadDispatchGroup(groupId);
   if (existing) return existing;
   const firstPacket = packets[0] || {};
+  if (!firstPacket.stateRef) {
+    fail(`Dispatch group ${groupId} is missing stateRef; legacy Markdown-plan groups are no longer supported.`);
+  }
   return {
     kind: "DispatchGroup",
     version,
     groupId,
-    controlPlan: firstPacket.controlPlan,
+    humanContextRef: firstPacket.humanContextRef,
+    stateRef: firstPacket.stateRef,
     controllerWindow: firstPacket.controllerWindow,
     expectedTargets: packets.map((packet) => targetDescriptor({
       targetWindow: packet.targetWindow,
@@ -504,14 +540,14 @@ function parseBoolean(value, fallback = false) {
 function keepLiveCommand() {
   return getValue(
     "--keep-live-command",
-    process.env.CODEX_AUTOMATION_KEEP_LIVE_COMMAND || process.env.CODEX_VAD_KEEP_AWAKE_COMMAND || "caffeinate",
+    process.env.CODEX_AUTOMATION_KEEP_LIVE_COMMAND || "caffeinate",
   );
 }
 
 function keepLiveArgs() {
   const explicitArgs = getAllValues("--keep-live-arg");
   if (explicitArgs.length > 0) return explicitArgs;
-  const jsonArgs = process.env.CODEX_AUTOMATION_KEEP_LIVE_ARGS_JSON || process.env.CODEX_VAD_KEEP_AWAKE_ARGS_JSON;
+  const jsonArgs = process.env.CODEX_AUTOMATION_KEEP_LIVE_ARGS_JSON;
   if (jsonArgs) {
     try {
       const parsed = JSON.parse(jsonArgs);
@@ -526,7 +562,7 @@ function keepLiveArgs() {
 function keepLiveEnabled() {
   if (hasFlag("--no-keep-live")) return false;
   if (process.env.CODEX_AUTOMATION_KEEP_LIVE === "0") return false;
-  return process.env.CODEX_VAD_KEEP_AWAKE !== "0";
+  return true;
 }
 
 function keepLiveMechanism(commandName = keepLiveCommand()) {
@@ -1100,7 +1136,15 @@ function repositoryForWindow(windowName) {
   };
 }
 
-function formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup, controllerWindow }) {
+function formatTargetPrompt({
+  targetWindow,
+  taskId,
+  dispatchGroup,
+  controllerWindow,
+  humanContextRef = "",
+  stateRef,
+}) {
+  if (!stateRef) fail("Target prompts require stateRef from a controller state root.");
   return [
     `继续当前窗口任务：${targetWindow} / ${taskId}。`,
     "",
@@ -1108,14 +1152,29 @@ function formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup, 
     `- currentWindow: ${targetWindow}`,
     `- taskId: ${taskId}`,
     ...(controllerWindow ? [`- controllerWindow: ${controllerWindow}`] : []),
-    `- controlPlan: ${controlPlan}`,
+    `- stateRoot: ${stateRef.stateRoot}`,
+    `- demandKey: ${stateRef.demandKey}`,
+    `- taskPackageId: ${stateRef.taskPackageId}`,
+    `- stateRevision: ${stateRef.stateRevision}`,
+    ...(humanContextRef ? [`- humanContextRef: ${humanContextRef}`] : []),
     ...(dispatchGroup ? [`- dispatchGroup: ${dispatchGroup}`] : []),
     "- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；按 dispatch group returnPolicy 和 controllerWindow 判断是否执行一次总控回跳（build + send/readback + record）。",
     "- skill: ../codex-control-workspace/skills/dev/codex-automation-target/SKILL.md",
   ].join("\n");
 }
 
-function formatControllerReturnPrompt({ dispatchGroup, controllerWindow, triggerTarget, triggerTaskId, controlPlan, returnPolicy, reviewScope, groupSnapshot }) {
+function formatControllerReturnPrompt({
+  dispatchGroup,
+  controllerWindow,
+  triggerTarget,
+  triggerTaskId,
+  humanContextRef = "",
+  stateRef,
+  returnPolicy,
+  reviewScope,
+  groupSnapshot,
+}) {
+  if (!stateRef) fail("Controller return prompts require stateRef from a controller state root.");
   const returnedTargets = [
     ...(groupSnapshot.readyTargets || []),
     ...(groupSnapshot.blockedTargets || []),
@@ -1143,7 +1202,11 @@ function formatControllerReturnPrompt({ dispatchGroup, controllerWindow, trigger
     `- groupStatus: ${groupSnapshot.groupStatus}`,
     ...(hasBlockedTargets ? [`- blockedTargets: ${blockedTargets}`] : []),
     ...(hasRemainingTargets ? [`- remainingTargets: ${remainingTargets}`] : []),
-    `- controlPlan: ${controlPlan}`,
+    `- stateRoot: ${stateRef.stateRoot}`,
+    `- demandKey: ${stateRef.demandKey}`,
+    `- taskPackageId: ${stateRef.taskPackageId}`,
+    `- stateRevision: ${stateRef.stateRevision}`,
+    ...(humanContextRef ? [`- humanContextRef: ${humanContextRef}`] : []),
     "- rules: 用完即弃；review-results；按 groupSnapshot 判断单个回填、继续等待或整组验收；证据通过且目标未完成且存在 eligible task 时才创建下一批 dispatch；没有任务、目标完成或需要用户裁决时停止，不创建下一跳；禁止为回跳本身再次回跳。",
     "- skill: codex-control-workspace/skills/dev/codex-automation-controller/SKILL.md",
   ].join("\n");
@@ -1408,6 +1471,152 @@ function buildReviewPack(review) {
   };
 }
 
+function stateRootTargetResults(stateRoot) {
+  const dir = path.join(stateRoot, "target-results");
+  if (!existsSync(dir)) return [];
+  return listJsonFiles(dir).map((file) => ({
+    file,
+    result: readJson(file, "state-root target result"),
+  }));
+}
+
+function latestStateRootResultsByTargetTask(stateRoot) {
+  const latest = new Map();
+  for (const item of stateRootTargetResults(stateRoot)) {
+    const existing = latest.get(item.result.targetTaskId);
+    if (!existing || String(item.result.createdAt ?? "") >= String(existing.result.createdAt ?? "")) {
+      latest.set(item.result.targetTaskId, item);
+    }
+  }
+  return latest;
+}
+
+function stateRootEvidenceRefSummary(stateRoot, stateRootRef, ref) {
+  const text = String(ref ?? "");
+  const looksLikePath = text.includes("/") || /\.(json|md|log|txt|png|jpg|jpeg|webp|html|csv)$/i.test(text);
+  const resolvedPath = looksLikePath
+    ? (path.isAbsolute(text) ? text : path.resolve(stateRoot, text))
+    : "";
+  return {
+    ref: text,
+    looksLikePath,
+    exists: Boolean(resolvedPath && existsSync(resolvedPath)),
+    path: resolvedPath && existsSync(resolvedPath) ? path.relative(workspaceRoot, resolvedPath) : undefined,
+    stateRootRelativePath: looksLikePath ? path.join(stateRootRef, text) : undefined,
+  };
+}
+
+function buildStateRootReviewPack(stateRoot) {
+  const { state, stateRootRef } = readControllerStateRoot(stateRoot);
+  const resultsByTask = latestStateRootResultsByTargetTask(stateRoot);
+  const targetTasks = state.targetTasks ?? [];
+  const targetResults = targetTasks.map((task) => {
+    const item = resultsByTask.get(task.targetTaskId);
+    const result = item?.result ?? null;
+    const evidenceRefs = Array.isArray(result?.evidenceRefs) ? result.evidenceRefs : [];
+    const verificationSummary = Array.isArray(result?.verification) ? result.verification : [];
+    return {
+      targetWindow: task.targetWindow,
+      taskId: task.targetTaskId,
+      taskPackageId: task.taskPackageId,
+      resultId: result?.resultId,
+      resultStatus: result?.status || "missing",
+      resultFile: item ? path.relative(workspaceRoot, item.file) : undefined,
+      evidenceRefs,
+      evidenceRefSummaries: evidenceRefs.map((ref) => stateRootEvidenceRefSummary(stateRoot, stateRootRef, ref)),
+      verificationSummary,
+      riskSummary: Array.isArray(result?.risks) ? result.risks : [],
+      reportedAt: result?.createdAt,
+      hasControllerReviewEvidence: evidenceRefs.length > 0 || verificationSummary.length > 0,
+      stateRootResult: true,
+    };
+  });
+  const missing = targetResults.filter((item) => item.resultStatus === "missing");
+  const blocked = targetResults.filter((item) => item.resultStatus === "blocked");
+  const ready = targetResults.filter((item) => item.resultStatus !== "missing" && item.resultStatus !== "blocked");
+  const decision = missing.length > 0
+    ? "wait"
+    : blocked.length > 0
+      ? "blocked"
+      : "needs-controller-review";
+  const groupStatus = missing.length > 0
+    ? ready.length > 0 || blocked.length > 0 ? "partially-ready" : "waiting"
+    : blocked.length > 0 ? "blocked" : "ready";
+  const groupSnapshot = {
+    groupId: state.demandKey,
+    returnPolicy: { mode: "group-ready" },
+    groupStatus,
+    expected: targetResults.map((item) => ({
+      packetId: item.taskId,
+      targetWindow: item.targetWindow,
+      taskId: item.taskId,
+      status: item.resultStatus,
+      resultFile: item.resultFile,
+    })),
+    completed: targetResults.filter((item) => item.resultStatus === "completed"),
+    ready,
+    blocked,
+    missing,
+    needsReview: targetResults.filter((item) => item.resultStatus === "needs-review"),
+    expectedTargets: [...new Set(targetTasks.map((item) => item.targetWindow))],
+    completedTargets: [...new Set(targetResults.filter((item) => item.resultStatus === "completed").map((item) => item.targetWindow))],
+    readyTargets: [...new Set(ready.map((item) => item.targetWindow))],
+    blockedTargets: [...new Set(blocked.map((item) => item.targetWindow))],
+    missingTargets: [...new Set(missing.map((item) => item.targetWindow))],
+    allResultsPresent: missing.length === 0,
+    stateRoot: stateRootRef,
+  };
+  const reviewReady = decision !== "wait";
+  return {
+    kind: "ControllerReviewPack",
+    version,
+    source: "controller-state-root",
+    demandKey: state.demandKey,
+    stateRoot: stateRootRef,
+    stateRevision: state.revision,
+    controllerState: state.state,
+    decision,
+    returnPolicy: groupSnapshot.returnPolicy,
+    groupStatus,
+    groupSnapshot,
+    controllerReturnDelivery: {
+      status: "not-applicable",
+      reason: "state-root review pack is independent of controller-return delivery evidence",
+    },
+    targetResults,
+    rawEvidenceRequired: targetResults
+      .filter((item) => item.resultStatus !== "missing")
+      .map((item) => ({
+        targetWindow: item.targetWindow,
+        taskId: item.taskId,
+        resultStatus: item.resultStatus,
+        evidenceRefs: item.evidenceRefs,
+        verificationSummary: item.verificationSummary,
+        hasControllerReviewEvidence: item.hasControllerReviewEvidence,
+      })),
+    gates: {
+      controllerReviewReady: reviewReady,
+      waitForMissingResults: decision === "wait",
+      blockedResultsPresent: blocked.length > 0,
+      controllerReturnSent: false,
+      rawEvidencePullRequired: reviewReady,
+      totalControlVerdictRequired: reviewReady,
+      stateRootBased: true,
+    },
+    nextAction: decision === "wait"
+      ? "wait-for-state-root-target-result"
+      : decision === "blocked"
+        ? "pull-block-evidence-and-run-controller-state-reducer"
+        : "pull-raw-evidence-and-run-controller-state-reducer",
+    forbiddenConclusions: [
+      "review-pack-is-controller-acceptance",
+      "review-pack-creates-next-dispatch",
+      "review-pack-updates-developer-progress",
+    ],
+    generatedAt: nowIso(),
+  };
+}
+
 function buildWindowConfig(windowName, { requireThread = false } = {}) {
   const registration = loadThreadRegistration(windowName);
   if (requireThread && !registration) fail(`No registered thread for window: ${windowName}`);
@@ -1521,29 +1730,39 @@ function commandBuildWindowConfig() {
 
 function buildDispatchArtifacts({
   contextPolicy,
-  controlPlan,
   controllerWindow = "",
   dispatchGroup = "",
   evidenceRequired = [],
   forbidden = [],
+  humanContextRef = "",
   objective,
   returnPolicyMode = "",
   scope = [],
+  stateRef = null,
   targetWindow,
   taskId,
 }) {
+  if (!stateRef) fail("dispatch requires stateRef from controller state root.");
   if (returnPolicyMode && !dispatchGroup) fail("--return-policy requires --group.");
   if (returnPolicyMode) validateReturnPolicyMode(returnPolicyMode);
-  const prompt = formatTargetPrompt({ targetWindow, taskId, controlPlan, dispatchGroup, controllerWindow });
+  const prompt = formatTargetPrompt({
+    targetWindow,
+    taskId,
+    dispatchGroup,
+    controllerWindow,
+    humanContextRef,
+    stateRef,
+  });
   if (!prompt) fail("Prompt cannot be empty.");
 
   const id = [dispatchGroup, targetWindow, taskId].filter(Boolean).map(slug).join("__");
   const dispatchGroupRecord = dispatchGroup
     ? upsertDispatchGroup({
         groupId: dispatchGroup,
-        controlPlan,
         controllerWindow,
+        humanContextRef,
         returnPolicyMode,
+        stateRef,
         targetWindow,
         taskId,
         packetId: id,
@@ -1557,7 +1776,8 @@ function buildDispatchArtifacts({
     taskId,
     dispatchGroup: dispatchGroup || undefined,
     controllerWindow: controllerWindow || undefined,
-    controlPlan,
+    humanContextRef: humanContextRef || undefined,
+    stateRef: stateRef || undefined,
     objective,
     scope,
     forbidden,
@@ -1581,47 +1801,6 @@ function writeDispatchArtifacts({ dispatchGroup = "", dispatchGroupRecord, packe
   atomicWriteJson(packetFile, packet);
 }
 
-function commandCreateDispatch() {
-  const targetWindow = requireValue("--target-window");
-  const taskId = requireValue("--task-id");
-  const controlPlan = requireValue("--control-plan");
-  const objective = requireValue("--objective");
-  const controllerWindow = getValue("--controller-window", "");
-  const dispatchGroup = getValue("--group", "");
-  const { dispatchGroupRecord, packet, packetFile } = buildDispatchArtifacts({
-    contextPolicy: getValue("--context-policy", "refresh-if-missing"),
-    controlPlan,
-    controllerWindow,
-    dispatchGroup,
-    evidenceRequired: getAllValues("--evidence"),
-    forbidden: getAllValues("--forbidden"),
-    objective,
-    returnPolicyMode: getValue("--return-policy", ""),
-    scope: getAllValues("--scope"),
-    targetWindow,
-    taskId,
-  });
-  if (write) {
-    writeDispatchArtifacts({ dispatchGroup, dispatchGroupRecord, packet, packetFile });
-  }
-  output(
-    {
-      ok: true,
-      command: "create-dispatch",
-      wrote: write,
-      packet,
-      dispatchGroup: dispatchGroupRecord,
-      packetFile: write ? path.relative(workspaceRoot, packetFile) : "",
-      dispatchGroupFile: write && dispatchGroupRecord ? path.relative(workspaceRoot, groupFileFor(dispatchGroup)) : "",
-    },
-    [
-      `${write ? "Created" : "Would create"} dispatch packet ${packet.id}.`,
-      `Target: ${targetWindow}`,
-      `Task: ${taskId}`,
-    ],
-  );
-}
-
 function buildDeliveryArtifacts({
   automationEnabled = false,
   deliveryId = "",
@@ -1632,6 +1811,7 @@ function buildDeliveryArtifacts({
 }) {
   if (packet.kind !== "ControllerDispatchPacket") fail("Packet file must contain a ControllerDispatchPacket.");
   if (!packet.targetWindow || !packet.prompt || !packet.taskId) fail("Dispatch packet is missing targetWindow, taskId, or prompt.");
+  if (!packet.stateRef) fail("Dispatch packet is missing stateRef; legacy Markdown-plan packets are no longer supported.");
 
   const registration = loadThreadRegistration(packet.targetWindow);
   if (requireThread && !registration) fail(`No registered thread for target window: ${packet.targetWindow}`);
@@ -1646,7 +1826,8 @@ function buildDeliveryArtifacts({
     taskId: packet.taskId,
     dispatchGroup: packet.dispatchGroup,
     controllerWindow: packet.controllerWindow,
-    controlPlan: packet.controlPlan,
+    humanContextRef: packet.humanContextRef,
+    stateRef: packet.stateRef,
     prompt: packet.prompt,
     returnPolicy: packet.returnPolicy,
     returnRoute: validateReturnRoute(returnRoute),
@@ -1715,28 +1896,61 @@ function commandBuildDelivery() {
   );
 }
 
-function commandPrepareDispatch() {
-  const targetWindow = requireValue("--target-window");
-  const taskId = requireValue("--task-id");
-  const controlPlan = requireValue("--control-plan");
-  const objective = requireValue("--objective");
+function commandPrepareDispatchFromState() {
+  const stateRoot = resolveStateRoot(requireValue("--state-root"));
+  const { state, stateRootRef } = readControllerStateRoot(stateRoot);
+  const targetTaskId = requireValue("--target-task-id");
+  const targetTask = (state.targetTasks ?? []).find((item) => item.targetTaskId === targetTaskId);
+  if (!targetTask) fail(`target task does not exist in controller state: ${targetTaskId}`);
+  const taskPackageId = getValue("--task-package-id", targetTask.taskPackageId);
+  if (!taskPackageId) fail(`target task ${targetTaskId} is missing taskPackageId.`);
+  if (targetTask.taskPackageId && taskPackageId !== targetTask.taskPackageId) {
+    fail(`target task ${targetTaskId} belongs to task package ${targetTask.taskPackageId}, not ${taskPackageId}`);
+  }
+  const taskPackage = readTaskPackageFromStateRoot(stateRoot, taskPackageId);
+  const targetWindow = targetTask.targetWindow;
+  if (!targetWindow) fail(`target task ${targetTaskId} is missing targetWindow.`);
   const controllerWindow = getValue("--controller-window", "");
-  const dispatchGroup = getValue("--group", "");
+  const dispatchGroup = getValue("--group", taskPackageId);
   const automationEnabled = hasFlag("--automation-enabled");
   const requireThread = hasFlag("--require-thread");
   const windowConfig = buildWindowConfig(targetWindow, { requireThread });
+  const humanContextRef = getValue(
+    "--human-context-ref",
+    state.projection?.progressDoc ? path.join(stateRootRef, state.projection.progressDoc) : stateRootRef,
+  );
+  const stateRef = {
+    stateRoot: stateRootRef,
+    demandKey: state.demandKey,
+    taskPackageId,
+    targetTaskId,
+    stateRevision: state.revision,
+  };
   const { dispatchGroupRecord, packet, packetFile } = buildDispatchArtifacts({
     contextPolicy: getValue("--context-policy", "refresh-if-missing"),
-    controlPlan,
     controllerWindow,
     dispatchGroup,
-    evidenceRequired: getAllValues("--evidence"),
-    forbidden: getAllValues("--forbidden"),
-    objective,
+    evidenceRequired: [
+      ...getAllValues("--evidence"),
+      "TargetResultEnvelope with evidence refs; target result is not controller acceptance.",
+    ],
+    forbidden: [
+      ...getAllValues("--forbidden"),
+      "Do not treat dispatch packet, delivery run, or target result as total-control acceptance.",
+      "Do not parse developer-progress.md as state authority.",
+    ],
+    humanContextRef,
+    objective: getValue("--objective", targetTask.summary || taskPackage.summary || `Complete ${targetTaskId}.`),
     returnPolicyMode: getValue("--return-policy", ""),
-    scope: getAllValues("--scope"),
+    scope: [
+      ...getAllValues("--scope"),
+      `demandKey=${state.demandKey}`,
+      `taskPackageId=${taskPackageId}`,
+      `targetTaskId=${targetTaskId}`,
+    ],
+    stateRef,
     targetWindow,
-    taskId,
+    taskId: targetTaskId,
   });
   const { deliveryFile, envelope, registration } = buildDeliveryArtifacts({
     automationEnabled,
@@ -1761,9 +1975,14 @@ function commandPrepareDispatch() {
   output(
     {
       ok: true,
-      command: "prepare-dispatch",
+      command: "prepare-dispatch-from-state",
       wrote: write,
       keepLive,
+      stateRoot: stateRootRef,
+      stateRevision: state.revision,
+      taskPackageId,
+      targetTaskId,
+      humanContextRef,
       windowName: targetWindow,
       windowConfig,
       configFile: write ? path.relative(workspaceRoot, windowConfigFileFor(targetWindow)) : "",
@@ -1775,12 +1994,17 @@ function commandPrepareDispatch() {
       deliveryFile: write ? path.relative(workspaceRoot, deliveryFile) : "",
       threadReady: Boolean(registration),
       threadIdRedacted: Boolean(registration),
+      forbiddenConclusions: [
+        "prepared-dispatch-is-host-send",
+        "prepared-dispatch-is-target-result",
+        "prepared-dispatch-is-controller-acceptance",
+      ],
     },
     [
-      `${write ? "Prepared" : "Would prepare"} dispatch + delivery for ${targetWindow} / ${taskId}.`,
+      `${write ? "Prepared" : "Would prepare"} state-root dispatch + delivery for ${targetWindow} / ${targetTaskId}.`,
+      `State root: ${stateRootRef}`,
       `Thread: ${registration ? "registered" : "missing"}`,
       `Delivery: ${path.relative(workspaceRoot, deliveryFile)}`,
-      `Next: send prompt with host thread tool, then record-delivery-run.`,
     ],
   );
 }
@@ -1789,12 +2013,21 @@ function commandBuildControllerReturn() {
   const dispatchGroup = requireValue("--group");
   const triggerTarget = requireValue("--trigger-target");
   const triggerTaskId = requireValue("--trigger-task-id");
-  const controlPlan = requireValue("--control-plan");
   const config = readWorkspaceConfig();
   const explicitControllerWindow = getValue("--controller-window", "");
   const returnReason = validateReturnReason(getValue("--return-reason", "result-ready"));
   const automationEnabled = hasFlag("--automation-enabled");
   const review = computeReviewResults({ group: dispatchGroup });
+  const inheritedStateRef = review.groupRecord?.stateRef
+    || review.packets.find((packet) => packet.stateRef)?.stateRef
+    || null;
+  const inheritedHumanContextRef = review.groupRecord?.humanContextRef
+    || review.packets.find((packet) => packet.humanContextRef)?.humanContextRef
+    || "";
+  const humanContextRef = getValue("--human-context-ref", inheritedHumanContextRef || "");
+  if (!inheritedStateRef) {
+    fail("build-controller-return requires stateRef from a state-root dispatch group.");
+  }
   const storedControllerWindow = review.groupRecord?.controllerWindow
     || review.packets.find((packet) => packet.controllerWindow)?.controllerWindow
     || "";
@@ -1813,7 +2046,8 @@ function commandBuildControllerReturn() {
     controllerWindow,
     triggerTarget,
     triggerTaskId,
-    controlPlan,
+    humanContextRef,
+    stateRef: inheritedStateRef,
     returnPolicy: review.returnPolicy,
     reviewScope,
     groupSnapshot: review.groupSnapshot,
@@ -1829,7 +2063,8 @@ function commandBuildControllerReturn() {
     returnPolicy: review.returnPolicy,
     groupSnapshot: review.groupSnapshot,
     reviewScope,
-    controlPlan,
+    humanContextRef: humanContextRef || undefined,
+    stateRef: inheritedStateRef || undefined,
     prompt,
     oneShot: true,
     targetThread: registration
@@ -2198,6 +2433,31 @@ function commandReviewResults() {
 }
 
 function commandReviewPack() {
+  const stateRootArg = getValue("--state-root", "");
+  if (stateRootArg) {
+    const stateRoot = resolveStateRoot(stateRootArg);
+    const reviewPack = buildStateRootReviewPack(stateRoot);
+    output(
+      {
+        ok: true,
+        command: "review-pack",
+        source: "controller-state-root",
+        stateRoot: reviewPack.stateRoot,
+        stateRevision: reviewPack.stateRevision,
+        demandKey: reviewPack.demandKey,
+        decision: reviewPack.decision,
+        groupStatus: reviewPack.groupStatus,
+        reviewPack,
+      },
+      [
+        `Review pack: state root ${reviewPack.stateRoot}`,
+        `Decision: ${reviewPack.decision}`,
+        `Targets: ${reviewPack.groupSnapshot.expectedTargets.join(", ") || "(none)"}`,
+        `Next: ${reviewPack.nextAction}`,
+      ],
+    );
+    return;
+  }
   const group = getValue("--group", "");
   const taskId = getValue("--task-id", "");
   const review = computeReviewResults({ group, taskId });
@@ -2264,14 +2524,11 @@ try {
     case "build-window-config":
       commandBuildWindowConfig();
       break;
-    case "create-dispatch":
-      commandCreateDispatch();
-      break;
     case "build-delivery":
       commandBuildDelivery();
       break;
-    case "prepare-dispatch":
-      commandPrepareDispatch();
+    case "prepare-dispatch-from-state":
+      commandPrepareDispatchFromState();
       break;
     case "build-controller-return":
       commandBuildControllerReturn();

@@ -171,7 +171,7 @@
 - 总控窗口拥有 automation 合规审计和删除权。任何当前 automation 若无法对应当前用户目标、当前总控计划、合法 dispatch group / task、目标窗口、真实 thread id、`TestWindow` 边界或一次性投递策略，必须删除并记录原因；不得为了“不中断自动化”保留不合规循环。
 - direct thread dispatch 是正常工作流水线；自动化开启只表示当前总控计划允许无人值守持续闭环，不表示用户在电脑前的普通讨论、Design 需求设计、总控决策讨论或单窗口开发都自动进入无人值守循环。每次仍按最新用户输入和当前窗口职责判断。
 - 一旦用户明确开启无人值守自动化，默认进入 continuous / infinite loop 形态：总控在已确认最终目标、完成定义、仓库边界和可领取 TODO 内持续 review result、拉原始证据、裁决、补计划、创建下一批 dispatch 并继续 direct thread 投递；不得把阶段完成、计划刷新或“给用户看下一阶段计划”当成默认停点。停止条件只能是最终目标完成、硬门禁、用户停止、无可领取 TODO、证据不足必须人工裁决或当前计划明确禁止继续。
-- 新闭环默认入口是 `node scripts/codex-automation-loop.mjs`。常用命令语义：`create-dispatch` 只创建总控分派包并更新 `DispatchGroup.controllerWindow` / `DispatchGroup.returnPolicy`；`build-delivery` 只创建投递信封；`submit-result` 只记录子窗口结果信封；`review-results` 只汇总 ready / missing / blocked 结果和回调策略；`build-controller-return` 只按 `DispatchGroup.controllerWindow` / `DispatchGroup.returnPolicy` 创建待发送到原发起总控的回跳信封；`stop-loop` 只关闭后续投递意图。任何命令都不能替代总控验收。
+- 新闭环默认入口是 `node scripts/controller-state.mjs` + `node scripts/codex-automation-loop.mjs`。`controller-state` 维护独立机器状态根、任务包、target result、reducer candidate 和显式总控决策；`codex-automation-loop` 只维护 dispatch packet / delivery envelope / direct-thread delivery evidence / controller return 等 transport 机器数据。常用命令语义：`prepare-dispatch-from-state` 只从 state root 创建总控分派包和投递信封；`build-delivery` 只创建投递信封；`submit-result` 只记录 dispatch-group transport result；`review-pack --state-root` / `review-results` 只汇总 ready / missing / blocked 结果和回调策略；`build-controller-return` 只按 state-root dispatch group 的 `controllerWindow` / `returnPolicy` 创建待发送到原发起总控的回跳信封；`stop-loop` 只关闭后续投递意图。任何命令都不能替代总控验收。
 - 正常启动 / 续跑优先走轻量闭环：总控先决定任务包和目标窗口，再生成 dispatch packet / delivery envelope；delivery adapter 使用 direct thread dispatch；缺真实 thread id、host send 能力不可用或目标线程不可投递时必须 fail closed 回到总控裁决，不创建旧 automation 投递路线；子窗口返回 result envelope；总控再 pull 原始证据裁决。不要把完整 preflight、全量 verify、长审计当作每次启动前置。
 - macOS keep-live / 防睡眠只属于无人值守 automation support，不是任务逻辑、投递 transport 或验收证据。若用户明确开启自动化，应同时开启 keep-live；若 keep-live 启动或停止失败，必须报告为自动化就绪风险，不得假装可靠。
 - direct thread 提示词必须是轻量唤醒信封，只放动态变量、规则名和对应 skill 指向；首行必须是任务语义，例如“继续当前窗口任务”或“继续总控验收”，不得以机制名开头抢占 UI 第一视线；不得把完整命令手册复制进提示词。direct send 成功只证明投递，不证明任务完成。
@@ -218,7 +218,7 @@ TODO / Backlog、窗口覆盖、任务包和新闭环命令细节见 `skills/dev
 
 - 当用户要求检查、升级或选择 workspace 脚本，评估流水线是否可继续自动化，或判断是否需要脚本使用 skill 时，读取 `skills/dev/control-workspace-governance/SKILL.md`，并按 `references/script-pipeline.md` 执行细则。
 - `scripts/README.md` 是 workspace 脚本入口索引；新增、重命名或删除 `scripts/*.mjs` 后，必须同步更新该索引，并运行 `node scripts/check-script-docs.mjs`。
-- 新建或调整当前总控计划、Design handoff board、测试交流、归档入口或相关模板时，必须遵守 `scripts/README.md` 中的脚本可读格式说明和 `templates/workspace-control-plan-template.md`；不要随意重命名脚本依赖章节或改变窗口分派 / TODO / 任务包表结构。
+- 新建或调整状态机需求根、开发者推进文档、Design handoff board、测试交流、归档入口或相关模板时，必须遵守 `scripts/README.md` 中的脚本可读格式说明。新需求使用 `templates/control-state-machine/` 与 `controller-state.mjs`；开发者推进文档只允许脚本更新统一状态块，其余补充走追加日志。不要随意重命名脚本依赖章节或改变状态机、target result、reducer candidate、窗口分派和回填证据的机器字段。
 - `node scripts/verify-control-center.mjs` 是默认总控验证编排；不要把它能自动覆盖的机械检查重复拆成口头流程，除非当前任务只需要其中一个更小脚本。
 - 写入型脚本必须默认 dry-run 或显式 check，只有用户目标或当前总控文档需要写入时才使用 `--write` / `--apply`。
 
@@ -252,7 +252,7 @@ TODO / Backlog、窗口覆盖、任务包和新闭环命令细节见 `skills/dev
   - 做 TODO / Backlog 入账、滚动、优先级、空闲窗口调度时，读 `skills/dev/control-workspace-governance/references/todo-backlog.md`；TODO 不替代用户目标和完成定义。
   - 做 wave、任务包、窗口覆盖、producer / consumer 顺序和可复制提示词时，读 `skills/dev/control-workspace-governance/references/window-dispatch.md`；分派前的定位声明和上游证据门禁仍留在 `AGENTS.md`。
   - 做测试边界、`TestWindow` 交接、证据解释和验证命令选择时，读 `skills/dev/control-workspace-governance/references/testing-validation.md`；总控默认自测和 `TestWindow` 真实场景边界仍留在 `AGENTS.md`。
-  - 做脚本维护、脚本验证、Design handoff 导入、current plan 同步和 runtime 检查时，读 `skills/dev/control-workspace-governance/references/script-pipeline.md`；脚本不得替代总控判断仍留在 `AGENTS.md`。
+  - 做脚本维护、脚本验证、Design handoff 导入、controller state root / developer progress 投影和 runtime 检查时，读 `skills/dev/control-workspace-governance/references/script-pipeline.md`；脚本不得替代总控判断仍留在 `AGENTS.md`。
   - 做 workspace 文档落点、索引、归档、模板字段和 skill 资产账本时，读 `skills/dev/control-workspace-governance/references/workspace-ledgers.md`；workspace 不跟踪子仓库和真实测试项目仍留在 `AGENTS.md`。
   - 做 Codex Automation Closed Loop、dispatch packet、delivery envelope、target result envelope、controller review 或自动化投递 / 回跳时，读 `skills/dev/control-workspace-governance/references/codex-automation-loop.md`；总控裁决权、thread id 真实性和 `TestWindow` 边界仍留在 `AGENTS.md`，且不得把旧 `claim / finish / chain-next` 当新闭环核心协议。
   - 做跨仓库迁移、能力抽取、删除清理或发布封口时，读 `skills/dev/control-workspace-governance/references/phased-migration.md`；不得薄实现、空壳迁移或提前删除仍留在 `AGENTS.md`。

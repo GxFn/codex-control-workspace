@@ -20,8 +20,7 @@ paths, secrets, or one-off decisions.
 - [requirement-design-template.md](requirement-design-template.md)：需求设计文档模板。
 - [workspace-signal-template.md](workspace-signal-template.md)：`DesignWindow` 给总控的轻量 bug / TODO / research / decision signal 模板。
 - [workspace-handoff-template.md](workspace-handoff-template.md)：`DesignWindow` 给总控的完整需求设计 / 方案交接模板。
-- [workspace-control-plan-template.md](workspace-control-plan-template.md)：当前总控计划模板，包含目标判断、任务包、窗口分派、测试边界和 `workspace-sync` 脚本锚点。
-- [workspace-task-package-template.md](workspace-task-package-template.md)：总控 wave 派发中的任务包模板，用于把当前阶段主线动作和可关闭 TODO 合并成可验收任务包。
+- [control-state-machine/](control-state-machine/)：新统一状态机需求根目录的可复用模板；安装 / 初始化脚本用它创建 ignored active state root 和唯一 `developer-progress.md`。
 - [starter-workspace/](starter-workspace/)：安装时生成 `.workspace-active/workspace/` 初始活跃账本的模板。
 - [window-support/](window-support/)：内部 `DesignWindow` / `TestWindow` 支撑文件模板；外部窗口安装时也从这里同步必要文件。
 

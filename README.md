@@ -113,9 +113,9 @@ The strongest rules stay there because they are safety rails for the controller 
 
 ### Current Work
 
-`.workspace-active/workspace/index.md` is the active control entrypoint. It points to the current plan, current status, TODO board, test exchange, design inbox, and automation state.
+`.workspace-active/workspace/index.md` is the active control entrypoint. It points to the current status, active controller state roots / developer progress documents, TODO board, test exchange, design inbox, and automation state.
 
-Current plans are short-lived. They describe the present goal, task packages, window coverage, producer / consumer order, validation commands, and backfill requirements. When finished, important evidence is moved to `../workspace-ledger/`.
+New demands use one developer-readable progress document plus a machine state root. The progress document explains the present goal, completion definition, stage plan, task packages, append-only backfill summaries, and decisions; its `Unified Status` block is generated from JSON state. Legacy current plans remain readable for migration, but they are no longer the default automation authority.
 
 ### Child Windows
 
@@ -123,7 +123,7 @@ Each child repository keeps its own `AGENTS.md`. The control installer adds a co
 
 - where the control workspace is;
 - which window name it owns;
-- where the current plan and ledger are;
+- where the state root / progress document and ledger are;
 - how to execute an assigned dispatch packet and return a result envelope;
 - when to stop and report back.
 
@@ -137,14 +137,16 @@ The script layer manages explicit packets and envelopes:
 
 ```sh
 node scripts/workspace-control.mjs loop register-thread --window <window> --thread-id <realThreadId> --write --json
-node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --group <group> --controller-window <controllerWindow> --return-policy group-ready --control-plan <plan> --objective "<objective>" --write --json
-node scripts/workspace-control.mjs loop build-delivery --packet-file <packetFile> --require-thread --write --json
-node scripts/workspace-control.mjs loop submit-result --target-window <window> --task-id <taskId> --status completed --evidence-ref <ref> --write --json
-node scripts/workspace-control.mjs loop review-results --group <group> --json
-node scripts/workspace-control.mjs loop build-controller-return --group <group> --trigger-target <window> --trigger-task-id <taskId> --control-plan <plan> --require-thread --write --json
+node scripts/controller-state.mjs init --demand-key <key> --title "<title>" --write --json
+node scripts/controller-state.mjs add-task-package --state-root <stateRoot> --task-package-id <taskPackageId> --summary "<summary>" --target-window <window> --target-task-id <taskId> --write --json
+node scripts/workspace-control.mjs loop prepare-dispatch-from-state --state-root <stateRoot> --target-task-id <taskId> --group <group> --controller-window <controllerWindow> --human-context-ref <stateRoot>/developer-progress.md --require-thread --write --json
+node scripts/controller-state.mjs import-target-result --state-root <stateRoot> --target-window <window> --target-task-id <taskId> --status completed --evidence-ref <ref> --write --json
+node scripts/workspace-control.mjs loop review-pack --state-root <stateRoot> --json
+node scripts/controller-state.mjs reduce-results --state-root <stateRoot> --write --json
+node scripts/controller-state.mjs decide-review --state-root <stateRoot> --candidate-id <candidateId> --decision accept --reason "<reason>" --write --json
 ```
 
-The script layer prepares dispatch packets and delivery envelopes; it does not by itself prove that a prompt reached a target thread. A Codex controller window or delivery adapter must record the actual transport action with direct thread send readback / delivery-run evidence. The target window then reports a `TargetResultEnvelope`.
+The script layer prepares dispatch packets and delivery envelopes; it does not by itself prove that a prompt reached a target thread. A Codex controller window or delivery adapter must record the actual transport action with direct thread send readback / delivery-run evidence. The target window then writes a target result JSON. Result import does not accept work; `reduce-results` and explicit `decide-review` are separate controller steps.
 
 Callback behavior is part of the `DispatchGroup` protocol. Total control chooses `controller-window` and `return-policy` when the group is created: `controller-window` fixes the originating controller that receives the callback, `group-ready` creates one barrier callback after all expected targets return, while `per-target` lets each completed target wake total control with a group snapshot that still lists completed, blocked, and missing targets.
 
@@ -159,12 +161,15 @@ Start with the active control surface:
 ```sh
 node scripts/workspace-control.mjs status
 node scripts/workspace-control.mjs loop status --json
-node scripts/verify-control-center.mjs --require-task-packages --with-script-tests
+node scripts/verify-control-center.mjs --with-script-tests
 ```
 
-For ordinary manual dispatch, the controller writes one prompt for all windows: read the parent `AGENTS.md`, read the current plan, read your own repository `AGENTS.md`, declare your window identity, do only the task assigned to your window, and backfill evidence.
+For ordinary manual dispatch, the controller writes one prompt for all windows:
+read the parent `AGENTS.md`, read the state root / developer progress
+document, read your own repository `AGENTS.md`, declare your window identity,
+do only the task assigned to your window, and backfill evidence.
 
-For unattended work, use Codex Automation Closed Loop only when the current plan explicitly allows it. Turning it on does not make every conversation automatic; it only authorizes the current plan's target fan-out, result review, and next-wave decisions. Manual developer input always outranks the next automated dispatch.
+For unattended work, use Codex Automation Closed Loop only when the controller state root and user goal explicitly allow it. Turning it on does not make every conversation automatic; it only authorizes that demand's target fan-out, result review, and next-wave decisions. Manual developer input always outranks the next automated dispatch.
 
 ## Repository Layout
 
@@ -172,12 +177,12 @@ For unattended work, use Codex Automation Closed Loop only when the current plan
 | --- | --- |
 | `AGENTS.md` | Source total-control instructions, unpacked to the parent workspace root. |
 | `workspace.config.json` | Generic window names, repository paths, role labels, and script defaults. |
-| `.workspace-active/` | Ignored current control surface: current plans, TODOs, test exchange, design inbox. |
+| `.workspace-active/` | Ignored current control surface: controller state roots, developer progress docs, TODOs, test exchange, design inbox. |
 | `.workspace-local/` | Ignored local runtime: thread ids, automation loop state, local config override. |
 | `../workspace-ledger/` | Project-specific long-term records outside the generic repository. |
 | `scripts/` | Installation, validation, ledger, automation, and control helper scripts. |
 | `skills/` | Operational manuals for total control, target windows, testing, ledgers, and automation. |
-| `templates/` | Minimal skeletons for plans, task packages, design handoff, tests, and confirmations. |
+| `templates/` | Minimal skeletons for controller state roots, developer progress docs, design handoff, tests, and confirmations. |
 
 ## Design Philosophy
 

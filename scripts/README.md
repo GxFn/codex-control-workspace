@@ -7,312 +7,160 @@ Scripts in this directory should:
 
 - operate from the workspace root unless documented otherwise;
 - avoid secrets, tokens, local absolute paths, and network access by default;
-- avoid writing into child source repositories unless the user has confirmed
-  an install-scope `AGENTS.md` write, or a current control plan explicitly
-  assigns that work;
+- avoid writing into child source repositories unless the user has confirmed an
+  install-scope `AGENTS.md` write or an active controller state root assigns the
+  work;
 - report clear pass/fail evidence that can be pasted into workspace docs;
-- when used by automation, finish with an explicit agent-facing completion
-  cue. JSON output should expose `scriptComplete: true` and `agentNext`; text
-  output should end with a concise `Agent next:` line. The cue is not a
-  verdict, only the next control action for Codex to consider.
+- when used by automation, finish with an explicit agent-facing completion cue.
+  JSON output should expose `scriptComplete: true` and `agentNext`; text output
+  should end with a concise `Agent next:` line. The cue is not a verdict.
 
 Node CLI exit policy:
 
-- Prefer setting `process.exitCode` and letting the event loop drain instead
-  of calling `process.exit()` after printing important stdout / stderr.
+- Prefer setting `process.exitCode` and letting the event loop drain instead of
+  calling `process.exit()` after printing important stdout / stderr.
 - Reserve direct `process.exit()` for explicit worker processes after cleanup.
-- `check-script-docs.mjs` enforces this policy. Normal CLI scripts must use
-  `process.exitCode` and controlled returns so Codex can continue after output
-  has flushed.
+- `check-script-docs.mjs` enforces this policy.
 - Long-running background helpers must avoid holding the short-lived CLI open:
-  spawn them with ignored stdio, detach only when they intentionally outlive
-  the command, call `unref()`, and provide a local stop marker or equivalent
-  shutdown path.
+  spawn them with ignored stdio, detach only when they intentionally outlive the
+  command, call `unref()`, and provide a local stop marker.
 
 Human-facing document policy:
 
-- Users should normally read only the goal / stage confirmation document and
-  the current workspace control plan with its window task packages.
-- Repeated status surfaces, generated inboxes, format anchors, archive maps,
-  and script verification notes should stay script-owned and short.
+- Users should normally read only the goal / stage confirmation document and the
+  single developer progress document for the active controller state root.
+- Repeated status surfaces, generated inboxes, format anchors, archive maps, and
+  script verification notes should stay script-owned and short.
 
 Script-readable document format:
 
-- New current plans should start from
-  `templates/workspace-control-plan-template.md` so `workspace-sync`, dispatch,
-  TODO, task-package, prompt, test handoff, and backfill anchors are present
-  before scripts run.
-- Current plans that drive `sync-current-plan.mjs` may include:
-
-```md
-状态：<!-- workspace-state:plan -->待脚本同步<!-- /workspace-state:plan -->
-
-...
-
-<!-- workspace-sync
-{
-  "state": {
-    "id": "paused",
-    "note": "<optional display note>"
-  },
-  "indexPlanDescription": "<index current-plan row summary>",
-  "indexStatusDescription": "<index current-status row summary>",
-  "currentIndexType": "当前计划",
-  "currentIndexDescription": "<current index summary>",
-  "currentStatusSummary": "<first summary bullet after the current-plan link>",
-  "indexRows": [],
-  "currentIndexRows": []
-}
--->
-```
-
-- `workspace-sync` is mechanical metadata only. It must not decide readiness,
-  TODO priority, Design acceptance, window acceptance, or product scope.
-- New state-machine driven plans should use `workspace-sync.state` and the
-  `workspace-state:plan` placeholder instead of hand-editing displayed status
-  text. The script renders human-readable status text into the plan, index, and
-  status mirror. Legacy `workspace-sync.status` remains readable only for
-  migration.
-- Keep `workspace-sync` after `## 回填区`, near the end of the current plan.
-  `sync-current-plan.mjs` fails closed if this script metadata is placed above
-  human-facing plan content.
-- `currentStatusSummary` is optional; when present, `sync-current-plan.mjs`
-  uses it to keep the concise status page from retaining stale mainline text.
-- Keep these section names stable when scripts need to read or sync them:
-  `目标判断`, `总控决策记录`, `任务包`, `TODO / Backlog`, `空闲窗口调度`,
-  `窗口分派`, `可复制分派提示词` / `可复制提示词`, `测试交接`, and `回填区`.
-- Current plans must include `总控决策记录` before mechanical sync or
-  acceptance checks. This section records what demand / evidence triggered the
-  doc update, whether the evidence answered the right question, what should be
-  verified or replanned first, and which conclusions are allowed or forbidden.
-- Window dispatch tables should keep the narrow form:
-  `| 窗口 / 状态 | 任务 |`.
-- TODO / idle scheduling tables should keep explicit ID, status, owner,
-  effect on dispatch / retest, send decision, and next-step fields.
-- Design handoff inboxes, test exchange docs, current indexes, archive maps,
-  and compact summaries are script or evidence surfaces; keep them concise and
-  link back to the human-facing current plan instead of duplicating it.
+- New demands start from a controller state root created by
+  `controller-state.mjs init`.
+- The root contains machine-owned `demand.json`, `controller-state.json`,
+  `controller-events.jsonl`, `task-packages/*.json`, `target-results/*.json`,
+  `transition-candidates/*.json`, and one developer-readable
+  `developer-progress.md`.
+- `developer-progress.md` is not state authority. Scripts may update only its
+  `<!-- unified-status:start -->` block via `render-progress-doc.mjs`; task
+  packages, backfill summaries, and decisions are append-only timestamped
+  sections managed by `append-progress-log.mjs`.
+- Design handoff inboxes, test exchange docs, current indexes, archive maps, and
+  compact summaries are evidence surfaces; keep them concise and link back to
+  the active progress document rather than duplicating it.
 
 Current scripts:
 
 - `workspace-control.mjs`: command-style aggregator for common control-center
-  workflows. It maps friendly subcommands such as `status`, `verify`,
-  `sync`, `dispatch`, `design`, `runtime`, `install`, `scripts`, `loop`,
-  `next-work`, and `pipeline`
-  onto the existing workspace scripts without replacing their dry-run / write
-  gates. Use `--print` to inspect the exact commands before running them.
-- `codex-automation-loop.mjs`: new CodexAutomationClosedLoop contract
-  surface. It creates explicit controller dispatch packets, turns a packet
-  into a delivery envelope, records target result envelopes, stores
-  dispatch-group return policy, reviews ready / missing / blocked group state,
-  emits review packs that gather result envelopes, target delivery evidence,
-  controller-return status, and raw evidence pointers for total-control
-  judgment, stores local thread registrations under
-  `.workspace-local/codex-automation-loop/`, and writes an explicit stop marker.
-  The direct-thread design adds local child-window config, delivery-run
-  evidence, controller-return envelopes, and macOS keep-live watcher
-  state/control files under the same ignored runtime root; tracked docs only
-  describe the schema and must not contain raw thread ids. `start-keep-live` /
-  `stop-keep-live` manage the local watcher for unattended runs, while
-  `stop-loop` closes future delivery intent and stops keep-live.
-  `prepare-dispatch` bundles the mechanical preparation of window config,
-  dispatch packet, and delivery envelope after total control has already chosen
-  the target; it deliberately stops before host thread send. The script does not
-  parse current plans, decide sendable windows, claim target work, create legacy
-  automations, send Codex thread messages, or accept evidence. Total control
-  owns planning and review, delivery adapters consume envelopes, and target
-  windows return result envelopes.
-- `control-workspace-install.mjs`: sibling-directory installation helper for
-  GitHub-distributed control workspaces. It discovers repositories next to the
-  control repo, writes user-confirmed `workspace.config.json` repository scope,
-  unpacks the source control `AGENTS.md` into the parent workspace root,
-  prints child-window prompts for scope confirmation, and dry-runs or writes a
-  managed child-window access-card block into each configured child `AGENTS.md`. `DesignWindow`
-  and `TestWindow` may be configured as external sibling directories, or kept
-  internal with workspace-owned templates when the user has no separate design
-  / test directory. `sync-templates` creates the full required Design/Test
-  support surfaces for either mode: Design operating policy, original-plan /
-  requirement-design / signal / handoff templates, handoff board, Test
-  operation policy, test handoff template, and external alignment notes where
-  applicable. `write-agents` refreshes the managed child access-card block with
-  the parent `AGENTS.md`, active workspace index/status, current plan directory,
-  window ledger, and automation execution boundary; it intentionally avoids
-  repeating each repository's own stop card. By default
-  it writes only `managedAgents` repositories, while `--include-unmanaged`
-  can explicitly include Design/Test windows and still skips the protected real
-  project unless `--include-real-project` is passed. It defaults to dry-run and
-  refuses to write outside the configured parent workspace. `access-profiles`
-  prints a read-only ChildWindowAccessProfile view that compares
-  `workspace.config.json` with each child AGENTS managed block. Use
-  `discover`, `status`, `configure`, `sync-root-agents`, `prompts`,
-  `write-agents`, `access-profiles`, and `sync-templates`.
-  Runtime scripts read `.workspace-local/workspace.config.json` first when it
-  exists, then tracked `workspace.config.json`, unless `--config` or
-  `CODEX_CONTROL_WORKSPACE_CONFIG` is provided. Use the ignored local config for
-  one installation's concrete window names without committing project-specific
-  scope to the generic repository.
-- `collect-repo-status.mjs`: summarizes branch, HEAD, dirty state,
-  upstream, ahead / behind counts, untracked files, and latest commit for each
-  workspace child repository.
+  workflows. It maps friendly subcommands such as `status`, `verify`, `sync`,
+  `design`, `runtime`, `install`, `scripts`, `loop`, and `next-work` onto the
+  current scripts without replacing their dry-run / write gates. Use `--print`
+  to inspect the exact commands before running them.
+- `controller-state.mjs`: state-root manager. `init` creates a per-demand
+  machine directory from `templates/control-state-machine/`; `add-task-package`
+  writes task package JSON; `import-target-result` stores result evidence;
+  `reduce-results` creates review candidates; `decide-review` records explicit
+  total-control judgment. It does not dispatch work or parse Markdown as state.
+- `render-progress-doc.mjs`: reads a state root, rebuilds `projection.json`, and
+  replaces only the `Unified Status` marker block inside
+  `developer-progress.md`.
+- `append-progress-log.mjs`: appends timestamped task-package, backfill, or
+  decision entries to allowed developer-readable sections while leaving machine
+  state and `Unified Status` untouched.
+- `codex-automation-loop.mjs`: state-root-only automation transport manager. It
+  registers threads, builds window configs, prepares dispatch packets from
+  state roots, builds delivery envelopes, records delivery-run evidence, records
+  target result envelopes, reviews group readiness, builds controller-return
+  envelopes, manages keep-live state, and writes stop markers. It does not read
+  current plan Markdown as authority, create old Codex automations, send host
+  thread messages, or accept evidence.
+- `control-workspace-install.mjs`: sibling-directory installation helper. It
+  discovers repositories, writes user-confirmed `workspace.config.json` scope,
+  unpacks source `AGENTS.md` into the parent workspace root, prints child-window
+  prompts, writes managed child access-card blocks, and syncs internal or
+  external Design/Test support templates.
+- `collect-repo-status.mjs`: summarizes branch, HEAD, dirty state, upstream,
+  ahead / behind counts, untracked files, and latest commit for each configured
+  child repository.
 - `check-workspace-boundary.mjs`: verifies that child source repositories and
   local noise files are not tracked by the workspace Git repository.
-- `check-repository-residue.mjs`: scans configured child repositories for
-  local runtime residue such as `.asd/`, `.cursor/skills`, and
-  `.agents/skills`. It is read-only by default; use `--fix` only after the
-  residue is confirmed as generated workspace pollution.
-- `verify-workspace-docs.mjs`: checks the workspace index, current control
-  plan, required sections, Markdown links, and completed document references.
-- `check-workspace-current-layout.mjs`: verifies that short-term workspace docs
-  live under `.workspace-active/workspace/current/`, that the current index target points
-  there, and that active docs/scripts/templates do not reference the old
-  root-level short-term paths.
-- `check-dispatch-coverage.mjs`: verifies that the current control plan covers
-  every expected window, that the declared copyable prompt send list matches
-  task statuses (`待启动`, `执行中`, or `已投递`), and that sendable prompts
-  require reading `AGENTS.md` plus an explicit window / repository positioning
-  statement. It also fails overlong copyable prompts so task details stay in
-  task packages and window rules. Nonstandard extra windows are allowed when
-  they are not send-eligible.
-- `check-decision-preflight.mjs`: verifies that the current control plan
-  records `总控决策记录` before document/state changes are treated as valid.
-  It requires the trigger, demand / test-result interpretation, checked
-  evidence, whether verification / replanning / user confirmation should happen
-  first, allowed updates, and forbidden conclusions.
-- `check-test-boundary.mjs`: verifies that `TestWindow` cannot be made
-  send-eligible for verification without an active test card that records why
-  total control cannot self-test, the real scenario dependency, the exact
-  question under test, object / window / thread / project boundaries, success /
-  failure inference limits, and stop / no-start conditions. Explicit non-test
-  thread-registry or Codex Automation Closed Loop smoke rows are allowed only
-  when the current plan says no test handoff, no real-project validation, and
-  local-only runtime evidence.
-- `check-todo-board.mjs`: verifies that plans using the TODO submode contain a
-  `TODO / Backlog` section and idle-window scheduling coverage. Use
-  `--require` when TODO items affect dispatch, parallel scheduling, or the next
-  wave order.
-- `check-task-packages.mjs`: verifies that plans using package-based dispatch
-  contain a task-package section with stage goal, mainline actions, merged
-  TODOs, exclusions, blockers / dependencies, verification, and backfill
-  fields, plus the `AGENTS.md` reading and explicit positioning precondition.
-  Use `--require` when TODOs and mainline work are bundled for a wave.
+- `check-repository-residue.mjs`: scans configured child repositories for local
+  runtime residue such as `.asd/`, `.cursor/skills`, and `.agents/skills`.
+  It is read-only by default; use `--fix` only after confirming generated
+  workspace pollution.
 - `check-runtime-residue.mjs`: read-only check for BaseWindow daemon, Dashboard
-  dev server, and Codex MCP process residue. It does not start, stop, or kill
-  anything; use `--strict` only when a clean runtime surface is required.
-- `check-script-docs.mjs`: verifies that every workspace `scripts/*.mjs` file
-  is represented in this README, that test scripts appear in the workspace
-  script-test instructions, that normal CLI scripts do not call direct
-  `process.exit()`, and that `verify-control-center.mjs` with
-  `--with-script-tests` runs all `*.test.mjs` files. Use `--root <workspace>`
-  for fixture / CI execution and `--json` for machine output.
-- `verify-control-center.mjs`: one-command control-center verification that
-  runs boundary, repo status, workspace docs, script docs, current-plan sync
-  check, decision preflight, dispatch coverage, test boundary, and
-  `git diff --check`. Add `--require-todo` when TODO scheduling must be
-  present, `--require-task-packages` when package-based dispatch must be
-  present, `--with-runtime` for a read-only runtime residue report,
-  `--strict-runtime` to fail when BaseWindow daemon / Dashboard dev residue is
-  present, or `--with-script-tests` to run workspace script unit tests.
-- `sync-current-plan.mjs`: dry-run by default; reads the current plan, plus an
-  optional `<!-- workspace-sync { ... } -->` JSON block, and synchronizes the
-  mechanical current-control surfaces: the first current-plan/current-status
-  rows and window coverage table in `.workspace-active/workspace/index.md`, the active plan
-  row in `.workspace-active/workspace/current/index.md`, and the status summary /
-  window-dispatch / copyable-prompt sections in
-  `.workspace-active/workspace/current/workspace-current-status.md`.
-  It also supports controlled `indexRows` and `currentIndexRows` in the
-  sync block for extra rows that the total-control plan has already decided.
-  Use `--write` to apply, `--check` to fail when generated surfaces are stale,
-  `--root <workspace>` for fixture / CI execution, and `--json` for machine
-  output. Writes are restricted to workspace docs, use atomic file replacement,
-  and validate workspace-relative row targets. This script does not create
-  TODOs, alter Design handoff status, decide window readiness, accept window
-  backfills, or edit product repositories.
+  dev server, and Codex MCP process residue. Use `--strict` only when clean
+  runtime surface is required.
+- `check-script-docs.mjs`: verifies that every top-level `scripts/*.mjs` file is
+  represented in this README, that test scripts appear in workspace script-test
+  instructions, that normal CLI scripts do not call direct `process.exit()`, and
+  that `verify-control-center.mjs --with-script-tests` runs all `*.test.mjs`
+  files.
+- `verify-control-center.mjs`: one-command control-center verification. It runs
+  workspace boundary, repository residue, repo status, workspace docs, script
+  docs, current layout, `git diff --check`, optional runtime residue, and
+  optional workspace script tests.
+- `verify-workspace-docs.mjs`: checks the workspace index, active state-root
+  references, required sections, Markdown links, and completed document
+  references.
+- `check-workspace-current-layout.mjs`: verifies that short-term workspace docs
+  live under `.workspace-active/workspace/current/`, that the current index
+  target points there, and that active docs/scripts/templates do not reference
+  old root-level short-term paths.
 - `archive-workspace-docs.mjs`: dry-run by default; moves completed workspace
-  control documents into `../workspace-ledger/workspace/archive/YYYY-MM/<topic>/`, rewrites
-  relative links inside moved documents, rewrites index links, removes archived
-  rows from the current index table, and adds / updates a topic entry in
-  `../workspace-ledger/workspace/workspace-record-map.md` only when `--apply` is provided. Use
-  `--keep-index-rows` only when a
-  historical row must remain visible. The script protects active first-row
-  plans, but completed first-row plans can be archived once a new current or
-  idle status entry is ready.
+  control documents into `../workspace-ledger/workspace/archive/YYYY-MM/<topic>/`,
+  rewrites relative links, updates index rows, and refreshes the record map when
+  `--apply` is provided.
 - `compact-workspace-index.mjs`: dry-run by default; compacts historical rows
-  from `.workspace-active/workspace/index.md` into a topic manifest under
-  `../workspace-ledger/workspace/archive/YYYY-MM/<topic>/index.md`, and updates
-  `../workspace-ledger/workspace/workspace-record-map.md`. Use this after moving old documents, or
-  when old execution rows still clutter the current index.
+  from `.workspace-active/workspace/index.md` into archive topic manifests and
+  updates the workspace record map.
 - `archive-global-todo-board.mjs`: dry-run by default; moves completed global
-  TODO rows and old sync records from `.workspace-active/workspace/current/global-todo-board.md` to
-  `../workspace-ledger/workspace/archive/YYYY-MM/global-todo/`, keeping the active board small.
+  TODO rows and old sync records from the active TODO board to archive.
 - `next-control-work.mjs`: read-only by default; scans the configured Design
   handoff board and global TODO board for controller-ready candidates after a
-  demand completes. It reports ranked candidates, blockers, and whether a
-  single candidate is mechanically auto-claimable. It never creates a current
-  plan, accepts evidence, dispatches windows, or changes TODO / Design status;
-  use `--id <Design/TODO Key>` when the user names a specific ready demand.
-  Design `Handoff` links are optional when the requirement design itself
-  carries the handoff content; original-plan and requirement-design links
-  remain required. Use `--write` only to store the local candidate scan under
-  ignored runtime.
-- `import-design-handoffs.mjs`: imports the configured `DesignWindow` handoff
-  board into the active Design inbox and validates ready rows. It supports the
-  forward-compatible enum columns `用户确认状态`, `主线关系状态`, and `优先级枚举`
-  while keeping old boards that only have `用户确认`, `当前主线关系`, and `优先级`
-  readable. If enum values conflict with prose, the script fails closed so
-  total control can review the handoff instead of silently accepting it. Use
-  `--id <Design Key>` to focus validation on one Design entry and verify its
-  linked docs expose the same `Design Key` metadata.
+  demand completes. It never creates a current plan, accepts evidence,
+  dispatches windows, or changes TODO / Design status.
+- `import-design-handoffs.mjs`: imports the configured DesignWindow handoff
+  board into the active Design inbox and validates ready rows. It supports
+  forward-compatible enum columns while keeping old board prose readable.
 - `generate-archive-topic-summaries.mjs`: dry-run by default; creates or
-  refreshes `index.md` summary files for the archive root, month folders, and
-  every `../workspace-ledger/workspace/archive/YYYY-MM/<topic>/` folder, preserving historical
-  body files as evidence snapshots while giving each archive folder a readable
-  map.
-- `run-workspace-pipeline-e2e.mjs`: creates a temporary fixture workspace and
-  runs the complete governance-script chain from Design handoff intake through
-  current-plan sync, dispatch / TODO / task-package verification, simulated
-  test completion, archive apply, TODO archive, archive summary generation, and
-  post-archive verification. It never writes product repositories. Use `--keep`
-  to retain the fixture on success and `--json` for machine output.
+  refreshes archive `index.md` summary files.
 
 Workspace script tests:
 
 Run them through `node scripts/workspace-control.mjs scripts --tests`. The
 current set is `archive-global-todo-board.test.mjs`,
 `codex-automation-loop.test.mjs`, `collect-repo-status.test.mjs`,
-`check-decision-preflight.test.mjs`, `check-dispatch-coverage.test.mjs`,
-`check-script-docs.test.mjs`, `check-test-boundary.test.mjs`,
+`controller-state.test.mjs`, `control-state-machine-route-fixtures.test.mjs`,
+`check-repository-residue.test.mjs`, `check-script-docs.test.mjs`,
 `control-workspace-install.test.mjs`, `import-design-handoffs.test.mjs`,
-`check-repository-residue.test.mjs`, `next-control-work.test.mjs`,
-`sync-current-plan.test.mjs`, and `workspace-control.test.mjs`.
+`next-control-work.test.mjs`, and `workspace-control.test.mjs`.
 
 ## Common Routes
 
-Use `workspace-control.mjs` as the short entrypoint for ordinary work, then
-fall back to the named script only when a narrower check is needed. For the full
+Use `workspace-control.mjs` as the short entrypoint for ordinary work, then fall
+back to the named script only when a narrower check is needed. For the full
 command catalog and selection table, read
 `skills/dev/control-workspace-governance/references/script-pipeline.md`.
 
 | Need | Command |
 | --- | --- |
-| Current repo / plan / dispatch health | `node scripts/workspace-control.mjs status` |
+| Current repo / closed-loop health | `node scripts/workspace-control.mjs status` |
 | Full control-center verification | `node scripts/workspace-control.mjs verify` |
-| Dispatch plan with TODO and task-package gates | `node scripts/workspace-control.mjs verify --dispatch` |
-| Sync current plan mirrors and verify | `node scripts/workspace-control.mjs sync --write --verify` |
+| Render a controller state-root progress doc | `node scripts/workspace-control.mjs sync --state-root <state-root> --write` |
 | Design handoff intake | `node scripts/workspace-control.mjs design --id <DESIGN-KEY> --json` |
 | Script docs plus script tests | `node scripts/workspace-control.mjs scripts --tests` |
 | Runtime residue read-only check | `node scripts/workspace-control.mjs runtime` |
-| Codex Automation Closed Loop contract commands | `node scripts/workspace-control.mjs loop <subcommand> ...` |
-| Scan next controller-ready candidate after completion | `node scripts/workspace-control.mjs next-work --after-completion --json` |
-| Focus a named Design/TODO candidate for total-control claim | `node scripts/workspace-control.mjs next-work --id <DESIGN-KEY> --json` |
+| Codex Automation Closed Loop commands | `node scripts/workspace-control.mjs loop <subcommand> ...` |
+| Scan next controller-ready candidate | `node scripts/workspace-control.mjs next-work --after-completion --json` |
+| Focus a named Design/TODO candidate | `node scripts/workspace-control.mjs next-work --id <DESIGN-KEY> --json` |
 | Sibling install / child AGENTS scope writes | `node scripts/workspace-control.mjs install <subcommand> ...` |
 | Child window access profile view | `node scripts/workspace-control.mjs install access-profiles --json` |
-| Full governance fixture pipeline | `node scripts/workspace-control.mjs pipeline` |
 
-Run write/apply commands only after the current plan or user request authorizes
-the write. Use `--print` on `workspace-control.mjs` when you want to inspect
-the underlying script calls before execution.
+Run write/apply commands only after the active state root or user request
+authorizes the write. Use `--print` on `workspace-control.mjs` when you want to
+inspect the underlying script calls before execution.
 
-Real-project test scripts, when an external `TestWindow` exists, live under
-that repository's `scripts/` directory so the control workspace root
-`scripts/` directory stays focused on governance. If `TestWindow` is internal,
-keep only handoff templates and evidence links in `.workspace-active/workspace/current/test-exchange.md`.
+Real-project test scripts, when an external `TestWindow` exists, live under that
+repository's `scripts/` directory so the control workspace root `scripts/`
+directory stays focused on governance. If `TestWindow` is internal, keep only
+handoff templates and evidence links in `.workspace-active/workspace/current/test-exchange.md`.

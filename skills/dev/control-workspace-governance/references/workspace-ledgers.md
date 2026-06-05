@@ -8,7 +8,9 @@ Use this reference when creating, moving, syncing, or archiving ControlWorkspace
 
 - Human-facing workspace surfaces should stay scarce:
   - final goal / stage confirmation documents;
-  - current control plan / window dispatch documents.
+  - the single `developer-progress.md` inside the active controller state root.
+- Legacy current control plan / window dispatch documents remain readable only
+  for historical plans that have not migrated to state roots.
 - Generated indexes, current status mirrors, Design inboxes, test exchanges, archive summaries, script format notes, and script-readable anchors are maintenance / evidence surfaces.
 - When a workflow can be checked or synchronized mechanically, prefer script-maintained concise surfaces over repeated hand-written prose.
 
@@ -76,7 +78,7 @@ Use this reference when creating, moving, syncing, or archiving ControlWorkspace
 - ControlWorkspace may track workspace-owned documentation, scripts, templates, and skill assets only.
 - Do not add child repositories, real test projects, gitlinks, submodules, or local runtime state to the workspace repository.
 - Child repo source / tests / docs must be committed in their own repositories.
-- Other windows may create or backfill workspace docs only when authorized by the current control plan; they must not run workspace `git add`, `git commit`, or `git push`.
+- Other windows may create or backfill workspace docs only when authorized by the active controller state root; they must not run workspace `git add`, `git commit`, or `git push`.
 - Total control performs final workspace acceptance, deduplication, index correction, and workspace commits.
 
 ## Skill Asset Ledger
@@ -165,16 +167,13 @@ Common ids and rendered labels:
 
 - Sync internal/external Design and Test support surfaces:
   `node scripts/control-workspace-install.mjs sync-templates --all --write`
-- Sync current plan mirrors:
-  `node scripts/sync-current-plan.mjs --check`
-  `node scripts/sync-current-plan.mjs --write`
+- Render developer progress projection:
+  `node scripts/render-progress-doc.mjs --state-root <state-root> --write`
 - Verify control center:
   `node scripts/verify-control-center.mjs`
-- Verify TODO / task-package plans:
-  `node scripts/verify-control-center.mjs --require-todo --require-task-packages`
 - Verify script changes:
   `node scripts/verify-control-center.mjs --with-script-tests`
 - Check script docs:
   `node scripts/check-script-docs.mjs`
 
-Use write/apply modes only when the user goal or current control plan requires it.
+Use write/apply modes only when the user goal or active controller state root requires it.

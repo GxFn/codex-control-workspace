@@ -8,6 +8,7 @@ workspace governance work.
 
 - 总控默认自己验证不依赖真实场景的事项：workspace 脚本测试、文档校验、状态机验证、targeted unit / probe、轻量集成验证、可构造的最小复现和可直接读取证据的验收复核。
 - `TestWindow` 只承接真实场景：真实测试项目操作、cold-start / rescan、Dashboard 手动观察、运行时监控、真实项目复现 / 回归、真实项目冒烟和跨仓库集成环境证据。
+- 如果 workspace 定义了 IDE / Plugin 测试职责窗口，例如 AlembicWorkspace 的 `AlembicTest-IDE`，Codex Plugin、Codex host MCP、Codex 会话 / 本地环境、installed / packaged Plugin runtime smoke 和 direct-thread / IDE 投递读回走该窗口；真实 BiliDili / AlembicWorkspace cold-start / rescan / AI/provider 测试仍走 `TestWindow`。
 - 总控已经看到具体代码缺口、文档缺口、脚本缺口、自动化状态机缺口或可由最小 probe 复现的问题时，先由总控或归属源码仓库完成最小修复和验证；修复后仍需要真实环境证明时，才让 `TestWindow` 复测。
 - 测试相关可以交给 `TestWindow`，但总控负责控制节奏：先判断边界，再决定谁测；不能把自己已经能判断或验证的问题推给 Test。
 
@@ -29,6 +30,7 @@ workspace governance work.
 ## TestWindow Handoff
 
 - 只在测试确实需要真实项目环境、cold-start / rescan、Dashboard 手动观察、运行时监控、真实项目复现 / 回归或跨仓库集成环境证据时，才通过 `.workspace-active/workspace/current/test-exchange.md` 创建或更新测试单。
+- 只在测试对象属于 Codex Plugin / host MCP / 本地环境 / IDE 投递读回时，才把 IDE / Plugin 测试职责窗口写为 `执行窗口`；不得为了方便把这类测试写给真实项目 `TestWindow`。
 - 测试单先按 `templates/test-handoff-template.md` 填写，再挂入 `.workspace-active/workspace/current/test-exchange.md`；测试单状态为 `待启动` 时才建议用户发送给 `TestWindow`。
 - 测试单必须写清总控自测排除理由、需要的真实场景、测试前边界与多条件判断、验证命令、回填证据和停止条件。
 - 总控可以制定测试目标、验收标准、观察点、风险和回填要求；只有交给 `TestWindow` 的真实场景测试，测试脚本、测试配置、复现记录和长期验证报告才放在 `TestWindow/` 下。
@@ -55,6 +57,7 @@ workspace governance work.
 
 - 测试交流入口：`.workspace-active/workspace/current/test-exchange.md`
 - 测试执行长期规则：内部模式为 `../workspace-ledger/testing/docs/testing-operation-policy.md`；外部模式为 `TestWindow/docs/testing-operation-policy.md`
+- IDE / Plugin 测试职责窗口：读取 workspace config 的 `ideTestWindow`；没有该字段时，必须在当前计划中显式写清窗口名。
 - 默认测试参数：`TestWindow/config/defaults.json`
 - 测试单模板：`templates/test-handoff-template.md`
-- 机械校验：`scripts/check-test-boundary.mjs`
+- 机械记录：测试边界写入 state-root 任务包 / `test-exchange.md`，由总控人工复核；没有单独测试边界脚本作为验收替代。

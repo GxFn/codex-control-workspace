@@ -9,7 +9,7 @@
 
 本模板只确认完整功能模块。若需求目标、用户场景、输入输出、状态变化、生产方、消费方、验证方式或完成定义不明确，必须停在确认问题，不得进入执行派发。不得把抽象接口、空 provider、空 adapter 或无真实调用方的代码连接当作阶段目标。
 
-用户确认后新建 wave / 当前计划时，必须使用 `templates/workspace-control-plan-template.md`，并遵守 `scripts/README.md` 的脚本可读格式说明。
+用户确认后新建执行面时，默认使用 `templates/control-state-machine/` 创建 state root 和唯一 `developer-progress.md`，并遵守 `scripts/README.md` 的脚本可读格式说明。
 
 ## 用户原始目标
 
@@ -118,7 +118,7 @@
 
 ## 第一波任务包候选
 
-确认前只写候选，不派发。用户确认后，复制到 wave 执行计划并按 `templates/workspace-task-package-template.md` 补齐。
+确认前只写候选，不派发。用户确认后，把第一波任务包写入 controller state root 的 `task-packages/*.json`，再由脚本追加摘要到唯一 `developer-progress.md`。
 
 - 下一处真实阻塞点：
 - 阻塞点之前还能做：

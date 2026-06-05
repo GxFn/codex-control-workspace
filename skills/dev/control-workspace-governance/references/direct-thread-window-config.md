@@ -129,7 +129,12 @@ flag.
   "kind": "DispatchGroup",
   "version": 1,
   "groupId": "group-id",
-  "controlPlan": ".workspace-active/workspace/current/plan.md",
+  "stateRef": {
+    "stateRoot": ".workspace-active/workspace/current/demand-key",
+    "taskPackageId": "TASK-PACKAGE-ID",
+    "stateRevision": 2
+  },
+  "humanContextRef": ".workspace-active/workspace/current/demand-key/developer-progress.md",
   "controllerWindow": "AlembicWorkspace-Aux",
   "expectedTargets": [
     {
@@ -145,6 +150,10 @@ flag.
   "updatedAt": "2026-05-31T00:00:00.000Z"
 }
 ```
+
+Dispatch groups must contain `stateRef` and should carry `humanContextRef` for
+the developer progress document. Groups without `stateRef` are invalid for the
+current automation route.
 
 Supported `returnPolicy.mode` values:
 
@@ -174,7 +183,13 @@ automation payloads. It should become a direct-thread plan:
   "targetWindow": "AlembicPlugin",
   "taskId": "TASK-ID",
   "dispatchGroup": "group-id",
-  "controlPlan": ".workspace-active/workspace/current/plan.md",
+  "stateRef": {
+    "stateRoot": ".workspace-active/workspace/current/demand-key",
+    "taskPackageId": "TASK-PACKAGE-ID",
+    "targetTaskId": "TASK-ID",
+    "stateRevision": 2
+  },
+  "humanContextRef": ".workspace-active/workspace/current/demand-key/developer-progress.md",
   "prompt": "继续当前窗口任务：...",
   "returnPolicy": {
     "mode": "group-ready"
@@ -201,7 +216,8 @@ automation payloads. It should become a direct-thread plan:
 }
 ```
 
-When the user explicitly enables unattended automation for the current plan:
+When the user explicitly enables unattended automation for the current state
+root:
 
 ```json
 {

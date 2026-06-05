@@ -18,14 +18,12 @@ const testScripts = [
   "scripts/archive-global-todo-board.test.mjs",
   "scripts/codex-automation-loop.test.mjs",
   "scripts/collect-repo-status.test.mjs",
-  "scripts/check-decision-preflight.test.mjs",
-  "scripts/check-dispatch-coverage.test.mjs",
+  "scripts/controller-state.test.mjs",
+  "scripts/control-state-machine-route-fixtures.test.mjs",
   "scripts/check-script-docs.test.mjs",
-  "scripts/check-test-boundary.test.mjs",
   "scripts/control-workspace-install.test.mjs",
   "scripts/import-design-handoffs.test.mjs",
   "scripts/next-control-work.test.mjs",
-  "scripts/sync-current-plan.test.mjs",
   "scripts/workspace-control.test.mjs",
 ];
 
@@ -37,30 +35,27 @@ Usage:
   node scripts/workspace-control.mjs --print <command> [options]
 
 Commands:
-  status      Show repo status and current dispatch/sync health.
+  status      Show repo status and closed-loop machine health.
   verify      Run verify-control-center with common option aliases.
-  sync        Check or write current-plan generated surfaces.
-  dispatch    Check dispatch, TODO, and task-package readiness.
+  sync        Render a controller state-root progress document.
   design      Refresh or validate Design handoff intake.
   runtime     Inspect runtime residue without mutating processes.
   install     Discover sibling repos, configure scope, and write child AGENTS blocks.
   scripts     Check script docs, optionally including script tests.
   loop        Operate the new Codex Automation Closed Loop contract surface.
   next-work   Scan Design handoff and TODO ledgers for the next controller-ready candidate.
-  pipeline    Run the fixture governance pipeline.
   help        Show this help.
 
 Common examples:
   node scripts/workspace-control.mjs status
   node scripts/workspace-control.mjs status --json
-  node scripts/workspace-control.mjs verify --dispatch --script-tests
-  node scripts/workspace-control.mjs sync --write --verify --dispatch
+  node scripts/workspace-control.mjs verify --script-tests
+  node scripts/workspace-control.mjs sync --state-root .workspace-active/workspace/current/<demand-key> --write
   node scripts/workspace-control.mjs design --id PCVM-2026-05-25 --json
   node scripts/workspace-control.mjs install status --json
   node scripts/workspace-control.mjs loop status --json
   node scripts/workspace-control.mjs next-work --after-completion --json
   node scripts/workspace-control.mjs next-work --id PLUGIN-MCP-MULTI-PROJECT-RUNTIME-2026-06-03 --json
-  node scripts/workspace-control.mjs pipeline --json
 
 Safety:
   This script only orchestrates existing workspace scripts. Write-capable flows
@@ -129,15 +124,6 @@ function shellDisplay(step) {
 
 function verifyArgs(options) {
   const out = [];
-  if (hasFlag(options, "--dispatch")) {
-    out.push("--require-todo", "--require-task-packages");
-  }
-  if (hasFlag(options, "--todo")) {
-    out.push("--require-todo");
-  }
-  if (hasFlag(options, "--task-packages")) {
-    out.push("--require-task-packages");
-  }
   if (hasFlag(options, "--runtime") || hasFlag(options, "--with-runtime")) {
     out.push("--with-runtime");
   }
@@ -155,16 +141,12 @@ function buildStatus(options) {
   const json = hasFlag(options, "--json");
   return [
     { label: "repo status", key: "repoStatus", ...nodeScript("collect-repo-status.mjs", json ? ["--json"] : []) },
-    { label: "current plan sync", key: "currentPlanSync", ...nodeScript("sync-current-plan.mjs", ["--check", ...(json ? ["--json"] : [])]) },
-    { label: "dispatch coverage", key: "dispatchCoverage", ...nodeScript("check-dispatch-coverage.mjs", json ? ["--json"] : []) },
+    { label: "closed-loop status", key: "closedLoopStatus", ...nodeScript("codex-automation-loop.mjs", ["status", ...(json ? ["--json"] : [])]) },
   ];
 }
 
 function buildVerify(options) {
   assertKnownOptions(options, [
-    "--dispatch",
-    "--todo",
-    "--task-packages",
     "--runtime",
     "--with-runtime",
     "--strict-runtime",
@@ -175,38 +157,17 @@ function buildVerify(options) {
 }
 
 function buildSync(options) {
-  assertKnownOptions(options, ["--check", "--write", "--verify", "--dispatch", "--json"]);
-  if (hasFlag(options, "--json") && (hasFlag(options, "--write") || hasFlag(options, "--verify"))) {
-    fail("sync --json is only supported for the single-command check path.");
+  assertKnownOptions(options, ["--write", "--json"], ["--state-root", "--root"]);
+  const stateRoot = getValue(options, "--state-root");
+  if (!stateRoot) {
+    fail("sync requires --state-root for the controller state-machine route.");
   }
-
-  const steps = [];
-  if (hasFlag(options, "--write")) {
-    steps.push({ label: "sync current plan", ...nodeScript("sync-current-plan.mjs", ["--write"]) });
-    steps.push({ label: "sync current plan check", ...nodeScript("sync-current-plan.mjs", ["--check"]) });
-  } else {
-    steps.push({
-      label: "sync current plan check",
-      ...nodeScript("sync-current-plan.mjs", ["--check", ...(hasFlag(options, "--json") ? ["--json"] : [])]),
-    });
-  }
-
-  if (hasFlag(options, "--verify")) {
-    steps.push({
-      label: "post-sync verification",
-      ...nodeScript("verify-control-center.mjs", hasFlag(options, "--dispatch") ? ["--require-todo", "--require-task-packages"] : []),
-    });
-  }
-  return steps;
-}
-
-function buildDispatch(options) {
-  assertKnownOptions(options, [], []);
-  return [
-    { label: "dispatch coverage", ...nodeScript("check-dispatch-coverage.mjs") },
-    { label: "TODO board", ...nodeScript("check-todo-board.mjs", ["--require"]) },
-    { label: "task packages", ...nodeScript("check-task-packages.mjs", ["--require"]) },
-  ];
+  const out = ["--state-root", stateRoot];
+  const root = getValue(options, "--root");
+  if (root) out.push("--root", root);
+  if (hasFlag(options, "--write")) out.push("--write");
+  if (hasFlag(options, "--json")) out.push("--json");
+  return [{ label: "render controller progress doc", key: "controllerProgressRender", ...nodeScript("render-progress-doc.mjs", out) }];
 }
 
 function buildDesign(options) {
@@ -289,17 +250,6 @@ function buildNextWork(options) {
   return [{ label: "next control work candidate scan", ...nodeScript("next-control-work.mjs", options) }];
 }
 
-function buildPipeline(options) {
-  assertKnownOptions(options, ["--keep", "--json"]);
-  const out = [];
-  for (const flag of ["--keep", "--json"]) {
-    if (hasFlag(options, flag)) {
-      out.push(flag);
-    }
-  }
-  return [{ label: "governance pipeline fixture", ...nodeScript("run-workspace-pipeline-e2e.mjs", out) }];
-}
-
 function buildSteps() {
   switch (command) {
     case "help":
@@ -313,8 +263,6 @@ function buildSteps() {
       return buildVerify(commandArgs);
     case "sync":
       return buildSync(commandArgs);
-    case "dispatch":
-      return buildDispatch(commandArgs);
     case "design":
       return buildDesign(commandArgs);
     case "runtime":
@@ -327,8 +275,6 @@ function buildSteps() {
       return buildLoop(commandArgs);
     case "next-work":
       return buildNextWork(commandArgs);
-    case "pipeline":
-      return buildPipeline(commandArgs);
     default:
       fail(`Unknown workspace-control command: ${command}\n\n${helpText}`);
   }

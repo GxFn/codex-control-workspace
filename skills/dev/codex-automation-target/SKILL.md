@@ -6,8 +6,8 @@ description: Use when a target Codex window receives a Codex Automation Closed L
 # Codex Automation Target
 
 Use this skill only inside a target-window automation wakeup. Workspace
-`AGENTS.md`, the current control plan, and the target repository `AGENTS.md`
-remain higher authority.
+`AGENTS.md`, the dispatch packet's `stateRoot` / human context document, and
+the target repository `AGENTS.md` remain higher authority.
 
 ## Prompt Shape
 
@@ -20,14 +20,15 @@ Target wakeups should be task-first and compact:
 - currentWindow: <window>
 - taskId: <taskId>
 - controllerWindow: <controller>
-- controlPlan: <path>
+- stateRoot: <path>
+- humanContextRef: <path>
 - dispatchGroup: <group>
 - rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；按 dispatch group returnPolicy 和 controllerWindow 判断是否执行一次总控回跳（build + send/readback + record）。
 ```
 
 Do not require the prompt to repeat command manuals. Derive commands from the
-variables and this skill. If the variables conflict with the target repository
-or current plan, stop and report instead of guessing.
+variables and this skill. If the variables conflict with the target repository,
+state root, or human context document, stop and report instead of guessing.
 
 ## Target Flow
 
@@ -39,8 +40,9 @@ or current plan, stop and report instead of guessing.
      transport route.
 
 2. **Orient**
-   - Read workspace `AGENTS.md`, workspace index/status, the current control
-     plan, this skill, and the target repository `AGENTS.md`.
+   - Read workspace `AGENTS.md`, workspace index/status, the dispatch packet's
+     `stateRoot` / `humanContextRef` documents, this skill, and the target
+     repository `AGENTS.md`.
    - State current window identity and repository responsibility.
    - Do not use legacy `claim` to discover work. The dispatch packet / prompt
      is the assigned work boundary.
@@ -53,14 +55,22 @@ or current plan, stop and report instead of guessing.
      acceptance, or next-wave planning.
 
 4. **Report result envelope**
-   - From the control workspace root, record the result:
+   - For state-root delivery, record the target result as machine data without
+     changing controller state:
+
+```text
+node scripts/controller-state.mjs import-target-result --state-root <stateRoot> --target-window <currentWindow> --target-task-id <taskId> --status completed --result-id <resultId> --evidence-ref <file-or-log> --verification "<command and result>" --risk "<risk>" --write --json
+```
+
+   - From the control workspace root, also record the dispatch-group transport
+     result when the delivery needs controller return:
 
 ```text
 node scripts/codex-automation-loop.mjs submit-result --target-window <currentWindow> --task-id <taskId> --group <dispatchGroup> --status completed --changed-repo <repo> --commit <hash> --evidence-ref <file-or-log> --verification "<command and result>" --risk "<risk>" --write --json
 ```
 
    - Use `--status blocked` for a real blocker and include `--risk` /
-     `--next-suggestion`.
+     `--next-suggestion` where the command supports it.
    - Use `--status needs-review` when work is partial or the total-control
      boundary needs a decision.
 
@@ -85,11 +95,10 @@ node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --
    - If policy allows return, build one controller-return envelope. Do not
      choose the controller ad hoc; `build-controller-return` defaults to the
      dispatch group's stored `controllerWindow`, so automation started by
-     controller A returns to controller A. Use `--controller-window` only for
-     legacy groups that do not yet store the field.
+     controller A returns to controller A.
 
 ```text
-node scripts/codex-automation-loop.mjs build-controller-return --group <dispatchGroup> --trigger-target <currentWindow> --trigger-task-id <taskId> --control-plan <controlPlan> --return-reason result-ready --require-thread --write --json
+node scripts/codex-automation-loop.mjs build-controller-return --group <dispatchGroup> --trigger-target <currentWindow> --trigger-task-id <taskId> --return-reason result-ready --require-thread --write --json
 ```
 
    - Building the envelope is not a controller return. The return is complete
@@ -123,8 +132,20 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <cont
 - Controller return only wakes total control for review. It does not authorize a
   next dispatch. If total control finds no eligible next task, it stops without
   creating another delivery.
-- `TestWindow` is total-control-owned unless the current plan and delivery
+- `TestWindow` is total-control-owned unless the state root and delivery
   envelope explicitly authorize an exception.
+- If the target is an IDE / Plugin test window such as `AlembicTest-IDE`, it
+  may handle assigned Codex Plugin, host MCP, local environment, installed /
+  packaged runtime smoke, and IDE / direct-thread readback tests. It must not
+  run BiliDili or AlembicWorkspace AI cold-start / rescan work.
+- If the target is the real scenario test window such as `AlembicTest`, it may
+  handle assigned BiliDili / AlembicWorkspace cold-start, rescan, AI/provider,
+  Dashboard, runtime monitoring, and real project regression work. It must not
+  handle Codex Plugin / host-environment smoke.
+- Codex MCP reload is not a test-window repair route. Test windows may collect
+  fresh MCP probe evidence only if assigned by the state root; they must not
+  run AlembicPlugin reload with `--stop-mcp` / watch
+  `--restart-mcp` to repair the current Codex host MCP session.
 - Raw thread ids stay only in local runtime files, never in tracked docs,
   prompts, GitHub, or result text. Thread ids exposed for local direct-send
   execution must not be copied into result envelopes.

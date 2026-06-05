@@ -508,7 +508,7 @@ function scopeBlock(context, repo) {
 ### Direct Thread Dispatch 最小门禁
 
 - Direct-thread delivery 是正常工作投递流水线，不改变本窗口职责，也不扩大任务范围；具体任务以 dispatch packet、当前计划和本仓库规则为准。
-- Delivery prompt 只承载动态变量、规则名和 skill 指向；不得把提示词当成完整命令手册。用 \`currentWindow\` / \`taskId\` / \`dispatchGroup\` / \`controlPlan\` 等变量按 \`codex-automation-target\` skill 执行，变量缺失或冲突时停止回报。
+- Delivery prompt 只承载动态变量、规则名和 skill 指向；不得把提示词当成完整命令手册。状态机路线用 \`currentWindow\` / \`taskId\` / \`dispatchGroup\` / \`stateRoot\` / \`humanContextRef\` 等变量按 \`codex-automation-target\` skill 执行；缺少 \`stateRoot\` 或变量冲突时停止回报。
 - 本窗口只处理 \`${repo.windowName}\` 对应的 dispatch packet，并返回 \`TargetResultEnvelope\`；不得代领、代验或处理其它窗口任务。
 - 子窗口默认不创建目标窗口下一跳 delivery；补证、重派和下一阶段都由总控 review 后决定。若 delivery \`returnRoute=controller\` 且 \`review-results\` 显示 \`DispatchGroup.returnPolicy\` 允许回调，只允许通过 \`build-controller-return\` 创建一次总控回跳 envelope，并默认回到 \`DispatchGroup.controllerWindow\` 指定的原发起总控；之后必须继续完成真实 direct-thread send、readback 和 \`record-delivery-run\`。只有存在 \`status=sent\` 且 \`readback.ok=true\` 的 \`DirectThreadDeliveryRun\`，才算真实回跳完成。\`group-ready\` 必须携带整组 ready / blocked / missing 快照；\`per-target\` 必须携带当前触发窗口和剩余窗口快照，不能把单个回填误判为整组完成。
 - 非 TestWindow 不得创建、处理或验证 TestWindow delivery，除非当前计划和 delivery envelope 同时显式授权。
@@ -981,7 +981,6 @@ function syncStarterLedgerFiles(context) {
     ensureTextFile(context.ledgerPaths.workspaceIndexPath, readControlFile(context.controlRoot, `${sourceRoot}/index.md`), "active workspace index"),
     ensureTextFile(context.ledgerPaths.workspaceCurrentIndexPath, readControlFile(context.controlRoot, `${sourceRoot}/current/index.md`), "active current index"),
     ensureTextFile(context.ledgerPaths.workspaceCurrentStatusPath, readControlFile(context.controlRoot, `${sourceRoot}/current/workspace-current-status.md`), "active current status"),
-    ensureTextFile(path.join(context.ledgerPaths.workspaceCurrentDir, "example-control-plan.md"), readControlFile(context.controlRoot, `${sourceRoot}/current/example-control-plan.md`), "active example control plan"),
     ensureTextFile(context.ledgerPaths.globalTodoPath, readControlFile(context.controlRoot, `${sourceRoot}/current/global-todo-board.md`), "active global TODO board"),
     ensureTextFile(resolveConfigPath(context.controlRoot, context.config.designHandoffBoard), readControlFile(context.controlRoot, `${sourceRoot}/current/design-handoff-board.md`), "active design handoff board"),
     ensureTextFile(resolveConfigPath(context.controlRoot, context.config.testExchangePath), readControlFile(context.controlRoot, `${sourceRoot}/current/test-exchange.md`), "active test exchange"),
