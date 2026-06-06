@@ -1,8 +1,10 @@
 # Phased Migration Playbook
 
 Use this reference when a task moves, extracts, deletes, or rehomes behavior
-across BaseWindow repositories. The matching copyable skeleton lives in
-`templates/phased-migration-command-template.md`.
+across BaseWindow repositories. This is a playbook, not a legacy long-form
+execution template. Execution should use a controller state root created from
+`templates/control-state-machine/`, with migration stages represented as task
+packages and review decisions.
 
 ## Core Rules
 
@@ -18,8 +20,8 @@ across BaseWindow repositories. The matching copyable skeleton lives in
   - import / reference scan has no live consumers;
   - replacement entrypoint is connected;
   - representative build / check / lint / smoke passes.
-- One wave should close one stage. Do not mix public surface, outer
-  consumption, deletion cleanup, and release smoke in one wave.
+- One task package should close one stage. Do not mix public surface, outer
+  consumption, deletion cleanup, and release smoke in one task package.
 - Publication / live paths are their own stage. Code compiles do not prove
   Plugin, Dashboard, daemon, npm package, channel, marketplace, or live smoke.
 - Observation is a real status only when the trigger for becoming active is
@@ -57,9 +59,10 @@ Anything without code evidence is a `待扫描假设`, not a dispatchable fact.
    - Validate packaging, channels, runtime smoke, Dashboard / Plugin live paths,
      or other release surfaces that the migration affects.
 
-## Current Plan Fields
+## State-Root Stage Fields
 
-Every phased migration plan should include:
+Every phased migration demand should record these facts in the state root,
+developer progress append log, or task package evidence:
 
 - user goal and non-goals;
 - hard stage rules;
@@ -68,11 +71,9 @@ Every phased migration plan should include:
 - stage table with entry condition, allowed scope, forbidden scope, validation,
   and next trigger;
 - task packages;
-- window dispatch table;
 - TODO / Backlog;
 - test boundary judgment;
-- acceptance matrix;
-- copyable prompt only for send-eligible windows.
+- acceptance matrix.
 
 ## Execution Record Fields
 
@@ -108,7 +109,7 @@ npm run lint
 - Writing a deletion plan without scans.
 - Reading only historical docs, not real code.
 - Starting downstream work before upstream contract evidence exists.
-- Compressing multiple stages into one wave for speed.
+- Compressing multiple stages into one task package for speed.
 - Treating an empty facade as migration completion.
 - Deleting host adapters because the boundary looks cleaner.
 - Skipping release smoke by hiding it inside a code stage.

@@ -52,7 +52,7 @@ Design Key：<READABLE-TOPIC-YYYY-MM-DD>
 - 在 ControlWorkspace 启动原始计划确认。
 - 启动需求设计 / 代码调研。
 - 创建目标阶段确认。
-- 创建 wave 计划。
+- 创建 controller state root / task package。
 - 暂停，等待用户确认。
 
 说明：本建议只给 `ControlWorkspace` 评审，不是执行窗口提示词。
@@ -102,7 +102,7 @@ Design Key：<READABLE-TOPIC-YYYY-MM-DD>
 | --- | --- | --- | --- |
 | 1 |  |  |  |
 
-阶段候选仅供总控评审，不是 wave 派发依据。
+阶段候选仅供总控评审，不是 task package 派发依据。
 
 ## 给 ControlWorkspace 的开放问题
 
@@ -112,6 +112,6 @@ Design Key：<READABLE-TOPIC-YYYY-MM-DD>
 
 - 已对照 `docs/workspace-alignment-checklist.md` 或外部 DesignWindow 的同名文件：
 - 本 handoff 没有包含可复制实现窗口提示词：
-- 阶段仍为候选，未写成 wave：
+- 阶段仍为候选，未写成 task package：
 - TODO / Backlog 已列入证据与链接：
 - 如有删减、降级、延期、兼容保留或边界变化，已列为待确认：

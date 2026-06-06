@@ -22,7 +22,7 @@
 - 把模糊想法整理成原始计划书、需求设计、workspace signal 或 workspace handoff。
 - 判断讨论内容属于新需求、bug 线索、TODO 候选、调研请求、用户决策、当前主线阻塞，还是无需进入总控账本的背景讨论。
 - 保存用户决策、假设、开放问题和交接说明。
-- 为 `ControlWorkspace` 准备随时可接收的 signal / handoff 草案；最终 TODO 入账、阶段确认、wave 派发、测试协调、验收、归档和提交仍归 `ControlWorkspace`。
+- 为 `ControlWorkspace` 准备随时可接收的 signal / handoff 草案；最终 TODO 入账、阶段确认、task package 派发、测试协调、验收、归档和提交仍归 `ControlWorkspace`。
 
 ## 不可变边界
 

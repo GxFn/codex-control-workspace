@@ -3,7 +3,7 @@
 状态：长期模板
 维护窗口：ControlWorkspace
 
-本模板用于用户提出较大任务目标后、正式派发执行窗口前。总控窗口必须先按本模板创建任务级“最终目标 + 分阶段确认”文档，等待用户确认后再新建或激活具体 wave 执行计划。
+本模板用于用户提出较大任务目标后、初始化执行 state root 前。总控窗口必须先按本模板创建任务级“最终目标 + 分阶段确认”文档，等待用户确认后再创建 controller state root 和第一批 task package。
 
 本模板必须基于 `../workspace-ledger/requirement-designs/<需求名>/` 下的原始计划书和需求设计文档填写；缺任一项，不进入目标阶段确认。
 
@@ -114,7 +114,7 @@
 - 阻塞点之前还能一波完成的主线动作：
 - 确认后第一波可启动窗口：
 - 等待窗口：
-- 确认后是否需要新建 wave 执行计划：
+- 确认后是否需要创建 controller state root：
 
 ## 第一波任务包候选
 
@@ -139,7 +139,7 @@
   - 真实消费方：
   - 错误 / 边界路径：
   - 用户可执行验证：
-  - 若发现最小实现，补齐 wave：
+  - 若发现最小实现，补齐 task package：
 - 稳定面统一验收：
 - 真实项目 smoke 触发条件：
 
@@ -149,31 +149,6 @@
 - 需要用户确认：
 - 不明确时禁止派发：
 - 若用户未确认，当前派发状态：
-
-## 窗口分派
-
-确认前必须保持不派发。确认后，再把本节或后续 wave 文档改成真实分派表。
-
-| 窗口 / 状态 | 任务 |
-| --- | --- |
-| `BaseWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划。 |
-| `CoreWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划。 |
-| `AgentWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划。 |
-| `DashboardWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划。 |
-| `PluginWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划。 |
-| `DesignWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划；只有需要补需求设计 / signal / handoff 时才发送。 |
-| `TestWindow`<br>暂停 | 等待用户确认本任务目标与阶段计划；真实测试项目只作为测试目标项目，不作为独立派发窗口。 |
-| `RealTestProject`<br>暂停 | 真实项目受保护，不直接派发。 |
-
-## 可复制提示词
-
-发送给：无
-
-```text
-等待用户确认任务级最终目标与阶段计划；当前不派发。确认后提示词必须要求执行窗口先读取目标仓库 AGENTS.md 并明确当前窗口定位。
-```
-
-不发送给：`BaseWindow`、`CoreWindow`、`AgentWindow`、`DashboardWindow`、`PluginWindow`、`DesignWindow`、`TestWindow`、`RealTestProject`。
 
 ## 回填区
 
@@ -185,8 +160,8 @@
 
 ### 确认后第一波
 
-- 启动文档：
-- 发送窗口：
-- 阻塞窗口：
-- 观察窗口：
-- index 当前计划是否已切到 wave 执行计划：
+- State root：
+- Developer progress：
+- Task package：
+- Target window：
+- 阻塞 / 等待窗口：

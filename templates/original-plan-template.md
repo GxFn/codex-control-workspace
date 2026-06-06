@@ -89,6 +89,6 @@ Design Key：<READABLE-TOPIC-YYYY-MM-DD>
 
 确认前禁止：
 
-- 写执行 wave。
+- 写执行 task package。
 - 建议发送实现窗口。
 - 把阶段候选写成派发顺序。

@@ -18,31 +18,4 @@ This file is the starter template for the single active workspace entrypoint. Af
 
 ## Current Dispatch Surface
 
-Keep active dispatch state inside the active controller state root. This index should remain small and should not become a second state surface.
-
-## 窗口覆盖状态
-
-发送给：无
-
-| 窗口 / 状态 | 任务 |
-| --- | --- |
-| `BaseWindow`<br>无任务 | Not sent. |
-| `CoreWindow`<br>无任务 | Not sent. |
-| `AgentWindow`<br>无任务 | Not sent. |
-| `DashboardWindow`<br>无任务 | Not sent. |
-| `PluginWindow`<br>无任务 | Not sent. |
-| `DesignWindow`<br>无任务 | Not sent. |
-| `TestWindow`<br>无任务 | Not sent. |
-| `RealTestProject`<br>无任务 | Not sent. |
-
-## 状态枚举
-
-- `待启动`: ready to dispatch.
-- `执行中`: currently being handled by the named window.
-- `已投递`: delivery envelope has been delivered and target result is pending.
-- `待验收`: waiting for total-control review.
-- `阻塞`: blocked by evidence, thread id, dependency, or user confirmation.
-- `观察中`: visible but not currently sendable.
-- `无任务`: no current work.
-- `已完成`: accepted and closed.
-- `暂停`: paused until user or evidence changes.
+Keep active dispatch state inside the active controller state root. This index should remain small and should not become a second state surface. Window eligibility, delivery envelopes, target results, and review decisions belong to the active state root and local automation runtime.
