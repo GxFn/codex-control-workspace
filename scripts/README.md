@@ -79,8 +79,11 @@ Current scripts:
   thread messages, or accept evidence. `prepare-dispatch-from-state` fails
   closed for completed / archived / paused demands, review-ready demands that
   still need a controller decision, blocked demands, and target tasks that are
-  already accepted, completed, or blocked. After a direct-thread delivery run is
-  recorded as sent/readback-ok, its agent cue must close the controller
+  already accepted, completed, or blocked. Group-scoped target result files
+  keep concurrent controller runs from overwriting each other, and
+  `build-controller-return` fails closed when a dispatch group already has a
+  pending or sent controller-return envelope. After a direct-thread delivery run
+  is recorded as sent/readback-ok, its agent cue must close the controller
   dispatch turn; it must not tell total control to sleep, poll, or wait in place
   for target results.
 - `demand-sequence.mjs`: ordered independent-demand runner. It reads a tracked

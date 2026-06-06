@@ -131,7 +131,10 @@ function registerThread(root, windowName, role = "target") {
   ]));
 }
 
-function prepareDispatch(root, stateRootRef, extra = []) {
+function prepareDispatch(root, stateRootRef, options = {}) {
+  const config = Array.isArray(options) ? { extra: options } : options;
+  const group = config.group || "GROUP-STATE";
+  const extra = config.extra || [];
   return parseOk(run(root, [
     "prepare-dispatch-from-state",
     "--state-root",
@@ -139,7 +142,7 @@ function prepareDispatch(root, stateRootRef, extra = []) {
     "--target-task-id",
     "CSMR-TASK-1",
     "--group",
-    "GROUP-STATE",
+    group,
     "--controller-window",
     "AlembicWorkspace",
     "--human-context-ref",
@@ -350,6 +353,70 @@ test("review-results and controller return require state-root group evidence", (
   assert.doesNotMatch(returned.envelope.prompt, /<codex_delegation>|<input>|source_thread_id/);
   assert.doesNotMatch(readFileSync(path.join(root, returned.returnFile), "utf8"), /controlPlan/);
   assert.equal(returned.envelope.dispatchGroup, prepared.packet.dispatchGroup);
+
+  const duplicateReturn = run(root, [
+    "build-controller-return",
+    "--group",
+    "GROUP-STATE",
+    "--trigger-target",
+    "AlembicPlugin",
+    "--trigger-task-id",
+    "CSMR-TASK-1",
+    "--require-thread",
+    "--write",
+  ]);
+  assert.notEqual(duplicateReturn.status, 0);
+  assert.match(duplicateReturn.stdout, /already has controller-return delivery status pending-host-send/);
+});
+
+test("target results are scoped by dispatch group to avoid parallel run collisions", () => {
+  const { root, stateRootRef } = makeFixture();
+  registerThread(root, "AlembicPlugin");
+  prepareDispatch(root, stateRootRef, { group: "GROUP-A" });
+  prepareDispatch(root, stateRootRef, { group: "GROUP-B" });
+
+  const resultA = parseOk(run(root, [
+    "submit-result",
+    "--target-window",
+    "AlembicPlugin",
+    "--task-id",
+    "CSMR-TASK-1",
+    "--group",
+    "GROUP-A",
+    "--status",
+    "completed",
+    "--evidence-ref",
+    "reports/group-a.json",
+    "--write",
+  ]));
+  const resultB = parseOk(run(root, [
+    "submit-result",
+    "--target-window",
+    "AlembicPlugin",
+    "--task-id",
+    "CSMR-TASK-1",
+    "--group",
+    "GROUP-B",
+    "--status",
+    "blocked",
+    "--evidence-ref",
+    "reports/group-b.json",
+    "--risk",
+    "group B is intentionally blocked",
+    "--write",
+  ]));
+
+  assert.match(resultA.resultFile, /GROUP-A__AlembicPlugin__CSMR-TASK-1\.json$/);
+  assert.match(resultB.resultFile, /GROUP-B__AlembicPlugin__CSMR-TASK-1\.json$/);
+  assert.notEqual(resultA.resultFile, resultB.resultFile);
+
+  const reviewA = parseOk(run(root, ["review-results", "--group", "GROUP-A"]));
+  assert.equal(reviewA.decision, "needs-controller-review");
+  assert.equal(reviewA.groupSnapshot.ready[0].status, "completed");
+
+  const reviewB = parseOk(run(root, ["review-results", "--group", "GROUP-B"]));
+  assert.equal(reviewB.decision, "blocked");
+  assert.equal(reviewB.groupSnapshot.blocked[0].status, "blocked");
 });
 
 test("review-pack gates missing path evidence refs before controller verdict", () => {

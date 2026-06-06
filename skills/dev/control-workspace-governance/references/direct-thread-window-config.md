@@ -183,6 +183,14 @@ controller. `build-controller-return` reads this field by default, so a group
 started by controller A returns to controller A even when the workspace config's
 global `controlWindow` points at a different controller.
 
+Target result transport files are scoped by dispatch group when `--group` is
+provided. This allows multiple controller windows to run parallel dispatch
+loops against the same target window and task id without overwriting each
+other's local result envelope. Controller-return envelopes are one-shot at the
+group level: once a group has a pending or sent controller return, another
+`build-controller-return` for that group must fail closed instead of creating a
+duplicate wakeup.
+
 ## Delivery Envelope Changes
 
 The code-stage `DeliveryEnvelope` should stop producing legacy schedule or

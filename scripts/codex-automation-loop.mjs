@@ -239,8 +239,9 @@ function keepLiveControlFile() {
   return path.join(dirs.keepLive, "control.json");
 }
 
-function resultFileFor(targetWindow, taskId) {
-  return path.join(dirs.results, `${slug(targetWindow)}__${slug(taskId)}.json`);
+function resultFileFor(targetWindow, taskId, dispatchGroup = "") {
+  const parts = [dispatchGroup, targetWindow, taskId].filter(Boolean).map(slug);
+  return path.join(dirs.results, `${parts.join("__")}.json`);
 }
 
 function listJsonFiles(dir) {
@@ -2111,6 +2112,10 @@ function commandBuildControllerReturn() {
   const registration = loadThreadRegistration(controllerWindow);
   if (hasFlag("--require-thread") && !registration) fail(`No registered controller thread for window: ${controllerWindow}`);
   validateControllerReturnAllowed({ review, triggerTarget, triggerTaskId });
+  const existingReturn = controllerReturnDeliveryStatusForGroup(dispatchGroup);
+  if (existingReturn.pendingCount > 0 || existingReturn.sentCount > 0) {
+    fail(`Dispatch group ${dispatchGroup} already has controller-return delivery status ${existingReturn.status}; do not create duplicate controller returns.`);
+  }
   const windowConfig = buildWindowConfig(controllerWindow);
   const reviewScope = review.returnPolicy.mode === "group-ready" ? "group" : "single-target";
 
@@ -2373,6 +2378,7 @@ function commandSubmitResult() {
   const targetWindow = requireValue("--target-window");
   const taskId = requireValue("--task-id");
   const status = validateResultStatus(requireValue("--status"));
+  const dispatchGroup = getValue("--group", "");
   const evidenceRefs = getAllValues("--evidence-ref");
   const verificationSummary = getAllValues("--verification");
   const commits = getAllValues("--commit");
@@ -2385,7 +2391,7 @@ function commandSubmitResult() {
     version,
     targetWindow,
     taskId,
-    dispatchGroup: getValue("--group", "") || undefined,
+    dispatchGroup: dispatchGroup || undefined,
     status,
     changedRepos: getAllValues("--changed-repo"),
     commits,
@@ -2396,7 +2402,7 @@ function commandSubmitResult() {
     reportedAt: nowIso(),
   };
 
-  const resultFile = resultFileFor(targetWindow, taskId);
+  const resultFile = resultFileFor(targetWindow, taskId, dispatchGroup);
   if (write) {
     ensureStateDirs();
     atomicWriteJson(resultFile, result);
@@ -2430,7 +2436,7 @@ function computeReviewResults({ group = "", taskId = "" } = {}) {
   if (packets.length === 0) fail("No matching dispatch packets found for review.");
   const groupRecord = groupFromPackets({ groupId: group || packets[0]?.dispatchGroup || "", packets });
   const unorderedResults = packets.map((packet) => {
-    const file = resultFileFor(packet.targetWindow, packet.taskId);
+    const file = resultFileFor(packet.targetWindow, packet.taskId, packet.dispatchGroup);
     return {
       packet,
       file,
