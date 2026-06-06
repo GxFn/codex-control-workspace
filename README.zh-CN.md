@@ -2,7 +2,7 @@
 
 # Codex Control Workspace
 
-一个本地优先的 Codex 多窗口总控工作区，用可见、可接管的自动化持续推进多仓库协作。
+一个本地优先的 Codex 多仓库总控工作区：唯一机器状态根、唯一开发者可读推进面，以及仍然由总控裁决的 direct-thread 无人值守闭环。
 
 [English](README.md)
 
@@ -10,7 +10,7 @@
 
 ---
 
-- [为什么](#为什么) · [安装形态](#安装形态) · [开始安装](#开始安装) · [它如何工作](#它如何工作) · [Codex 自动化闭环](#codex-自动化闭环) · [日常使用](#日常使用) · [目录职责](#目录职责) · [设计取向](#设计取向)
+- [为什么](#为什么) · [安装形态](#安装形态) · [开始安装](#开始安装) · [总控流水线](#总控流水线) · [无人值守自动化](#无人值守自动化) · [日常使用](#日常使用) · [目录职责](#目录职责) · [设计哲学](#设计哲学)
 
 ## 为什么
 
@@ -18,23 +18,25 @@
 
 一个需求可能同时涉及插件入口、本地 daemon、共享 core、Dashboard、需求设计窗口和真实项目测试窗口。如果每个窗口只靠自己的上下文往前走，计划很容易漂移：一个窗口做了薄接口，另一个窗口等不到证据，测试窗口验证了错误问题，总控则不断改状态文档，却没有把真实闭环跑通。
 
-Codex Control Workspace 提供的是一个**总控面**：
+Codex Control Workspace 提供的是总控面：
 
 ```text
 用户目标
    ↓
-总控计划
+状态根需求
    ↓
 任务包 → 同级 Codex 子窗口
    ↓
-证据回填 → 总控验收
+目标窗口结果证据
    ↓
-下一阶段、继续派发、归档或停止
+总控 review 裁决
+   ↓
+下一任务包、返工、阻塞、完成或停止
 ```
 
-它刻意保持朴素：没有托管服务，没有数据库，没有隐藏调度器。核心就是 `AGENTS.md`、Markdown 账本、小型 Node 脚本、Codex skill、direct Codex thread delivery，以及可选的 keep-live 支持。所有判断面都在文件里，可以读、可以改、可以复核。
+当前实现刻意保持简洁：没有托管服务，没有数据库，没有隐藏调度器。通用仓库保存 `AGENTS.md`、模板、skills 和 Node 脚本。项目运行态放在 Git 外的 `.workspace-active/`；真实 thread id 等本机状态放在 `.workspace-local/`；长期项目记忆放在同级 `workspace-ledger/`。
 
-真正的优势是“人优先的连续性”。有人在 Mac 前时，可以随时查看进度、调整范围、直接改代码或关闭自动化；自动化永远排在开发者现场判断之后。没有人在 Mac 前且已开启无人值守模式时，总控才会在子窗口完成后继续验收证据、接受或打回、补计划、创建下一阶段任务包、再次派发，直到用户最终目标完成、出现硬门禁，或没有可领取 TODO。自动化服务于总控判断，而不是替代总控判断。
+关键是职责分离。机器状态是 JSON；开发者可读推进文档只是投影；direct-thread 自动化负责在 Codex 窗口之间移动 packet，但不验收工作。总控必须继续拉取原始证据、判断结果是否通过，并选择下一步可领取任务。
 
 ## 安装形态
 
@@ -43,7 +45,7 @@ Codex Control Workspace 提供的是一个**总控面**：
 ```text
 MyWorkspace/
   AGENTS.md                  # 解包后的总控入口
-  codex-control-workspace/   # 本仓库
+  codex-control-workspace/   # 本通用仓库
   ProductRepo/
   CoreRepo/
   PluginRepo/
@@ -52,7 +54,7 @@ MyWorkspace/
   workspace-ledger/          # 项目专属长期账本
 ```
 
-这个 GitHub 仓库只保存通用总控能力。项目运行中的当前计划放在 `.workspace-active/`，本机运行态放在 `.workspace-local/`，长期历史和项目专属文档放在同级 `workspace-ledger/`。
+tracked `workspace.config.json` 是可复用默认配置。真实本机安装可以用 `.workspace-local/workspace.config.json` 覆盖；这个文件不提交。`.workspace-active/` 与 `.workspace-local/` 是安装 / 运行态，不是产品源码状态。仓库内模板是创建这些本地面的支持方式。
 
 ## 开始安装
 
@@ -90,7 +92,7 @@ node scripts/control-workspace-install.mjs prompts
 node scripts/control-workspace-install.mjs write-agents --all --write
 ```
 
-如果你没有独立的需求设计仓库或测试仓库，可以使用内部入口：
+如果你没有独立的需求设计仓库或测试仓库，可以使用内部支持面：
 
 ```sh
 node scripts/control-workspace-install.mjs configure \
@@ -103,56 +105,172 @@ node scripts/control-workspace-install.mjs configure \
 
 `write-agents` 只维护同级仓库 `AGENTS.md` 中带 `codex-control-workspace:scope` 标记的管理块，不会覆盖子仓库原有规则正文。
 
-## 它如何工作
+## 总控流水线
 
-### 总控入口
+### 总控门禁
 
 父目录的 `AGENTS.md` 是 Codex 自动读取的总控契约。它由本仓库 `AGENTS.md` 解包生成，规定总控在派发、测试、验收、归档和自动化之前必须如何思考。
 
-最硬的规则保留在这里，因为它们约束的是总控本身：不能用脚本输出代替判断，不能接受薄弱证据，不能把空壳连接包装成完成，不能在边界不清时把任务丢给别的窗口。
+最硬的规则保留在这里，因为它们约束的是总控本身：不能用脚本输出代替判断，不能接受薄弱证据，不能把空壳连接包装成完成，不能在最小代码闭环没跑通时扩大范围，不能在边界不清时把任务丢给别的窗口。
 
-### 当前工作面
+### 状态根
 
-`.workspace-active/workspace/index.md` 是当前总控入口。它挂载当前计划、当前状态、TODO、测试交流、Design inbox 和自动化状态。
+新需求由 `controller-state.mjs init` 创建一个 controller state root。状态根包含这些机器文件：
 
-当前计划是短期文件，只描述这一轮目标、任务包、窗口覆盖、producer / consumer 顺序、验证命令和回填要求。完成后，有长期价值的证据再收束到 `../workspace-ledger/`。
-
-### 子窗口
-
-每个子仓库保留自己的 `AGENTS.md`。安装脚本会写入一个紧凑的管理块，让子窗口知道：
-
-- 总控仓库在哪里；
-- 自己对应哪个窗口名；
-- 当前计划和长期账本在哪里；
-- 如何执行分配给自己的 dispatch packet 并回填 result envelope；
-- 什么情况必须停止并回报总控。
-
-子窗口仍然拥有自己的仓库。它可以读代码、实现、测试，也可以在自己的边界内使用 Codex 子 agent。总控只验收它统一回填的原始证据。
-
-## Codex 自动化闭环
-
-Codex Automation Closed Loop 使用 direct thread dispatch 作为正常工作流水线，但计划和验收始终留在总控。delivery contract 只走 direct-thread：把任务提示词发送到已登记的 Codex 线程；如果缺真实 thread id 或宿主线程投递能力不可用，fail closed 回到总控裁决。
-
-脚本层只负责明确的 packet / envelope：
-
-```sh
-node scripts/workspace-control.mjs loop register-thread --window <window> --thread-id <realThreadId> --write --json
-node scripts/workspace-control.mjs loop create-dispatch --target-window <window> --task-id <taskId> --group <group> --controller-window <controllerWindow> --return-policy group-ready --control-plan <plan> --objective "<objective>" --write --json
-node scripts/workspace-control.mjs loop build-delivery --packet-file <packetFile> --require-thread --write --json
-node scripts/workspace-control.mjs loop submit-result --target-window <window> --task-id <taskId> --status completed --evidence-ref <ref> --write --json
-node scripts/workspace-control.mjs loop review-results --group <group> --json
-node scripts/workspace-control.mjs loop build-controller-return --group <group> --trigger-target <window> --trigger-task-id <taskId> --control-plan <plan> --require-thread --write --json
+```text
+demand.json
+controller-state.json
+controller-events.jsonl
+intake/*.json
+test-cards/*.json
+task-packages/*.json
+target-results/*.json
+transition-candidates/*.json
+developer-progress.md
 ```
 
-脚本不会直接调用 Codex automation API。它只生成 dispatch packet / delivery envelope。总控窗口或 delivery adapter 按 envelope 执行 direct thread send，并用 send/readback 的 delivery-run 证据证明已投递；目标窗口完成后回填 `TargetResultEnvelope`，并按 `DispatchGroup.controllerWindow` / `DispatchGroup.returnPolicy` 通过 controller-return 回调原发起总控。
+`controller-state.json` 是流程权威。`developer-progress.md` 是开发者可读推进面：目标、完成定义、阶段方案、任务包、追加式回填摘要、裁决记录，以及自动生成的 `Unified Status` 区块。脚本只能重建这个固定区块；其它内容是可读上下文或带时间戳的追加历史。
 
-回调线路和策略是 dispatch group 的一等协议。总控创建 group 时选择 `controller-window` 和 `return-policy`：`controller-window` 固定接收回调的原发起总控；`group-ready` 表示所有预期窗口都有结果后只回调一次；`per-target` 表示每个已完成窗口都可以唤醒总控，但回跳信封必须携带 completed / blocked / missing 的 group snapshot，不能让总控误判整组完成。
+### Design 与 Test Intake
 
-总控完成 direct-thread send、readback 和 delivery-run 记录后，该派发动作即完成；总控释放当前路口，等待子窗口通过结果信封和 controller-return 回调进入下一次验收。
+Design 和 Test 不再各自维护一套状态机。它们把结构化证据挂到当前状态根：
 
-这个闭环面向长时间无人值守运行，但始终可被人接管。开发者在场时，手动修正、代码修改和范围裁决优先于下一次自动跳转；Mac 空闲无人看守时，总控可以复核 result envelope、拉取原始证据、接受或打回、创建下一阶段任务包并继续派发，直到用户最终目标完成、出现硬门禁，或没有可领取 TODO。
+```sh
+node scripts/controller-state.mjs init \
+  --demand-key <key> \
+  --title "<title>" \
+  --goal "<goal>" \
+  --completion-definition "<done>" \
+  --stage-plan "<stage plan>" \
+  --write --json
 
-在 macOS 上，防睡眠只是 delivery support，不是任务逻辑。若安装实例启用防睡眠，启动或停止失败必须报告为自动化就绪风险，不能隐藏在任务状态里。
+node scripts/control-intake.mjs design-handoff \
+  --state-root <stateRoot> \
+  --design-key <DESIGN-KEY> \
+  --write --json
+
+node scripts/control-intake.mjs test-card \
+  --state-root <stateRoot> \
+  --test-id <testId> \
+  --target-window <TestWindow> \
+  --question "<question>" \
+  --object-boundary "<boundary>" \
+  --controller-self-check "<already checked>" \
+  --real-scenario-condition "<why real scenario is needed>" \
+  --success-means "<success conclusion>" \
+  --failure-means "<failure conclusion>" \
+  --cannot-conclude "<what this test cannot prove>" \
+  --stop-condition "<when to stop>" \
+  --write --json
+```
+
+`control-intake.mjs` 只负责验证并写入机器 intake。它不接收 Design handoff、不验收测试结果、不修改 controller state、不创建 dispatch。
+
+### 任务包与验收
+
+正常路线是任务包、派发、结果、归约、裁决：
+
+```sh
+node scripts/controller-state.mjs add-task-package \
+  --state-root <stateRoot> \
+  --task-package-id <packageId> \
+  --summary "<summary>" \
+  --target-window <window> \
+  --target-task-id <taskId> \
+  --target-summary "<target task>" \
+  --write --json
+
+node scripts/codex-automation-loop.mjs prepare-dispatch-from-state \
+  --state-root <stateRoot> \
+  --task-package-id <packageId> \
+  --target-task-id <taskId> \
+  --group <groupId> \
+  --controller-window <controllerWindow> \
+  --human-context-ref <stateRoot>/developer-progress.md \
+  --require-thread \
+  --write --json
+
+node scripts/controller-state.mjs import-target-result \
+  --state-root <stateRoot> \
+  --target-window <window> \
+  --target-task-id <taskId> \
+  --status completed \
+  --evidence-ref <ref> \
+  --verification "<verification summary>" \
+  --write --json
+
+node scripts/codex-automation-loop.mjs review-pack \
+  --state-root <stateRoot> \
+  --json
+
+node scripts/controller-state.mjs reduce-results \
+  --state-root <stateRoot> \
+  --write --json
+
+node scripts/controller-state.mjs decide-review \
+  --state-root <stateRoot> \
+  --candidate-id <candidateId> \
+  --decision accept \
+  --reason "<controller evidence verdict>" \
+  --evidence-ref <ref> \
+  --write --json
+```
+
+当需求已完成、已归档、暂停、阻塞、正在等待总控 review，或目标任务已 accepted / completed / blocked 时，`prepare-dispatch-from-state` 会 fail closed。导入结果不是验收；`reduce-results` 和 `decide-review` 是独立的总控步骤。
+
+## 无人值守自动化
+
+Codex Automation Closed Loop 是无人值守工作的 transport 和回调契约。它只走 direct-thread：
+
+1. 真实 Codex thread id 登记在 `.workspace-local/`。
+2. 从状态根任务包生成 dispatch packet。
+3. 生成 delivery envelope。
+4. 用宿主 thread 工具发送提示词。
+5. 用 send/readback 证据记录 delivery run。
+6. 目标窗口返回 result envelope。
+7. 总控复核原始证据并裁决下一次状态迁移。
+
+常用命令：
+
+```sh
+node scripts/codex-automation-loop.mjs register-thread \
+  --window <window> \
+  --thread-id <realThreadId> \
+  --role target \
+  --write --json
+
+node scripts/codex-automation-loop.mjs record-delivery-run \
+  --delivery-file <deliveryEnvelope> \
+  --status sent \
+  --host-method send_message_to_thread \
+  --host-mode new-turn \
+  --readback-ok true \
+  --evidence "<readback summary>" \
+  --write --json
+
+node scripts/codex-automation-loop.mjs review-results \
+  --group <groupId> \
+  --json
+
+node scripts/codex-automation-loop.mjs build-controller-return \
+  --group <groupId> \
+  --trigger-target <window> \
+  --trigger-task-id <taskId> \
+  --controller-window <controllerWindow> \
+  --require-thread \
+  --write --json
+
+node scripts/codex-automation-loop.mjs stop-loop \
+  --automation-run-id <runId> \
+  --reason "<reason>" \
+  --write --json
+```
+
+脚本层不会自己发送 host thread message，也不会验收证据。delivery adapter 或总控窗口必须完成真实发送并记录 readback。回调由 `DispatchGroup.controllerWindow` 与 `return-policy` 决定：`group-ready` 是所有预期窗口都有结果后的一次 barrier callback；`per-target` 允许每个已完成目标唤醒总控，但必须携带 completed / blocked / missing 的 group snapshot。
+
+无人值守只在已确认需求内持续推进：review result envelope、拉原始证据、接受或打回、创建下一可领取任务包、再次派发。停止条件是最终完成、硬门禁、用户停止、无可领取 TODO、证据必须人工裁决，或当前状态禁止派发。
+
+在 macOS 上，keep-live / 防睡眠只是自动化支持，不是任务逻辑，也不是投递证明。如果无人值守依赖它，启动或停止失败必须报告为自动化就绪风险。
 
 ## 日常使用
 
@@ -161,12 +279,14 @@ node scripts/workspace-control.mjs loop build-controller-return --group <group> 
 ```sh
 node scripts/workspace-control.mjs status
 node scripts/workspace-control.mjs loop status --json
-node scripts/verify-control-center.mjs --require-task-packages --with-script-tests
+node scripts/workspace-control.mjs verify --script-tests
 ```
 
-普通手动派发时，总控默认只给一条通用提示词：读取父级 `AGENTS.md`、读取当前计划、读取自己仓库的 `AGENTS.md`、声明窗口身份、只做分配给自己的任务、回填证据。
+用 `workspace-control.mjs --print <command>` 可以查看底层脚本调用。完整脚本目录在 [scripts/README.md](scripts/README.md)。
 
-无人值守时，只有当前计划明确允许 Codex Automation Closed Loop，才开启自动化。开启自动化不代表所有聊天、需求讨论或单窗口开发都自动进入流水线；它只授权当前计划里的目标窗口派发、结果验收和下一阶段裁决。开发者的实时输入永远高于下一次自动派发。
+普通手动派发时，总控提示词应该保持短：读取父级 `AGENTS.md`、读取状态根和 `developer-progress.md`、读取目标仓库 `AGENTS.md`、声明窗口身份、只做分配给自己的目标任务、回填证据。
+
+开启无人值守不代表所有聊天、需求讨论或单窗口开发都自动进入流水线；它只授权当前需求在已确认目标、完成定义和仓库边界内进行目标窗口 fan-out、结果验收和下一任务包裁决。开发者实时输入永远高于下一次自动跳转。
 
 ## 目录职责
 
@@ -174,19 +294,21 @@ node scripts/verify-control-center.mjs --require-task-packages --with-script-tes
 | --- | --- |
 | `AGENTS.md` | 总控规则源文件，用于解包到父级工作区。 |
 | `workspace.config.json` | 通用窗口名、同级仓库路径、职责标签和脚本默认配置。 |
-| `.workspace-active/` | 不提交的当前工作面：当前计划、TODO、测试交流、Design inbox。 |
-| `.workspace-local/` | 不提交的本机运行态：thread id、自动化闭环状态、本机配置覆盖。 |
+| `.workspace-active/` | 不提交的项目运行态：当前索引、状态根、推进文档、TODO 投影、intake、test cards。 |
+| `.workspace-local/` | 不提交的本机运行态：真实 thread id、自动化闭环状态、keep-live 状态、本机配置覆盖。 |
 | `../workspace-ledger/` | 位于本仓库外的项目专属长期账本。 |
-| `scripts/` | 安装、校验、账本、自动化和总控辅助脚本。 |
+| `scripts/` | 安装、校验、账本、状态机、intake、自动化和总控辅助脚本。 |
 | `skills/` | 总控、子窗口、测试、账本和自动化操作手册。 |
-| `templates/` | 计划、任务包、Design handoff、测试单和阶段确认的最小骨架。 |
+| `templates/` | 状态根、开发者推进文档、Design/Test 支持面和阶段确认的最小骨架。 |
 
-## 设计取向
+## 设计哲学
 
-1. **提示词原生，文件承载**：人能读，Codex 也能读。
-2. **先总控判断，再自动化投递**：脚本负责分类和投递，不替代验收。
-3. **同级仓库保持独立**：产品代码、测试和提交仍留在自己的仓库。
-4. **当前工作本地化，长期历史外置**：通用仓库保持干净，项目记忆进入 active 和 ledger。
-5. **脚本要小，边界要硬**：自动化只有在保住窗口身份、仓库范围和证据质量时才有价值。
+1. **唯一状态机**：`controller-state.json` 是流程权威；Markdown 只是投影或证据。
+2. **唯一开发者可读推进面**：开发者在一个地方读取目标、阶段方案、任务包、回填和裁决。
+3. **机器数据保持机器化**：重复状态、thread id、envelope、任务包、test card、intake 都用 JSON / JSONL。
+4. **自动化是 transport，不是判断力**：direct-thread 投递和回调负责移动工作；总控负责接受或打回。
+5. **Design 和 Test 挂到需求**：handoff 和真实场景测试边界进入状态根 intake，不生成并行计划。
+6. **同级仓库保持独立**：产品代码、测试和提交仍留在自己的仓库。
+7. **干净模板优先于聪明分叉**：默认路线要易读、易验、难误用。
 
 Codex Control Workspace 不是判断力的替代品。它是让判断力在多窗口、多仓库工作里持续在线的脚手架。

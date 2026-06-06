@@ -453,6 +453,29 @@ const AGENTS_END = "<!-- codex-control-workspace:scope:end -->";
 const ROOT_AGENTS_START = "<!-- codex-control-workspace:root-agents:start -->";
 const ROOT_AGENTS_END = "<!-- codex-control-workspace:root-agents:end -->";
 
+function testWindowNamesForContext(context) {
+  const configuredNames = [
+    context.config.testWindow,
+    context.config.ideTestWindow,
+  ].filter(Boolean);
+  const testRepo = configuredNames
+    .map((name) => repoForWindow(context.config, name))
+    .find(Boolean);
+  if (!testRepo) {
+    return [...new Set(configuredNames.length > 0 ? configuredNames : ["TestWindow"])];
+  }
+  const testPath = repositoryAbsPath(context.controlRoot, testRepo);
+  const samePathNames = normalizedRepositories(context.config)
+    .filter((candidate) => repositoryAbsPath(context.controlRoot, candidate) === testPath)
+    .map((candidate) => candidate.windowName);
+  return [...new Set([...configuredNames, ...samePathNames])];
+}
+
+function testWindowDeliveryBoundaryLine(context) {
+  const names = testWindowNamesForContext(context).join(" / ");
+  return `- 非测试窗口不得创建、处理或验证 ${names} delivery，除非当前计划和 delivery envelope 同时显式授权。`;
+}
+
 function scopeBlock(context, repo) {
   const absolutePath = repositoryAbsPath(context.controlRoot, repo);
   const samePathRepos = repositoriesSharingPath(context, repo);
@@ -497,7 +520,7 @@ ${samePathRepos.map((item) => {
     roleNote.push(`- Design handoff board: \`${designBoard}\``);
   }
   if (isTest) {
-    roleNote.push(`- Test exchange: \`${testExchange}\``);
+    roleNote.push(`- Test exchange projection: \`${testExchange}\``);
   }
   const roleNoteText = roleNote.length > 0 ? `\n${roleNote.join("\n")}` : "";
   const windowNameText = hasWindowAliases
@@ -539,7 +562,7 @@ ${windowLedgerText}${roleNoteText}
 - Delivery prompt 只承载少量动态变量和 skill 指向；不得把提示词当成完整命令手册。状态机路线的可见变量只需要 \`currentWindow\` / \`taskId\` / \`stateRoot\` / 可选 \`dispatchGroup\`；\`controllerWindow\`、\`returnPolicy\`、\`humanContextRef\`、\`stateRevision\` 等机器字段从 state root、dispatch group 和 delivery envelope 读取。缺少 \`stateRoot\` 或变量冲突时停止回报。
 ${dispatchPacketRule}
 - 子窗口默认不创建目标窗口下一跳 delivery；补证、重派和下一阶段都由总控 review 后决定。若 delivery \`returnRoute=controller\` 且 \`review-results\` 显示 \`DispatchGroup.returnPolicy\` 允许回调，只允许通过 \`build-controller-return\` 创建一次总控回跳 envelope，并默认回到 \`DispatchGroup.controllerWindow\` 指定的原发起总控；之后必须继续完成真实 direct-thread send、readback 和 \`record-delivery-run\`。只有存在 \`status=sent\` 且 \`readback.ok=true\` 的 \`DirectThreadDeliveryRun\`，才算真实回跳完成。完整 group snapshot 留在 controller-return envelope；可见 prompt 只显示非空异常 targets，不能把单个回填误判为整组完成。
-- 非 TestWindow 不得创建、处理或验证 TestWindow delivery，除非当前计划和 delivery envelope 同时显式授权。
+${testWindowDeliveryBoundaryLine(context)}
 - Thread id 只能写入 control workspace 的本地 runtime；不得写入 tracked 文档、回填正文或 GitHub。
 
 ### 文档落点
@@ -607,7 +630,7 @@ function expectedScopeCoordinates(context, repo) {
     );
   }
   if (repo.windowName === context.config.testWindow) {
-    coordinate.testExchange = relativePathFrom(
+    coordinate.testExchangeProjection = relativePathFrom(
       absolutePath,
       resolveMaybeRelative(context.controlRoot, context.config.testExchangePath ?? ".workspace-active/workspace/current/test-exchange.md"),
     );
@@ -641,8 +664,8 @@ function coordinateChecks(block, coordinates) {
   if (coordinates.designHandoffBoard) {
     checks.push(["designHandoffBoard", `- Design handoff board: \`${coordinates.designHandoffBoard}\``]);
   }
-  if (coordinates.testExchange) {
-    checks.push(["testExchange", `- Test exchange: \`${coordinates.testExchange}\``]);
+  if (coordinates.testExchangeProjection) {
+    checks.push(["testExchangeProjection", `- Test exchange projection: \`${coordinates.testExchangeProjection}\``]);
   }
   return checks.map(([key, expected]) => {
     const ok = typeof expected === "function" ? expected(block) : block.includes(expected);
@@ -678,7 +701,7 @@ function accessProfileFor(context, repo) {
     },
     {
       key: "testWindowBoundary",
-      ok: block.includes("非 TestWindow 不得创建、处理或验证 TestWindow delivery"),
+      ok: block.includes(testWindowDeliveryBoundaryLine(context)),
     },
     {
       key: "threadIdLocalOnly",
@@ -928,20 +951,23 @@ function internalTestingReadme(config) {
 
 Use this directory when the user does not have an external ${config.testWindow} repository.
 
-- Test exchange: \`${config.testExchangePath}\`
+- Test boundary machine cards: \`<state-root>/test-cards/*.json\`
+- Test exchange projection: \`${config.testExchangePath}\`
 - Local rules: \`AGENTS.md\`
 - Testing operation policy: \`docs/testing-operation-policy.md\`
 - Test handoff template: \`templates/test-handoff-template.md\`
-- Rule: only create real test handoffs when a real scenario is required.
+- Rule: only run real test work when a controller state root assigns a matching task package and test card.
 `;
 }
 
 function testExchangeTemplate() {
-  return `# Test Exchange
+  return `# Test Exchange Projection
 
-This file records real-scenario validation handoffs and evidence.
+This file is a short human-readable projection for real-scenario validation handoffs.
+Machine authority lives under the active controller state root in \`test-cards/*.json\`,
+\`task-packages/*.json\`, and \`target-results/*.json\`.
 
-## Active Test Cards
+## Active Test Projection
 
 None.
 
@@ -956,8 +982,8 @@ function externalTestAlignment(repo, config) {
 
 This repository can act as an external test window for ${config.workspaceName}.
 
-- Control workspace test exchange: \`${config.testExchangePath}\`
-- Fill test cards in the control workspace first.
+- Control workspace test exchange projection: \`${config.testExchangePath}\`
+- Fill state-root test cards in the control workspace first.
 - Keep probe scripts and real-environment evidence in this repository only when the test really needs this external environment.
 `;
 }
@@ -1055,7 +1081,7 @@ function syncStarterLedgerFiles(context) {
     ensureTextFile(context.ledgerPaths.workspaceCurrentStatusPath, readControlFile(context.controlRoot, `${sourceRoot}/current/workspace-current-status.md`), "active current status"),
     ensureTextFile(context.ledgerPaths.globalTodoPath, readControlFile(context.controlRoot, `${sourceRoot}/current/global-todo-board.md`), "active global TODO board"),
     ensureTextFile(resolveConfigPath(context.controlRoot, context.config.designHandoffBoard), readControlFile(context.controlRoot, `${sourceRoot}/current/design-handoff-board.md`), "active design handoff board"),
-    ensureTextFile(resolveConfigPath(context.controlRoot, context.config.testExchangePath), readControlFile(context.controlRoot, `${sourceRoot}/current/test-exchange.md`), "active test exchange"),
+    ensureTextFile(resolveConfigPath(context.controlRoot, context.config.testExchangePath), readControlFile(context.controlRoot, `${sourceRoot}/current/test-exchange.md`), "active test exchange projection"),
     ensureTextFile(context.ledgerPaths.workspaceRecordMapPath, readControlFile(context.controlRoot, `${sourceRoot}/workspace-record-map.md`), "project workspace record map"),
   ];
 }
@@ -1143,7 +1169,7 @@ function syncTemplatesPayload() {
         results.push({ windowName, mode: repo.mode, ok: false, issue: "external test directory missing", path: repo.path });
         continue;
       }
-      results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(resolveConfigPath(context.controlRoot, context.config.testExchangePath), testExchangeTemplate(), "test exchange") });
+      results.push({ windowName, mode: repo.mode, ok: true, ...ensureTextFile(resolveConfigPath(context.controlRoot, context.config.testExchangePath), testExchangeTemplate(), "test exchange projection") });
       for (const result of syncTestSupportFiles(context, repoRoot, repo.mode)) {
         results.push({ windowName, mode: repo.mode, ok: true, ...result });
       }

@@ -221,7 +221,8 @@ test("write-agents can explicitly include unmanaged Design/Test windows while sk
 
   const testAgents = readFileSync(path.join(testWindow, "AGENTS.md"), "utf8");
   assert.match(testAgents, /Window name: `TestWindow`/);
-  assert.match(testAgents, /Test exchange: `\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/current\/test-exchange\.md`/);
+  assert.match(testAgents, /Test exchange projection: `\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/current\/test-exchange\.md`/);
+  assert.match(testAgents, /非测试窗口不得创建、处理或验证 TestWindow delivery/);
   assert.doesNotMatch(testAgents, /不得成为默认测试队列/);
 });
 
@@ -251,6 +252,7 @@ test("write-agents supports multiple workspace windows sharing one AGENTS.md", (
   assert.match(sharedAgents, /`TestIDE`: `\.\.\/workspace-ledger\/TestIDE`/);
   assert.match(sharedAgents, /`TestWindow`: `\.\.\/workspace-ledger\/TestWindow`/);
   assert.match(sharedAgents, /只处理本接入卡列出的窗口 dispatch packet/);
+  assert.match(sharedAgents, /非测试窗口不得创建、处理或验证 TestWindow \/ TestIDE delivery/);
   assert.match(sharedAgents, /currentWindow/);
 
   const ideProfile = runJson(fixture, ["access-profiles", "--window", "TestIDE"]).profiles[0];
