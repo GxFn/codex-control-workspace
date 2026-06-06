@@ -2,9 +2,9 @@
 
 # Codex Control Workspace
 
-A local-first total-control workspace for multi-repository Codex work, with one
-machine state root, one developer-readable progress surface, and an unattended
-direct-thread loop that still requires controller judgment.
+A local-first control plane for multi-repository Codex work: one controller,
+many specialist Codex windows, explicit evidence, and direct-thread handoff
+without turning scripts into the decision maker.
 
 [中文](README.zh-CN.md)
 
@@ -12,52 +12,63 @@ direct-thread loop that still requires controller judgment.
 
 ---
 
-- [Why](#why) · [Install Shape](#install-shape) · [Getting Started](#getting-started) · [Control Pipeline](#control-pipeline) · [Unattended Automation](#unattended-automation) · [Daily Use](#daily-use) · [Repository Layout](#repository-layout) · [Design Philosophy](#design-philosophy)
+- [What It Does](#what-it-does) · [Architecture](#architecture) · [Install Shape](#install-shape) · [How Work Moves](#how-work-moves) · [Automation Model](#automation-model) · [Daily Use](#daily-use) · [Repository Layout](#repository-layout) · [Design Philosophy](#design-philosophy)
 
-## Why
+## What It Does
 
-One Codex window is good at one codebase. Real product work is rarely that tidy.
+One Codex window is good at one codebase. Real product work often spans a
+plugin entrypoint, a local daemon, a shared core package, a dashboard, a design
+thread, and a real-project test thread. Codex Control Workspace keeps that work
+from turning into scattered chat state.
 
-A demand may need a plugin entrypoint, a local daemon, a shared core package, a
-dashboard, a design window, and a real-project test window. If each window works
-from its own memory, the plan drifts: one window builds a thin interface,
-another waits for evidence that never arrives, a test window validates the wrong
-question, and the controller spends its time rewriting status documents instead
-of closing the real loop.
+The main ideas:
 
-Codex Control Workspace gives that work a total-control surface:
+- **One controller brain**: the parent workspace owns goals, boundaries,
+  dispatch decisions, acceptance, TODO routing, and archive decisions.
+- **One state root per demand**: machine state, task packages, target results,
+  and review candidates live together instead of being spread across status
+  documents.
+- **One readable progress surface**: `developer-progress.md` is the human-facing
+  view of the goal, stage plan, task packages, backfills, and controller
+  decisions.
+- **Sibling Codex windows stay specialized**: product repositories keep their
+  own rules, commits, tests, and responsibility boundaries.
+- **Direct-thread transport is transport only**: packets move between Codex
+  windows, but the controller still reviews raw evidence before accepting work.
+- **Design and Test attach to the demand**: design handoffs and real-scenario
+  test cards become structured intake, not parallel state machines.
+- **Local-first by default**: active state and real thread ids stay out of Git;
+  long-term decisions go to a project ledger.
 
-```text
-User goal
-   ↓
-State-root demand
-   ↓
-Task packages → sibling Codex windows
-   ↓
-Target result evidence
-   ↓
-Controller review decision
-   ↓
-Next package, rework, blocked, complete, or stop
+The result is not a bigger script runner. It is a small control surface that
+keeps judgment, evidence, and ownership visible while Codex work fans out.
+
+## Architecture
+
+```mermaid
+flowchart TD
+  User["User / developer goal"] --> Controller["Controller Codex window"]
+  Controller --> Gates["AGENTS.md gates<br/>goal, boundary, evidence, stop rules"]
+  Controller <--> StateRoot["State root<br/>.workspace-active/..."]
+  StateRoot --> Packages["Task packages"]
+  Packages --> Envelopes["Delivery envelopes"]
+  Local[".workspace-local<br/>thread ids, local config"] -. "lookup" .-> Envelopes
+  Envelopes --> Host["Codex host thread tool<br/>send_message_to_thread"]
+  Host --> Targets["Sibling Codex windows"]
+  Targets --> Repos["Product repositories"]
+  Targets --> Results["TargetResultEnvelope<br/>plus raw evidence refs"]
+  Results --> Controller
+  Controller --> Ledger["workspace-ledger<br/>long-term records"]
 ```
 
-The current implementation is intentionally small. There is no hosted service,
-database, or hidden scheduler. The reusable repository contains `AGENTS.md`,
-templates, skills, and Node scripts. Project runtime state lives outside Git in
-`.workspace-active/`; local machine state such as real thread ids lives in
-`.workspace-local/`; long-term project memory lives in the sibling
-`workspace-ledger/`.
-
-The important trick is separation of responsibility. Machine state is JSON.
-Human-readable progress is a projection. Direct-thread automation moves packets
-between Codex windows, but it does not accept work. The controller must still
-pull raw evidence, decide whether the result is acceptable, and choose the next
-eligible step.
+The controller is the only place that decides whether evidence is enough. The
+scripts create, validate, summarize, and record machine data; they do not accept
+a feature, widen scope, or choose product behavior.
 
 ## Install Shape
 
-Do not put your product repositories inside this repository. Clone the control
-workspace next to the repositories it will manage:
+Do not put product repositories inside this repository. Put the reusable control
+workspace next to the repositories it manages:
 
 ```text
 MyWorkspace/
@@ -71,285 +82,99 @@ MyWorkspace/
   workspace-ledger/          # project-specific long-term records
 ```
 
-The tracked `workspace.config.json` is a reusable default. A local installation
-may override it with `.workspace-local/workspace.config.json`; that file is not
-committed. `.workspace-active/` and `.workspace-local/` are installation/runtime
-surfaces, not source-controlled product state. Templates in this repository are
-the supported way to create those local surfaces.
+`workspace.config.json` gives reusable defaults. A local installation can
+override them with `.workspace-local/workspace.config.json`; that file is never
+committed. `.workspace-active/` and `.workspace-local/` are runtime surfaces,
+not source-controlled product state.
 
-## Getting Started
+Recommended installation flow:
 
-Use Codex as the installer. Ask it to inspect the parent folder, propose
-repository roles, and wait for confirmation before writing anything:
+1. Ask Codex to inspect the parent folder.
+2. Let it propose repository roles and window names.
+3. Confirm the boundary.
+4. Let it write only the managed `AGENTS.md` blocks and local runtime surfaces.
+
+Useful first prompt:
 
 ```text
 You are installing codex-control-workspace.
 Read README.md, README.zh-CN.md, AGENTS.md, workspace.config.json, and scripts/README.md.
-Run node scripts/control-workspace-install.mjs discover --json.
-List sibling repositories, proposed window names, existing AGENTS.md status, and role suggestions.
-Wait for my confirmation before running configure, sync-root-agents, sync-templates, or write-agents.
+Run a read-only discovery of sibling repositories.
+List proposed window names, repository roles, existing AGENTS.md status, and local surfaces that would be created.
+Wait for my confirmation before writing anything.
 ```
 
-Common orientation commands:
+## How Work Moves
 
-```sh
-cd MyWorkspace/codex-control-workspace
-node scripts/control-workspace-install.mjs discover --json
-node scripts/control-workspace-install.mjs status --json
-```
+The normal loop is intentionally boring:
 
-After the scope is confirmed, configure sibling windows:
+1. The user gives a goal or a design handoff.
+2. The controller defines completion, boundaries, first blocker, and eligible
+   repositories.
+3. A state root records the demand and creates task packages.
+4. Target Codex windows receive compact direct-thread prompts.
+5. Target windows work only inside their repository responsibility and return
+   result envelopes with evidence references.
+6. The controller reads the raw evidence, accepts or rejects the result, and
+   records the decision.
+7. The controller either dispatches the next eligible package, marks the demand
+   blocked, stops for user judgment, or completes and archives.
 
-```sh
-node scripts/control-workspace-install.mjs configure \
-  --repo BaseWindow=../ProductRepo \
-  --repo PluginWindow=../PluginRepo \
-  --repo DesignWindow=../DesignRepo \
-  --repo TestWindow=../TestRepo \
-  --write
+Design and Test are supporting roles:
 
-node scripts/control-workspace-install.mjs sync-root-agents --write
-node scripts/control-workspace-install.mjs sync-templates --all --write
-node scripts/control-workspace-install.mjs prompts
-node scripts/control-workspace-install.mjs write-agents --all --write
-```
+- **Design** clarifies requirements, tradeoffs, hidden goals, and handoff
+  candidates. It does not become product truth until the user or controller
+  accepts it.
+- **Test** handles real-project, dashboard, cold-start, and runtime evidence
+  that the controller or product repo cannot safely reproduce alone.
 
-If you do not have separate design or test repositories, use internal support
-surfaces:
+## Automation Model
 
-```sh
-node scripts/control-workspace-install.mjs configure \
-  --repo BaseWindow=../ProductRepo \
-  --repo PluginWindow=../PluginRepo \
-  --internal-design \
-  --internal-test \
-  --write
-```
+Automation is direct-thread delivery plus result return. It is not a hidden
+scheduler and not a replacement for review.
 
-`write-agents` updates only managed `codex-control-workspace:scope` blocks in
-configured sibling repositories. It does not replace a child repository's own
-rules.
+Core rules:
 
-## Control Pipeline
+- Real Codex thread ids stay in `.workspace-local/`.
+- Delivery prompts stay small and human-readable.
+- The host thread tool sends the prompt; scripts only record the send/readback
+  evidence.
+- `group-ready` can wait for all expected target results before one controller
+  callback.
+- `per-target` can wake the controller for each target, still with a group
+  snapshot.
+- The controller stops on final completion, hard gates, user stop, no eligible
+  TODO, missing evidence, or any state that forbids dispatch.
 
-### Total-Control Gate
-
-The parent `AGENTS.md` is the always-loaded control contract. It is generated
-from this repository's `AGENTS.md` and tells the controller how to think before
-dispatching, testing, accepting, archiving, or automating work.
-
-The strongest rules stay there because they constrain the controller itself:
-do not replace judgment with script output, do not accept weak evidence, do not
-turn thin wiring into a completed feature, do not broaden scope when the
-smallest code loop is still broken, and do not send work to another window
-before the boundary is clear.
-
-### State Root
-
-New demands are represented by one controller state root created with
-`controller-state.mjs init`. The root contains machine-owned files such as:
-
-```text
-demand.json
-controller-state.json
-controller-events.jsonl
-intake/*.json
-test-cards/*.json
-task-packages/*.json
-target-results/*.json
-transition-candidates/*.json
-developer-progress.md
-```
-
-`controller-state.json` is the process authority. `developer-progress.md` is the
-developer-readable surface: goal, completion definition, stage plan, task
-packages, append-only backfill summaries, decisions, and a generated `Unified
-Status` block. Scripts may regenerate only that fixed block; everything else is
-readable context or timestamped append-only history.
-
-### Design And Test Intake
-
-Design and Test are not separate state machines. They attach structured
-evidence to the active state root:
-
-```sh
-node scripts/controller-state.mjs init \
-  --demand-key <key> \
-  --title "<title>" \
-  --goal "<goal>" \
-  --completion-definition "<done>" \
-  --stage-plan "<stage plan>" \
-  --write --json
-
-node scripts/control-intake.mjs design-handoff \
-  --state-root <stateRoot> \
-  --design-key <DESIGN-KEY> \
-  --write --json
-
-node scripts/control-intake.mjs test-card \
-  --state-root <stateRoot> \
-  --test-id <testId> \
-  --target-window <TestWindow> \
-  --question "<question>" \
-  --object-boundary "<boundary>" \
-  --controller-self-check "<already checked>" \
-  --real-scenario-condition "<why real scenario is needed>" \
-  --success-means "<success conclusion>" \
-  --failure-means "<failure conclusion>" \
-  --cannot-conclude "<what this test cannot prove>" \
-  --stop-condition "<when to stop>" \
-  --write --json
-```
-
-`control-intake.mjs` validates and writes machine intake. It does not accept a
-Design handoff, accept a test result, mutate controller state, or create
-dispatches.
-
-### Task Package And Review
-
-The normal route is package, dispatch, result, reduce, decide:
-
-```sh
-node scripts/controller-state.mjs add-task-package \
-  --state-root <stateRoot> \
-  --task-package-id <packageId> \
-  --summary "<summary>" \
-  --target-window <window> \
-  --target-task-id <taskId> \
-  --target-summary "<target task>" \
-  --write --json
-
-node scripts/codex-automation-loop.mjs prepare-dispatch-from-state \
-  --state-root <stateRoot> \
-  --task-package-id <packageId> \
-  --target-task-id <taskId> \
-  --group <groupId> \
-  --controller-window <controllerWindow> \
-  --human-context-ref <stateRoot>/developer-progress.md \
-  --require-thread \
-  --write --json
-
-node scripts/controller-state.mjs import-target-result \
-  --state-root <stateRoot> \
-  --target-window <window> \
-  --target-task-id <taskId> \
-  --status completed \
-  --evidence-ref <ref> \
-  --verification "<verification summary>" \
-  --write --json
-
-node scripts/codex-automation-loop.mjs review-pack \
-  --state-root <stateRoot> \
-  --json
-
-node scripts/controller-state.mjs reduce-results \
-  --state-root <stateRoot> \
-  --write --json
-
-node scripts/controller-state.mjs decide-review \
-  --state-root <stateRoot> \
-  --candidate-id <candidateId> \
-  --decision accept \
-  --reason "<controller evidence verdict>" \
-  --evidence-ref <ref> \
-  --write --json
-```
-
-`prepare-dispatch-from-state` fails closed when the demand is completed,
-archived, paused, blocked, waiting for controller review, or when the target task
-is already accepted, completed, or blocked. Importing a result is not
-acceptance; `reduce-results` and `decide-review` are explicit controller steps.
-
-## Unattended Automation
-
-Codex Automation Closed Loop is the transport and callback contract for
-unattended work. It is direct-thread only:
-
-1. Register real Codex thread ids in `.workspace-local/`.
-2. Build dispatch packets from a state-root task package.
-3. Build delivery envelopes.
-4. Send the prompt with the host thread tool.
-5. Record a delivery run with send/readback evidence.
-6. Target windows return result envelopes.
-7. Total control reviews raw evidence and decides the next transition.
-
-Useful commands:
-
-```sh
-node scripts/codex-automation-loop.mjs register-thread \
-  --window <window> \
-  --thread-id <realThreadId> \
-  --role target \
-  --write --json
-
-node scripts/codex-automation-loop.mjs record-delivery-run \
-  --delivery-file <deliveryEnvelope> \
-  --status sent \
-  --host-method send_message_to_thread \
-  --host-mode new-turn \
-  --readback-ok true \
-  --evidence "<readback summary>" \
-  --write --json
-
-node scripts/codex-automation-loop.mjs review-results \
-  --group <groupId> \
-  --json
-
-node scripts/codex-automation-loop.mjs build-controller-return \
-  --group <groupId> \
-  --trigger-target <window> \
-  --trigger-task-id <taskId> \
-  --controller-window <controllerWindow> \
-  --require-thread \
-  --write --json
-
-node scripts/codex-automation-loop.mjs stop-loop \
-  --automation-run-id <runId> \
-  --reason "<reason>" \
-  --write --json
-```
-
-The script layer never sends host thread messages by itself and never accepts
-evidence. A delivery adapter or controller window must perform the actual host
-send and record the readback. Callback behavior is controlled by
-`DispatchGroup.controllerWindow` and `return-policy`: `group-ready` creates one
-barrier callback after all expected targets return; `per-target` lets each
-completed target wake total control with a group snapshot that still lists
-completed, blocked, and missing targets.
-
-Unattended mode is continuous only inside a confirmed demand: review result
-envelopes, pull raw evidence, accept or reject, create the next eligible task
-package, and dispatch again. Stop conditions are final completion, a hard gate,
-user stop, no eligible TODO, evidence that needs human judgment, or a current
-state that forbids dispatch.
-
-On macOS, keep-live / keep-awake is automation support, not task logic and not
-delivery proof. If unattended mode depends on it, start/stop failures must be
-reported as automation readiness risk.
+If you need every flag and command, use [scripts/README.md](scripts/README.md).
+The README is meant to explain the control model, not act as a shell manual.
 
 ## Daily Use
 
-Start with the active control surface:
+Start by reading the active control surface and the current state root, not by
+running every script. The most common helper is:
 
 ```sh
 node scripts/workspace-control.mjs status
-node scripts/workspace-control.mjs loop status --json
-node scripts/workspace-control.mjs verify --script-tests
 ```
 
-Use `workspace-control.mjs --print <command>` to inspect the underlying script
-calls. The full script catalog is in [scripts/README.md](scripts/README.md).
+After that, choose the smallest action that advances the real loop:
 
-For ordinary manual dispatch, the controller prompt should be short: read the
-parent `AGENTS.md`, read the state root and `developer-progress.md`, read the
-target repository `AGENTS.md`, declare window identity, do only the assigned
-target task, and backfill evidence.
+- intake a design handoff or test card,
+- create or dispatch one task package,
+- import a target result,
+- reduce results and make a controller decision,
+- archive only after evidence and TODOs are settled.
 
-Turning on unattended automation does not make every conversation automatic. It
-only authorizes the current demand's target fan-out, result review, and
-next-package decisions inside the confirmed goal, completion definition, and
-repository boundary. Manual developer input always outranks the next automated
-hop.
+Script families:
+
+| Need | Script family |
+| --- | --- |
+| Install / sync parent and child `AGENTS.md` blocks | `control-workspace-install.mjs` |
+| Create state roots, task packages, decisions, progress projections | `controller-state.mjs` |
+| Record Design/Test intake | `control-intake.mjs` |
+| Build delivery envelopes, review result groups, record direct-thread runs | `codex-automation-loop.mjs` |
+| Daily status, verification, and printed command shortcuts | `workspace-control.mjs` |
 
 ## Repository Layout
 
@@ -361,18 +186,23 @@ hop.
 | `.workspace-local/` | Ignored local runtime: real thread ids, automation loop state, keep-live state, and local config overrides. |
 | `../workspace-ledger/` | Project-specific long-term records outside the reusable repository. |
 | `scripts/` | Installation, validation, ledger, state-machine, intake, automation, and control helper scripts. |
-| `skills/` | Operational manuals for total control, target windows, testing, ledgers, and automation. |
+| `skills/` | Operational manuals for controller windows, target windows, testing, ledgers, and automation. |
 | `templates/` | Minimal skeletons for state roots, developer progress docs, Design/Test support, and confirmations. |
 
 ## Design Philosophy
 
-1. **One state machine** — `controller-state.json` is the process authority; Markdown is projection or evidence.
-2. **One developer-readable progress surface** — developers read the goal, stage plan, task packages, backfills, and decisions in one place.
-3. **Machine data stays machine data** — repeated status, thread ids, envelopes, task packages, test cards, and intake records are JSON / JSONL.
-4. **Automation is transport, not judgment** — direct-thread delivery and callbacks move work; total control accepts or rejects it.
-5. **Design and Test attach to the demand** — handoffs and real-scenario test boundaries become state-root intake, not parallel plans.
-6. **Sibling repositories stay independent** — product code, tests, and commits stay in their own repositories.
-7. **Clean templates over clever branches** — the default route should be easy to read, easy to verify, and hard to misuse.
+1. **Judgment stays at the controller**: script output, window backfill, TODO
+   rows, and status docs are evidence, not acceptance.
+2. **One demand has one machine state root**: repeated status and envelopes stay
+   as JSON / JSONL, while Markdown remains readable context and evidence.
+3. **Progress has one readable surface**: developers should not need to chase
+   five status files to know the goal and next blocker.
+4. **Automation moves work, not authority**: direct-thread delivery proves only
+   that a prompt was sent, not that a task is complete.
+5. **Repositories keep their boundaries**: shared contracts, plugin entrypoints,
+   daemon behavior, dashboard UI, design, and testing stay in the right window.
+6. **Small prompts beat command dumps**: target windows need the current task,
+   state root, skill, and identity rules, not a full script manual.
 
-Codex Control Workspace is not a replacement for judgment. It is the scaffolding
-that keeps judgment present when the work spreads across many Codex windows.
+Codex Control Workspace is scaffolding for disciplined multi-window work. Its
+job is to make the real decision points hard to skip.
