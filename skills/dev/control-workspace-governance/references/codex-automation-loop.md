@@ -59,6 +59,10 @@ that dispatch and should release itself for other workspace traffic. It should
 not keep a synthetic working state merely to stay attached to the dispatched
 task. The next touchpoint is the target window's `TargetResultEnvelope` plus a
 controller-return when the stored dispatch group return policy allows it.
+Do not keep the same controller turn alive with `sleep`, repeated
+`review-results`, repeated `read_thread`, or manual polling just to wait for
+that result. Waiting is represented by the absence of a controller-return, not
+by a busy controller thread.
 
 Controller return is a wakeup for total-control review, not an instruction to
 keep looping. Return policy belongs to `DispatchGroup`, not to a target's ad-hoc
@@ -135,6 +139,10 @@ until a matching `DirectThreadDeliveryRun` has `status="sent"` and
 `review-results` only answers whether result envelopes exist, which targets are
 ready / missing / blocked, and whether the stored return policy permits
 controller review. It never accepts the task.
+When it returns a wait / missing state after a dispatch was already sent and
+recorded, the total-control action is to stop the current turn and wait for a
+future controller-return or explicit user/manual review input. It is not a
+reason to start a local sleep / polling loop.
 
 Use `review-pack` when the repeated local-file hopping itself becomes noise.
 It keeps the same readiness decision, but lays out result files, evidence refs,

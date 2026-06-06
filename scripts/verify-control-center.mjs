@@ -65,6 +65,7 @@ if (withScriptTests) {
       "scripts/controller-state.test.mjs",
       "scripts/control-state-machine-route-fixtures.test.mjs",
       "scripts/control-intake.test.mjs",
+      "scripts/demand-sequence.test.mjs",
       "scripts/check-repository-residue.test.mjs",
       "scripts/check-script-docs.test.mjs",
       "scripts/control-workspace-install.test.mjs",

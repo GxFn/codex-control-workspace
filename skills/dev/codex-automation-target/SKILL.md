@@ -126,6 +126,9 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <cont
      ids. Raw ids may be read only from ignored local runtime when passing the
      value to the host send tool.
    - This is the allowed total-control return, not a next target hop.
+   - After the controller-return delivery run is recorded as sent/readback-ok,
+     stop the target turn. Do not poll the controller thread or create another
+     delivery to check whether total control has reviewed it.
 
 ## Boundaries
 

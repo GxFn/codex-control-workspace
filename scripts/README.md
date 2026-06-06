@@ -79,7 +79,17 @@ Current scripts:
   thread messages, or accept evidence. `prepare-dispatch-from-state` fails
   closed for completed / archived / paused demands, review-ready demands that
   still need a controller decision, blocked demands, and target tasks that are
-  already accepted, completed, or blocked.
+  already accepted, completed, or blocked. After a direct-thread delivery run is
+  recorded as sent/readback-ok, its agent cue must close the controller
+  dispatch turn; it must not tell total control to sleep, poll, or wait in place
+  for target results.
+- `demand-sequence.mjs`: ordered independent-demand runner. It reads a tracked
+  machine manifest whose items point at standard developer demand documents,
+  validates each document has exactly one `Unified Status` marker plus the
+  append-only sections, claims at most one next demand by creating its ignored
+  controller state root and initial task package, and syncs the state-root
+  `Unified Status` back into the demand document. It does not dispatch, send
+  thread messages, accept evidence, or complete demands.
 - `control-intake.mjs`: state-root intake bridge for Design and Test surfaces.
   `design-handoff` validates a formal Design board row and writes
   `intake/design-handoff-*.json`; `test-card` writes a complete pre-test
@@ -146,9 +156,10 @@ Run them through `node scripts/workspace-control.mjs scripts --tests`. The
 current set is `archive-global-todo-board.test.mjs`,
 `codex-automation-loop.test.mjs`, `collect-repo-status.test.mjs`,
 `controller-state.test.mjs`, `control-state-machine-route-fixtures.test.mjs`,
-`control-intake.test.mjs`, `check-repository-residue.test.mjs`,
-`check-script-docs.test.mjs`, `control-workspace-install.test.mjs`,
-`import-design-handoffs.test.mjs`, `next-control-work.test.mjs`, and
+`control-intake.test.mjs`, `demand-sequence.test.mjs`,
+`check-repository-residue.test.mjs`, `check-script-docs.test.mjs`,
+`control-workspace-install.test.mjs`, `import-design-handoffs.test.mjs`,
+`next-control-work.test.mjs`, and
 `workspace-control.test.mjs`.
 
 ## Common Routes
@@ -168,6 +179,7 @@ command catalog and selection table, read
 | Script docs plus script tests | `node scripts/workspace-control.mjs scripts --tests` |
 | Runtime residue read-only check | `node scripts/workspace-control.mjs runtime` |
 | Codex Automation Closed Loop commands | `node scripts/workspace-control.mjs loop <subcommand> ...` |
+| Ordered independent demand sequence | `node scripts/workspace-control.mjs sequence <status|claim-next|sync-doc> --root .. --manifest <manifest.json> ...` |
 | Scan next controller-ready candidate | `node scripts/workspace-control.mjs next-work --after-completion --json` |
 | Focus a named Design/TODO candidate | `node scripts/workspace-control.mjs next-work --id <DESIGN-KEY> --json` |
 | Sibling install / child AGENTS scope writes | `node scripts/workspace-control.mjs install <subcommand> ...` |

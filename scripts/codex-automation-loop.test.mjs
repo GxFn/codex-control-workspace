@@ -591,7 +591,27 @@ test("record-delivery-run enforces sent readback evidence", () => {
   ]));
   assert.equal(recorded.status, "sent");
   assert.equal(recorded.run.readback.ok, true);
+  assert.match(recorded.agentNext, /Controller-side delivery is complete/);
+  assert.match(recorded.agentNext, /Do not poll, sleep, or run review-results/);
+  assert.doesNotMatch(recorded.agentNext, /Wait for the target result envelope/);
   assert.doesNotMatch(JSON.stringify(recorded), /0192fac-AlembicPlugin/);
+});
+
+test("waiting review results tell total control to stop instead of polling", () => {
+  const { root, stateRootRef } = makeFixture();
+  registerThread(root, "AlembicPlugin");
+  prepareDispatch(root, stateRootRef);
+
+  const waiting = parseOk(run(root, [
+    "review-results",
+    "--group",
+    "GROUP-STATE",
+  ]));
+
+  assert.equal(waiting.decision, "wait");
+  assert.match(waiting.agentNext, /stop this turn/);
+  assert.match(waiting.agentNext, /instead of polling or sleeping/);
+  assert.doesNotMatch(waiting.agentNext, /Wait for missing target result envelopes/);
 });
 
 test("stop-loop writes a stop marker without creating new delivery state", () => {

@@ -33,6 +33,13 @@ and sending a controller return according to the dispatch group's stored
 `returnPolicy`. Until then, total control is free to handle other user input or
 parallel plans.
 
+This is a hard flow boundary. After controller-side direct-thread delivery is
+recorded as `status=sent` with `readback.ok=true`, do not keep the controller
+turn open with `sleep`, repeated `review-results`, repeated `read_thread`, or
+manual polling just to wait for the target. The correct next action is to end
+the dispatch turn. Total control re-enters only through a real controller-return
+prompt, a user message, or an explicit manual review request.
+
 The previous `claim / finish / chain-next / start-plan / resume-plan` protocol
 is retired. Do not use it for closed-loop work.
 
@@ -228,8 +235,10 @@ node scripts/codex-automation-loop.mjs record-delivery-run --delivery-file <deli
 
    - Once the delivery run is recorded as sent/readback-ok, the controller-side
      dispatch is done. End the current controller work for that task unless
-     there is a separate ready result to review. The target's result envelope
-     plus controller-return is the next re-entry point.
+     there is a separate ready result to review. Do not run a sleep / polling /
+     repeated review-results loop to wait for the dispatched target. The
+     target's result envelope plus controller-return is the next re-entry
+     point.
    - For unattended return, register the controller thread once with role
      `controller`. Target windows may only create a controller-return delivery
      through `build-controller-return` according to the dispatch group's stored

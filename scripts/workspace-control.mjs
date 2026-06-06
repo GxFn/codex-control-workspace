@@ -21,6 +21,7 @@ const testScripts = [
   "scripts/controller-state.test.mjs",
   "scripts/control-state-machine-route-fixtures.test.mjs",
   "scripts/control-intake.test.mjs",
+  "scripts/demand-sequence.test.mjs",
   "scripts/check-script-docs.test.mjs",
   "scripts/control-workspace-install.test.mjs",
   "scripts/import-design-handoffs.test.mjs",
@@ -45,6 +46,7 @@ Commands:
   install     Discover sibling repos, configure scope, and write child AGENTS blocks.
   scripts     Check script docs, optionally including script tests.
   loop        Operate the new Codex Automation Closed Loop contract surface.
+  sequence    Claim or sync ordered independent demand documents.
   next-work   Scan Design handoff and TODO ledgers for the next controller-ready candidate.
   help        Show this help.
 
@@ -57,6 +59,7 @@ Common examples:
   node scripts/workspace-control.mjs intake design-handoff --state-root .workspace-active/workspace/current/<demand-key> --design-key PCVM-2026-05-25 --write --json
   node scripts/workspace-control.mjs install status --json
   node scripts/workspace-control.mjs loop status --json
+  node scripts/workspace-control.mjs sequence status --manifest workspace-ledger/requirement-designs/<topic>/sequence.json --json
   node scripts/workspace-control.mjs next-work --after-completion --json
   node scripts/workspace-control.mjs next-work --id PLUGIN-MCP-MULTI-PROJECT-RUNTIME-2026-06-03 --json
 
@@ -254,6 +257,12 @@ function buildLoop(options) {
   return [{ label: "codex automation closed loop", ...nodeScript("codex-automation-loop.mjs", [subcommand, ...rest]) }];
 }
 
+function buildSequence(options) {
+  const subcommand = options[0] ?? "status";
+  const rest = options.slice(1);
+  return [{ label: "ordered demand sequence", ...nodeScript("demand-sequence.mjs", [subcommand, ...rest]) }];
+}
+
 function buildNextWork(options) {
   assertKnownOptions(options, ["--after-completion", "--write", "--json"], ["--id", "--source", "--limit", "--board", "--todo", "--status", "--out"]);
   return [{ label: "next control work candidate scan", ...nodeScript("next-control-work.mjs", options) }];
@@ -284,6 +293,8 @@ function buildSteps() {
       return buildScripts(commandArgs);
     case "loop":
       return buildLoop(commandArgs);
+    case "sequence":
+      return buildSequence(commandArgs);
     case "next-work":
       return buildNextWork(commandArgs);
     default:

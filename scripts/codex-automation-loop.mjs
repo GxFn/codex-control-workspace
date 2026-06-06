@@ -123,16 +123,16 @@ function inferAgentNext(payload) {
   if (payload.command === "build-window-config") return "Use this child-window config when creating direct-thread delivery envelopes.";
   if (payload.command === "build-delivery") return payload.threadReady ? "Send the prompt with the host thread tool, then record a delivery run." : "Register the target thread before direct-thread delivery.";
   if (payload.command === "build-controller-return") return payload.threadReady ? "Send the controller-return prompt with the host thread tool, then record a delivery run." : "Register the controller thread before unattended return.";
-  if (payload.command === "record-delivery-run") return payload.status === "sent" ? "Wait for the target result envelope or run review-results when ready." : "Return to total control judgment for the delivery block.";
+  if (payload.command === "record-delivery-run") return payload.status === "sent" ? "Controller-side delivery is complete; end this dispatch turn and wait for a controller-return or new user input. Do not poll, sleep, or run review-results just to wait." : "Return to total control judgment for the delivery block.";
   if (payload.command === "start-keep-live") return payload.keepLive?.active ? "Continue unattended direct-thread dispatch; keep-live is active." : "Treat keep-live as an automation readiness risk before claiming unattended reliability.";
   if (payload.command === "stop-keep-live") return payload.keepLive?.retainedByOtherRuns ? "Keep-live is retained by other active automation runs." : payload.keepLive?.active ? "Inspect and stop the recorded keep-live process before claiming shutdown is clean." : "Keep-live is stopped; continue only by total-control judgment.";
   if (payload.command === "keep-live-state") return "Continue or stop unattended automation according to the current plan and keep-live status.";
   if (payload.command === "submit-result") return "Wake total control or run review-results; the result is not an acceptance verdict.";
-  if (payload.command === "review-results") return payload.decision === "wait" ? "Wait for missing target result envelopes." : "Total control must pull raw evidence and make the verdict.";
+  if (payload.command === "review-results") return payload.decision === "wait" ? "No controller review is available yet; stop this turn and wait for the target/controller-return instead of polling or sleeping." : "Total control must pull raw evidence and make the verdict.";
   if (payload.command === "review-pack") {
     if (payload.decision === "completed") return "Demand is completed; stop without creating new deliveries.";
     if (payload.decision === "no-target-tasks") return "No target tasks are reviewable; add a task package before dispatch or review.";
-    return payload.decision === "wait" ? "Wait for missing target result envelopes." : "Use this review pack to pull raw evidence, then make a total-control verdict.";
+    return payload.decision === "wait" ? "No controller review is available yet; stop this turn and wait for the target/controller-return instead of polling or sleeping." : "Use this review pack to pull raw evidence, then make a total-control verdict.";
   }
   if (payload.command === "stop-loop") return payload.keepLive?.retainedByOtherRuns ? "Closed-loop delivery is stopped for this run; keep-live remains active for other runs." : "Closed-loop delivery is stopped; do not create new deliveries.";
   return "Continue by total-control judgment.";
