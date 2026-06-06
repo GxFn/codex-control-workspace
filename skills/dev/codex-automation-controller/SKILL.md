@@ -61,6 +61,12 @@ Do not start the visible prompt with the automation mechanism name. Do not paste
 command manuals into the prompt. For `returnPolicy=group-ready`, the visible
 title uses the returned window names, not the dispatch group id.
 
+When using the Codex host thread tool, pass the delivery envelope's `prompt`
+field as the exact `send_message_to_thread.prompt` value. Do not manually wrap
+it in `<codex_delegation>`, `<source_thread_id>`, `<input>`, XML, JSON, or any
+other outer envelope. The Codex app creates the cross-thread card itself; manual
+wrapping leaks raw XML into the target window UI and breaks the card shape.
+
 Keep happy-path prompt variables compact. The visible prompt only needs
 `stateRoot`, `dispatchGroup`, `trigger`, and `skill`. Do not print
 `controllerWindow`, `returnPolicy`, `reviewScope`, `groupStatus`, `demandKey`,
@@ -224,6 +230,9 @@ node scripts/codex-automation-loop.mjs start-keep-live --automation-run-id <disp
      raw thread ids; raw ids stay in ignored local runtime files. If the thread
      id or host send capability is unavailable, fail closed and return to
      total-control judgment.
+   - For `send_message_to_thread`, copy only `envelope.prompt` / `packet.prompt`
+     into the tool argument. Do not add a manual `<codex_delegation>` wrapper or
+     any escaped XML around it.
    - Keep the transport policy simple: the adapter either performs a direct
      new-turn send with readback evidence or records blocked / failed evidence
      for total-control judgment.

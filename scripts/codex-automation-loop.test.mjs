@@ -204,6 +204,8 @@ test("prepare-dispatch-from-state writes packet, group, and delivery without con
   assert.doesNotMatch(payload.packet.prompt, /controllerWindow:/);
   assert.doesNotMatch(payload.packet.prompt, /rules:/);
   assert.doesNotMatch(payload.packet.prompt, /controlPlan:/);
+  assert.doesNotMatch(payload.packet.prompt, /<codex_delegation>|<input>|source_thread_id/);
+  assert.equal(payload.envelope.prompt, payload.packet.prompt);
   assert.doesNotMatch(readFileSync(path.join(root, payload.packetFile), "utf8"), /controlPlan/);
   assert.doesNotMatch(readFileSync(path.join(root, payload.deliveryFile), "utf8"), /controlPlan/);
   assert.doesNotMatch(readFileSync(path.join(root, payload.deliveryFile), "utf8"), /0192fac-AlembicPlugin/);
@@ -345,6 +347,7 @@ test("review-results and controller return require state-root group evidence", (
   assert.doesNotMatch(returned.envelope.prompt, /demandKey:/);
   assert.doesNotMatch(returned.envelope.prompt, /rules:/);
   assert.doesNotMatch(returned.envelope.prompt, /controlPlan:/);
+  assert.doesNotMatch(returned.envelope.prompt, /<codex_delegation>|<input>|source_thread_id/);
   assert.doesNotMatch(readFileSync(path.join(root, returned.returnFile), "utf8"), /controlPlan/);
   assert.equal(returned.envelope.dispatchGroup, prepared.packet.dispatchGroup);
 });

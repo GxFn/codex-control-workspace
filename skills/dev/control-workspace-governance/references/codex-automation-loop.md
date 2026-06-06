@@ -84,6 +84,12 @@ records or reports a blocked / failed delivery and stops. `review-results`
 must show `controllerReturnDelivery.status="sent"` before anyone treats the
 return as a real callback.
 
+Host thread send uses the prompt string as-is. When calling
+`send_message_to_thread`, pass only the generated `envelope.prompt`; do not wrap
+it in a manual `<codex_delegation>` / `<input>` envelope. The Codex host renders
+the cross-thread card automatically, and manual wrappers are visible as raw XML
+inside the target window.
+
 Keep-live / keep-awake is enabled support for unattended automation runs. It is
 not a delivery transport, not a target task, and not acceptance evidence; failure
 to start or stop it is an automation readiness risk. Keep-live must not be used
