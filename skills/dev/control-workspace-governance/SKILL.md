@@ -46,5 +46,5 @@ This skill may guide workspace documentation, TODO intake, dispatch planning, an
 
 1. Classify whether the task is TODO intake, TODO rolling, wave dispatch, task-package planning, test / validation judgment, script pipeline work, or prompt generation.
 2. Load only the matching reference file.
-3. Update the controller state root, developer progress append-only sections, `global-todo-board`, `test-exchange`, or Design inbox only when that is the correct ledger.
+3. Update the controller state root, developer progress append-only sections, `global-todo-board`, state-root `test-cards/*.json`, `test-exchange` projection, or Design inbox only when that is the correct ledger.
 4. Run the workspace validation commands required by `AGENTS.md` and the active state root / developer progress document.

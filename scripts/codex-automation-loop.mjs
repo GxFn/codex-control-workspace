@@ -129,7 +129,11 @@ function inferAgentNext(payload) {
   if (payload.command === "keep-live-state") return "Continue or stop unattended automation according to the current plan and keep-live status.";
   if (payload.command === "submit-result") return "Wake total control or run review-results; the result is not an acceptance verdict.";
   if (payload.command === "review-results") return payload.decision === "wait" ? "Wait for missing target result envelopes." : "Total control must pull raw evidence and make the verdict.";
-  if (payload.command === "review-pack") return payload.decision === "wait" ? "Wait for missing target result envelopes." : "Use this review pack to pull raw evidence, then make a total-control verdict.";
+  if (payload.command === "review-pack") {
+    if (payload.decision === "completed") return "Demand is completed; stop without creating new deliveries.";
+    if (payload.decision === "no-target-tasks") return "No target tasks are reviewable; add a task package before dispatch or review.";
+    return payload.decision === "wait" ? "Wait for missing target result envelopes." : "Use this review pack to pull raw evidence, then make a total-control verdict.";
+  }
   if (payload.command === "stop-loop") return payload.keepLive?.retainedByOtherRuns ? "Closed-loop delivery is stopped for this run; keep-live remains active for other runs." : "Closed-loop delivery is stopped; do not create new deliveries.";
   return "Continue by total-control judgment.";
 }
@@ -1151,14 +1155,8 @@ function formatTargetPrompt({
     "变量：",
     `- currentWindow: ${targetWindow}`,
     `- taskId: ${taskId}`,
-    ...(controllerWindow ? [`- controllerWindow: ${controllerWindow}`] : []),
     `- stateRoot: ${stateRef.stateRoot}`,
-    `- demandKey: ${stateRef.demandKey}`,
-    `- taskPackageId: ${stateRef.taskPackageId}`,
-    `- stateRevision: ${stateRef.stateRevision}`,
-    ...(humanContextRef ? [`- humanContextRef: ${humanContextRef}`] : []),
     ...(dispatchGroup ? [`- dispatchGroup: ${dispatchGroup}`] : []),
-    "- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；按 dispatch group returnPolicy 和 controllerWindow 判断是否执行一次总控回跳（build + send/readback + record）。",
     "- skill: ../codex-control-workspace/skills/dev/codex-automation-target/SKILL.md",
   ].join("\n");
 }
@@ -1193,21 +1191,11 @@ function formatControllerReturnPrompt({
     title,
     "",
     "变量：",
+    `- stateRoot: ${stateRef.stateRoot}`,
     `- dispatchGroup: ${dispatchGroup}`,
-    `- controllerWindow: ${controllerWindow}`,
-    `- triggerTarget: ${triggerTarget}`,
-    `- triggerTaskId: ${triggerTaskId}`,
-    `- returnPolicy: ${returnPolicy.mode}`,
-    `- reviewScope: ${reviewScope}`,
-    `- groupStatus: ${groupSnapshot.groupStatus}`,
+    `- trigger: ${triggerTarget} / ${triggerTaskId}`,
     ...(hasBlockedTargets ? [`- blockedTargets: ${blockedTargets}`] : []),
     ...(hasRemainingTargets ? [`- remainingTargets: ${remainingTargets}`] : []),
-    `- stateRoot: ${stateRef.stateRoot}`,
-    `- demandKey: ${stateRef.demandKey}`,
-    `- taskPackageId: ${stateRef.taskPackageId}`,
-    `- stateRevision: ${stateRef.stateRevision}`,
-    ...(humanContextRef ? [`- humanContextRef: ${humanContextRef}`] : []),
-    "- rules: 用完即弃；review-results；按 groupSnapshot 判断单个回填、继续等待或整组验收；证据通过且目标未完成且存在 eligible task 时才创建下一批 dispatch；没有任务、目标完成或需要用户裁决时停止，不创建下一跳；禁止为回跳本身再次回跳。",
     "- skill: codex-control-workspace/skills/dev/codex-automation-controller/SKILL.md",
   ].join("\n");
 }
@@ -1401,11 +1389,19 @@ function evidenceRefSummary(ref) {
   };
 }
 
+function missingEvidenceRefsFromSummaries(summaries) {
+  return summaries
+    .filter((item) => item.looksLikePath && !item.exists)
+    .map((item) => item.ref);
+}
+
 function targetResultReviewEntry(item) {
   const result = item.result;
   const evidenceRefs = Array.isArray(result?.evidenceRefs) ? result.evidenceRefs : [];
   const verificationSummary = Array.isArray(result?.verificationSummary) ? result.verificationSummary : [];
   const commits = Array.isArray(result?.commits) ? result.commits : [];
+  const evidenceRefSummaries = evidenceRefs.map(evidenceRefSummary);
+  const missingEvidenceRefs = missingEvidenceRefsFromSummaries(evidenceRefSummaries);
   return {
     packetId: item.packet.id,
     targetWindow: item.packet.targetWindow,
@@ -1415,7 +1411,8 @@ function targetResultReviewEntry(item) {
     changedRepos: Array.isArray(result?.changedRepos) ? result.changedRepos : [],
     commits,
     evidenceRefs,
-    evidenceRefSummaries: evidenceRefs.map(evidenceRefSummary),
+    evidenceRefSummaries,
+    missingEvidenceRefs,
     verificationSummary,
     riskSummary: Array.isArray(result?.riskSummary) ? result.riskSummary : [],
     nextSuggestion: result?.nextSuggestion,
@@ -1430,6 +1427,12 @@ function buildReviewPack(review) {
   const controllerReturnDelivery = controllerReturnDeliveryStatusForGroup(returnGroup);
   const results = review.results.map(targetResultReviewEntry);
   const reviewReady = review.decision !== "wait";
+  const missingEvidenceRefs = results.flatMap((item) => item.missingEvidenceRefs.map((ref) => ({
+    targetWindow: item.targetWindow,
+    taskId: item.taskId,
+    ref,
+  })));
+  const missingEvidenceRefsPresent = missingEvidenceRefs.length > 0;
   const rawEvidenceRequired = results
     .filter((item) => item.resultStatus !== "missing")
     .map((item) => ({
@@ -1440,14 +1443,17 @@ function buildReviewPack(review) {
       evidenceRefs: item.evidenceRefs,
       verificationSummary: item.verificationSummary,
       hasControllerReviewEvidence: item.hasControllerReviewEvidence,
+      missingEvidenceRefs: item.missingEvidenceRefs,
     }));
   const gates = {
-    controllerReviewReady: reviewReady,
+    controllerReviewReady: reviewReady && !missingEvidenceRefsPresent,
     waitForMissingResults: review.decision === "wait",
     blockedResultsPresent: review.blocked.length > 0,
+    missingEvidenceRefsPresent,
+    evidenceRepairRequired: missingEvidenceRefsPresent,
     controllerReturnSent: controllerReturnDelivery.status === "sent",
     rawEvidencePullRequired: reviewReady,
-    totalControlVerdictRequired: reviewReady,
+    totalControlVerdictRequired: reviewReady && !missingEvidenceRefsPresent,
   };
   return {
     kind: "ControllerReviewPack",
@@ -1461,12 +1467,15 @@ function buildReviewPack(review) {
     controllerReturnDelivery,
     targetResults: results,
     rawEvidenceRequired,
+    missingEvidenceRefs,
     gates,
     nextAction: review.decision === "wait"
       ? "wait-for-target-result-envelope"
       : review.decision === "blocked"
         ? "pull-block-evidence-and-classify"
-        : "pull-raw-evidence-and-make-total-control-verdict",
+        : missingEvidenceRefsPresent
+          ? "fix-missing-evidence-refs-before-controller-verdict"
+          : "pull-raw-evidence-and-make-total-control-verdict",
     generatedAt: nowIso(),
   };
 }
@@ -1494,15 +1503,29 @@ function latestStateRootResultsByTargetTask(stateRoot) {
 function stateRootEvidenceRefSummary(stateRoot, stateRootRef, ref) {
   const text = String(ref ?? "");
   const looksLikePath = text.includes("/") || /\.(json|md|log|txt|png|jpg|jpeg|webp|html|csv)$/i.test(text);
-  const resolvedPath = looksLikePath
-    ? (path.isAbsolute(text) ? text : path.resolve(stateRoot, text))
-    : "";
+  const absoluteRef = path.isAbsolute(text);
+  const candidatePaths = looksLikePath
+    ? absoluteRef
+      ? [text]
+      : [
+          path.resolve(stateRoot, text),
+          path.resolve(workspaceRoot, text),
+        ]
+    : [];
+  const resolvedPath = candidatePaths.find((candidate) => existsSync(candidate)) || candidatePaths[0] || "";
+  const stateRootCandidate = looksLikePath && !absoluteRef ? path.resolve(stateRoot, text) : "";
   return {
     ref: text,
     looksLikePath,
     exists: Boolean(resolvedPath && existsSync(resolvedPath)),
     path: resolvedPath && existsSync(resolvedPath) ? path.relative(workspaceRoot, resolvedPath) : undefined,
-    stateRootRelativePath: looksLikePath ? path.join(stateRootRef, text) : undefined,
+    stateRootRelativePath: stateRootCandidate ? path.join(stateRootRef, text) : undefined,
+    resolvedAgainst: resolvedPath && existsSync(resolvedPath)
+      ? (() => {
+          const relativeToStateRoot = path.relative(stateRoot, resolvedPath);
+          return !relativeToStateRoot.startsWith("..") && !path.isAbsolute(relativeToStateRoot) ? "state-root" : "workspace-root";
+        })()
+      : undefined,
   };
 }
 
@@ -1515,6 +1538,8 @@ function buildStateRootReviewPack(stateRoot) {
     const result = item?.result ?? null;
     const evidenceRefs = Array.isArray(result?.evidenceRefs) ? result.evidenceRefs : [];
     const verificationSummary = Array.isArray(result?.verification) ? result.verification : [];
+    const evidenceRefSummaries = evidenceRefs.map((ref) => stateRootEvidenceRefSummary(stateRoot, stateRootRef, ref));
+    const missingEvidenceRefs = missingEvidenceRefsFromSummaries(evidenceRefSummaries);
     return {
       targetWindow: task.targetWindow,
       taskId: task.targetTaskId,
@@ -1523,7 +1548,8 @@ function buildStateRootReviewPack(stateRoot) {
       resultStatus: result?.status || "missing",
       resultFile: item ? path.relative(workspaceRoot, item.file) : undefined,
       evidenceRefs,
-      evidenceRefSummaries: evidenceRefs.map((ref) => stateRootEvidenceRefSummary(stateRoot, stateRootRef, ref)),
+      evidenceRefSummaries,
+      missingEvidenceRefs,
       verificationSummary,
       riskSummary: Array.isArray(result?.risks) ? result.risks : [],
       reportedAt: result?.createdAt,
@@ -1534,12 +1560,22 @@ function buildStateRootReviewPack(stateRoot) {
   const missing = targetResults.filter((item) => item.resultStatus === "missing");
   const blocked = targetResults.filter((item) => item.resultStatus === "blocked");
   const ready = targetResults.filter((item) => item.resultStatus !== "missing" && item.resultStatus !== "blocked");
-  const decision = missing.length > 0
+  const noTargetTasks = targetTasks.length === 0;
+  const demandCompleted = state.state === "completed" || state.review?.status === "demand-completed";
+  const decision = demandCompleted
+    ? "completed"
+    : noTargetTasks
+    ? "no-target-tasks"
+    : missing.length > 0
     ? "wait"
     : blocked.length > 0
       ? "blocked"
       : "needs-controller-review";
-  const groupStatus = missing.length > 0
+  const groupStatus = demandCompleted
+    ? "completed"
+    : noTargetTasks
+    ? "empty"
+    : missing.length > 0
     ? ready.length > 0 || blocked.length > 0 ? "partially-ready" : "waiting"
     : blocked.length > 0 ? "blocked" : "ready";
   const groupSnapshot = {
@@ -1566,7 +1602,13 @@ function buildStateRootReviewPack(stateRoot) {
     allResultsPresent: missing.length === 0,
     stateRoot: stateRootRef,
   };
-  const reviewReady = decision !== "wait";
+  const reviewReady = !demandCompleted && !noTargetTasks && decision !== "wait";
+  const missingEvidenceRefs = targetResults.flatMap((item) => item.missingEvidenceRefs.map((ref) => ({
+    targetWindow: item.targetWindow,
+    taskId: item.taskId,
+    ref,
+  })));
+  const missingEvidenceRefsPresent = missingEvidenceRefs.length > 0;
   return {
     kind: "ControllerReviewPack",
     version,
@@ -1593,21 +1635,32 @@ function buildStateRootReviewPack(stateRoot) {
         evidenceRefs: item.evidenceRefs,
         verificationSummary: item.verificationSummary,
         hasControllerReviewEvidence: item.hasControllerReviewEvidence,
+        missingEvidenceRefs: item.missingEvidenceRefs,
       })),
+    missingEvidenceRefs,
     gates: {
-      controllerReviewReady: reviewReady,
+      controllerReviewReady: reviewReady && !missingEvidenceRefsPresent,
+      noTargetTasks,
       waitForMissingResults: decision === "wait",
       blockedResultsPresent: blocked.length > 0,
+      missingEvidenceRefsPresent,
+      evidenceRepairRequired: missingEvidenceRefsPresent,
       controllerReturnSent: false,
       rawEvidencePullRequired: reviewReady,
-      totalControlVerdictRequired: reviewReady,
+      totalControlVerdictRequired: reviewReady && !missingEvidenceRefsPresent,
       stateRootBased: true,
     },
-    nextAction: decision === "wait"
+    nextAction: demandCompleted
+      ? "demand-completed-stop-without-next-dispatch"
+      : noTargetTasks
+      ? "add-task-package-before-review"
+      : decision === "wait"
       ? "wait-for-state-root-target-result"
       : decision === "blocked"
         ? "pull-block-evidence-and-run-controller-state-reducer"
-        : "pull-raw-evidence-and-run-controller-state-reducer",
+        : missingEvidenceRefsPresent
+          ? "fix-missing-evidence-refs-before-controller-state-reducer"
+          : "pull-raw-evidence-and-run-controller-state-reducer",
     forbiddenConclusions: [
       "review-pack-is-controller-acceptance",
       "review-pack-creates-next-dispatch",
@@ -1896,6 +1949,25 @@ function commandBuildDelivery() {
   );
 }
 
+function validatePrepareDispatchEligibility({ state, taskPackage, targetTask }) {
+  if (["completed", "archived", "paused", "blocked"].includes(state.state)) {
+    fail(`cannot prepare dispatch while controller state is ${state.state}: ${state.demandKey}`);
+  }
+  if (["review-ready", "accepting"].includes(state.state)) {
+    fail(`cannot prepare dispatch while controller state is ${state.state}; decide review before dispatching more work.`);
+  }
+  const eligibleTargetStatuses = new Set(["pending", "needs-rework", "missing-result"]);
+  const targetStatus = targetTask.status || "pending";
+  if (!eligibleTargetStatuses.has(targetStatus)) {
+    fail(`target task ${targetTask.targetTaskId} is ${targetStatus}; only pending, needs-rework, or missing-result tasks can be dispatched.`);
+  }
+  const eligiblePackageStatuses = new Set(["pending", "needs-rework"]);
+  const packageStatus = taskPackage.status || "pending";
+  if (!eligiblePackageStatuses.has(packageStatus)) {
+    fail(`task package ${taskPackage.taskPackageId} is ${packageStatus}; only pending or needs-rework packages can be dispatched.`);
+  }
+}
+
 function commandPrepareDispatchFromState() {
   const stateRoot = resolveStateRoot(requireValue("--state-root"));
   const { state, stateRootRef } = readControllerStateRoot(stateRoot);
@@ -1910,6 +1982,7 @@ function commandPrepareDispatchFromState() {
   const taskPackage = readTaskPackageFromStateRoot(stateRoot, taskPackageId);
   const targetWindow = targetTask.targetWindow;
   if (!targetWindow) fail(`target task ${targetTaskId} is missing targetWindow.`);
+  validatePrepareDispatchEligibility({ state, taskPackage, targetTask });
   const controllerWindow = getValue("--controller-window", "");
   const dispatchGroup = getValue("--group", taskPackageId);
   const automationEnabled = hasFlag("--automation-enabled");
@@ -2161,12 +2234,13 @@ function commandRecordDeliveryRun() {
   }
   const deliveryRunId = getValue("--delivery-run-id", `run-${envelope.deliveryId}`);
   const keepLiveState = envelope.automation?.keepLive ? path.relative(stateDir, keepLiveStateFile()) : null;
+  const deliveryWindow = envelope.targetWindow || envelope.targetThread?.windowName || envelope.controllerWindow;
   const run = {
     kind: "DirectThreadDeliveryRun",
     version: deliveryRunVersion,
     deliveryRunId,
     deliveryId: envelope.deliveryId,
-    targetWindow: envelope.targetWindow || envelope.targetThread?.windowName,
+    targetWindow: deliveryWindow,
     taskId: envelope.taskId || envelope.triggerTaskId,
     dispatchGroup: envelope.dispatchGroup,
     triggerTarget: envelope.triggerTarget,
@@ -2175,7 +2249,7 @@ function commandRecordDeliveryRun() {
     transport: "direct-thread",
     status,
     thread: {
-      windowName: envelope.targetThread?.windowName || envelope.targetWindow,
+      windowName: deliveryWindow,
       threadIdRedacted: true,
       threadRegistryFile: envelope.transport?.threadRegistryFile || envelope.targetThread?.threadRegistryFile,
     },

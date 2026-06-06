@@ -8,4 +8,4 @@
 | State Machine Templates | [../../../templates/control-state-machine/](../../../templates/control-state-machine/) | Use these templates through `controller-state.mjs init` for a new active demand. |
 | Global TODO | [global-todo-board.md](global-todo-board.md) | Cross-plan TODO ledger. |
 | Design Handoff Board | [design-handoff-board.md](design-handoff-board.md) | Internal DesignWindow handoff board. |
-| Test Exchange | [test-exchange.md](test-exchange.md) | Test handoff ledger. |
+| Test Exchange | [test-exchange.md](test-exchange.md) | Human projection for TestWindow handoffs; state-root `test-cards/*.json` is the machine boundary. |

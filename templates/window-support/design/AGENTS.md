@@ -29,7 +29,7 @@
 - 不修改任何产品源码仓库。
 - 不运行产品构建、冷启动、真实项目测试、包刷新、发布命令或部署命令。
 - 不直接向 Base/Core/Agent/Dashboard/Plugin/Test 等执行窗口派发实现任务。
-- 不修改 `ControlWorkspace` 当前状态、TODO 列表或测试交流文档；Design 只写设计草案、signal、handoff 或 handoff board。
+- 不修改 `ControlWorkspace` 当前状态、TODO 列表、state-root、测试 card 或测试交流投影；Design 只写设计草案、signal、handoff 或 handoff board。
 - 不把 bug / TODO / 需求 signal 直接写入 workspace 全局 TODO；只交回总控接收。
 - 不创建空抽象、薄桥接或降低用户目标能力的局部设计。
 
@@ -40,6 +40,7 @@
 - 需要代码事实：记录已知代码证据；证据不足时写成代码调研缺口和交给总控的调研请求，不编造实现链路。
 - bug / TODO / 调研信号：基于 `templates/workspace-signal-template.md` 创建轻量 signal。
 - 准备交给总控：基于 `templates/workspace-handoff-template.md` 创建交接草案，并登记到 `../current/design-handoff-board.md` 或外部 DesignWindow 的 `docs/current/workspace-handoff-board.md`。
+- 总控接收后：由 `ControlWorkspace` 独立复核，并通过 state-root 和 `control-intake.mjs design-handoff` 把 Design 来源记录为机器 intake；Design 不直接创建 state-root、任务包、TODO 入账或分派提示词。
 
 ## Design Key
 

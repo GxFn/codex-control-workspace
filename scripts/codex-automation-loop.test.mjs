@@ -196,11 +196,79 @@ test("prepare-dispatch-from-state writes packet, group, and delivery without con
   assert.equal(payload.dispatchGroup.stateRef.stateRoot, stateRootRef);
   assert.equal(payload.envelope.stateRef.targetTaskId, "CSMR-TASK-1");
   assert.match(payload.packet.prompt, /- stateRoot: \.workspace-active\/workspace\/current\/CSMR-FIXTURE/);
-  assert.match(payload.packet.prompt, /- humanContextRef: \.workspace-active\/workspace\/current\/CSMR-FIXTURE\/developer-progress\.md/);
+  assert.match(payload.packet.prompt, /- dispatchGroup: GROUP-STATE/);
+  assert.doesNotMatch(payload.packet.prompt, /humanContextRef:/);
+  assert.doesNotMatch(payload.packet.prompt, /stateRevision:/);
+  assert.doesNotMatch(payload.packet.prompt, /taskPackageId:/);
+  assert.doesNotMatch(payload.packet.prompt, /demandKey:/);
+  assert.doesNotMatch(payload.packet.prompt, /controllerWindow:/);
+  assert.doesNotMatch(payload.packet.prompt, /rules:/);
   assert.doesNotMatch(payload.packet.prompt, /controlPlan:/);
   assert.doesNotMatch(readFileSync(path.join(root, payload.packetFile), "utf8"), /controlPlan/);
   assert.doesNotMatch(readFileSync(path.join(root, payload.deliveryFile), "utf8"), /controlPlan/);
   assert.doesNotMatch(readFileSync(path.join(root, payload.deliveryFile), "utf8"), /0192fac-AlembicPlugin/);
+});
+
+test("prepare-dispatch-from-state rejects completed and accepted state-root tasks", () => {
+  const { root, stateRootRef, stateRoot } = makeFixture();
+  const stateFile = path.join(stateRoot, "controller-state.json");
+  const state = JSON.parse(readFileSync(stateFile, "utf8"));
+  state.state = "completed";
+  state.review.status = "demand-completed";
+  state.taskPackages[0].status = "accepted";
+  state.targetTasks[0].status = "accepted";
+  writeJson(stateFile, state);
+
+  const completed = run(root, [
+    "prepare-dispatch-from-state",
+    "--state-root",
+    stateRootRef,
+    "--target-task-id",
+    "CSMR-TASK-1",
+    "--group",
+    "GROUP-STATE",
+    "--controller-window",
+    "AlembicWorkspace",
+    "--write",
+  ]);
+  assert.notEqual(completed.status, 0);
+  assert.match(completed.stdout, /cannot prepare dispatch while controller state is completed/);
+
+  state.state = "planned";
+  writeJson(stateFile, state);
+  const accepted = run(root, [
+    "prepare-dispatch-from-state",
+    "--state-root",
+    stateRootRef,
+    "--target-task-id",
+    "CSMR-TASK-1",
+    "--group",
+    "GROUP-STATE",
+    "--controller-window",
+    "AlembicWorkspace",
+    "--write",
+  ]);
+  assert.notEqual(accepted.status, 0);
+  assert.match(accepted.stdout, /target task CSMR-TASK-1 is accepted/);
+
+  state.state = "blocked";
+  state.taskPackages[0].status = "pending";
+  state.targetTasks[0].status = "pending";
+  writeJson(stateFile, state);
+  const blocked = run(root, [
+    "prepare-dispatch-from-state",
+    "--state-root",
+    stateRootRef,
+    "--target-task-id",
+    "CSMR-TASK-1",
+    "--group",
+    "GROUP-STATE",
+    "--controller-window",
+    "AlembicWorkspace",
+    "--write",
+  ]);
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.stdout, /cannot prepare dispatch while controller state is blocked/);
 });
 
 test("build-delivery rejects legacy packets without stateRef", () => {
@@ -266,13 +334,173 @@ test("review-results and controller return require state-root group evidence", (
   assert.equal(returned.envelope.stateRef.stateRoot, stateRootRef);
   assert.equal(returned.envelope.humanContextRef, `${stateRootRef}/developer-progress.md`);
   assert.match(returned.envelope.prompt, /- stateRoot: \.workspace-active\/workspace\/current\/CSMR-FIXTURE/);
+  assert.match(returned.envelope.prompt, /- trigger: AlembicPlugin \/ CSMR-TASK-1/);
+  assert.doesNotMatch(returned.envelope.prompt, /controllerWindow:/);
+  assert.doesNotMatch(returned.envelope.prompt, /returnPolicy:/);
+  assert.doesNotMatch(returned.envelope.prompt, /reviewScope:/);
+  assert.doesNotMatch(returned.envelope.prompt, /groupStatus:/);
+  assert.doesNotMatch(returned.envelope.prompt, /humanContextRef:/);
+  assert.doesNotMatch(returned.envelope.prompt, /stateRevision:/);
+  assert.doesNotMatch(returned.envelope.prompt, /taskPackageId:/);
+  assert.doesNotMatch(returned.envelope.prompt, /demandKey:/);
+  assert.doesNotMatch(returned.envelope.prompt, /rules:/);
   assert.doesNotMatch(returned.envelope.prompt, /controlPlan:/);
   assert.doesNotMatch(readFileSync(path.join(root, returned.returnFile), "utf8"), /controlPlan/);
   assert.equal(returned.envelope.dispatchGroup, prepared.packet.dispatchGroup);
 });
 
+test("review-pack gates missing path evidence refs before controller verdict", () => {
+  const { root, stateRootRef } = makeFixture();
+  registerThread(root, "AlembicPlugin");
+  prepareDispatch(root, stateRootRef);
+
+  parseOk(run(root, [
+    "submit-result",
+    "--target-window",
+    "AlembicPlugin",
+    "--task-id",
+    "CSMR-TASK-1",
+    "--group",
+    "GROUP-STATE",
+    "--status",
+    "completed",
+    "--evidence-ref",
+    "reports/missing-result.json",
+    "--verification",
+    "focused smoke passed",
+    "--write",
+  ]));
+
+  const missing = parseOk(run(root, ["review-pack", "--group", "GROUP-STATE"]));
+  assert.equal(missing.reviewPack.decision, "needs-controller-review");
+  assert.equal(missing.reviewPack.gates.controllerReviewReady, false);
+  assert.equal(missing.reviewPack.gates.missingEvidenceRefsPresent, true);
+  assert.equal(missing.reviewPack.gates.evidenceRepairRequired, true);
+  assert.equal(missing.reviewPack.gates.totalControlVerdictRequired, false);
+  assert.deepEqual(missing.reviewPack.missingEvidenceRefs, [{
+    targetWindow: "AlembicPlugin",
+    taskId: "CSMR-TASK-1",
+    ref: "reports/missing-result.json",
+  }]);
+  assert.match(missing.reviewPack.nextAction, /fix-missing-evidence-refs/);
+
+  writeText(path.join(root, "reports/missing-result.json"), "{\"ok\": true}");
+  const repaired = parseOk(run(root, ["review-pack", "--group", "GROUP-STATE"]));
+  assert.equal(repaired.reviewPack.gates.controllerReviewReady, true);
+  assert.equal(repaired.reviewPack.gates.missingEvidenceRefsPresent, false);
+  assert.deepEqual(repaired.reviewPack.missingEvidenceRefs, []);
+});
+
+test("controller-return blocked delivery records controller window evidence", () => {
+  const { root, stateRootRef } = makeFixture();
+  registerThread(root, "AlembicPlugin");
+  prepareDispatch(root, stateRootRef);
+  parseOk(run(root, [
+    "submit-result",
+    "--target-window",
+    "AlembicPlugin",
+    "--task-id",
+    "CSMR-TASK-1",
+    "--group",
+    "GROUP-STATE",
+    "--status",
+    "completed",
+    "--evidence-ref",
+    "reports/result.json",
+    "--verification",
+    "focused smoke passed",
+    "--write",
+  ]));
+
+  const returned = parseOk(run(root, [
+    "build-controller-return",
+    "--group",
+    "GROUP-STATE",
+    "--trigger-target",
+    "AlembicPlugin",
+    "--trigger-task-id",
+    "CSMR-TASK-1",
+    "--write",
+  ]));
+  assert.equal(returned.threadReady, false);
+
+  const recorded = parseOk(run(root, [
+    "record-delivery-run",
+    "--delivery-file",
+    returned.returnFile,
+    "--status",
+    "blocked",
+    "--error",
+    "controller thread missing",
+    "--write",
+  ]));
+  assert.equal(recorded.run.targetWindow, "AlembicWorkspace");
+  assert.equal(recorded.run.thread.windowName, "AlembicWorkspace");
+  assert.equal(recorded.run.status, "blocked");
+});
+
 test("state-root review-pack reads target results from controller state root", () => {
   const { root, stateRootRef, stateRoot } = makeFixture();
+  const absoluteEvidence = path.join(root, "absolute-evidence.json");
+  writeText(path.join(stateRoot, "reports/plugin-result.json"), "{\"ok\": true}");
+  writeText(path.join(root, "workspace-ledger/evidence/plugin-result.json"), "{\"workspaceRelative\": true}");
+  writeText(absoluteEvidence, "{\"absolute\": true}");
+  writeJson(path.join(stateRoot, "target-results/result-1.json"), {
+    schemaVersion: 1,
+    resultId: "result-1",
+    demandKey: "CSMR-FIXTURE",
+    taskPackageId: "CSMR-PKG-1",
+    targetTaskId: "CSMR-TASK-1",
+    targetWindow: "AlembicPlugin",
+    status: "completed",
+    evidenceRefs: ["reports/plugin-result.json", "workspace-ledger/evidence/plugin-result.json", absoluteEvidence],
+    verification: ["unit tests passed"],
+    risks: [],
+    createdAt: "2026-06-05T00:01:00.000Z",
+  });
+
+  const payload = parseOk(run(root, ["review-pack", "--state-root", stateRootRef]));
+  assert.equal(payload.source, "controller-state-root");
+  assert.equal(payload.decision, "needs-controller-review");
+  assert.equal(payload.reviewPack.gates.stateRootBased, true);
+  assert.equal(payload.reviewPack.gates.controllerReviewReady, true);
+  assert.equal(payload.reviewPack.gates.missingEvidenceRefsPresent, false);
+  assert.equal(payload.reviewPack.targetResults[0].stateRootResult, true);
+  assert.equal(payload.reviewPack.rawEvidenceRequired[0].evidenceRefs[0], "reports/plugin-result.json");
+  const summaries = payload.reviewPack.targetResults[0].evidenceRefSummaries;
+  assert.equal(summaries[0].stateRootRelativePath, `${stateRootRef}/reports/plugin-result.json`);
+  assert.equal(summaries[0].resolvedAgainst, "state-root");
+  assert.equal(summaries[1].ref, "workspace-ledger/evidence/plugin-result.json");
+  assert.equal(summaries[1].exists, true);
+  assert.equal(summaries[1].path, "workspace-ledger/evidence/plugin-result.json");
+  assert.equal(summaries[1].resolvedAgainst, "workspace-root");
+  assert.equal(summaries[2].ref, absoluteEvidence);
+  assert.equal(summaries[2].exists, true);
+  assert.equal(summaries[2].stateRootRelativePath, undefined);
+});
+
+test("state-root review-pack does not mark empty target lists as review ready", () => {
+  const { root, stateRootRef, stateRoot } = makeFixture();
+  const stateFile = path.join(stateRoot, "controller-state.json");
+  const state = JSON.parse(readFileSync(stateFile, "utf8"));
+  state.taskPackages = [];
+  state.targetTasks = [];
+  state.windows = [];
+  writeJson(stateFile, state);
+
+  const payload = parseOk(run(root, ["review-pack", "--state-root", stateRootRef]));
+  assert.equal(payload.decision, "no-target-tasks");
+  assert.equal(payload.groupStatus, "empty");
+  assert.equal(payload.reviewPack.gates.noTargetTasks, true);
+  assert.equal(payload.reviewPack.gates.controllerReviewReady, false);
+  assert.equal(payload.reviewPack.gates.totalControlVerdictRequired, false);
+  assert.equal(payload.reviewPack.nextAction, "add-task-package-before-review");
+  assert.equal(payload.agentNext, "No target tasks are reviewable; add a task package before dispatch or review.");
+});
+
+test("completed state-root review-pack stops instead of asking for another verdict", () => {
+  const { root, stateRootRef, stateRoot } = makeFixture();
+  writeText(path.join(stateRoot, "reports/plugin-result.json"), "{\"ok\": true}");
   writeJson(path.join(stateRoot, "target-results/result-1.json"), {
     schemaVersion: 1,
     resultId: "result-1",
@@ -286,13 +514,33 @@ test("state-root review-pack reads target results from controller state root", (
     risks: [],
     createdAt: "2026-06-05T00:01:00.000Z",
   });
+  const stateFile = path.join(stateRoot, "controller-state.json");
+  const state = JSON.parse(readFileSync(stateFile, "utf8"));
+  state.state = "completed";
+  state.stateReason = "done";
+  state.revision = 5;
+  state.taskPackages[0].status = "accepted";
+  state.targetTasks[0].status = "accepted";
+  state.targetTasks[0].resultId = "result-1";
+  state.targetTasks[0].reviewDecision = "accept";
+  state.windows[0].windowState = "accepted";
+  state.review = {
+    status: "demand-completed",
+    readyResultIds: ["result-1"],
+    blockedResultIds: [],
+    missingResultIds: [],
+  };
+  writeJson(stateFile, state);
 
   const payload = parseOk(run(root, ["review-pack", "--state-root", stateRootRef]));
-  assert.equal(payload.source, "controller-state-root");
-  assert.equal(payload.decision, "needs-controller-review");
-  assert.equal(payload.reviewPack.gates.stateRootBased, true);
-  assert.equal(payload.reviewPack.targetResults[0].stateRootResult, true);
-  assert.equal(payload.reviewPack.rawEvidenceRequired[0].evidenceRefs[0], "reports/plugin-result.json");
+  assert.equal(payload.decision, "completed");
+  assert.equal(payload.groupStatus, "completed");
+  assert.equal(payload.reviewPack.controllerState, "completed");
+  assert.equal(payload.reviewPack.gates.controllerReviewReady, false);
+  assert.equal(payload.reviewPack.gates.totalControlVerdictRequired, false);
+  assert.equal(payload.reviewPack.gates.rawEvidencePullRequired, false);
+  assert.equal(payload.reviewPack.nextAction, "demand-completed-stop-without-next-dispatch");
+  assert.equal(payload.agentNext, "Demand is completed; stop without creating new deliveries.");
 });
 
 test("completed target results require reviewable evidence", () => {

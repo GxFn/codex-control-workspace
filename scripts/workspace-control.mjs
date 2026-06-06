@@ -20,6 +20,7 @@ const testScripts = [
   "scripts/collect-repo-status.test.mjs",
   "scripts/controller-state.test.mjs",
   "scripts/control-state-machine-route-fixtures.test.mjs",
+  "scripts/control-intake.test.mjs",
   "scripts/check-script-docs.test.mjs",
   "scripts/control-workspace-install.test.mjs",
   "scripts/import-design-handoffs.test.mjs",
@@ -39,6 +40,7 @@ Commands:
   verify      Run verify-control-center with common option aliases.
   sync        Render a controller state-root progress document.
   design      Refresh or validate Design handoff intake.
+  intake      Attach Design/Test machine intake to a controller state root.
   runtime     Inspect runtime residue without mutating processes.
   install     Discover sibling repos, configure scope, and write child AGENTS blocks.
   scripts     Check script docs, optionally including script tests.
@@ -52,6 +54,7 @@ Common examples:
   node scripts/workspace-control.mjs verify --script-tests
   node scripts/workspace-control.mjs sync --state-root .workspace-active/workspace/current/<demand-key> --write
   node scripts/workspace-control.mjs design --id PCVM-2026-05-25 --json
+  node scripts/workspace-control.mjs intake design-handoff --state-root .workspace-active/workspace/current/<demand-key> --design-key PCVM-2026-05-25 --write --json
   node scripts/workspace-control.mjs install status --json
   node scripts/workspace-control.mjs loop status --json
   node scripts/workspace-control.mjs next-work --after-completion --json
@@ -187,6 +190,12 @@ function buildDesign(options) {
   return [{ label: "Design handoff intake", ...nodeScript("import-design-handoffs.mjs", out) }];
 }
 
+function buildIntake(options) {
+  const subcommand = options[0] ?? "help";
+  const rest = options.slice(1);
+  return [{ label: "Design/Test state-root intake", ...nodeScript("control-intake.mjs", [subcommand, ...rest]) }];
+}
+
 function buildRuntime(options) {
   assertKnownOptions(options, ["--strict"]);
   return [{ label: "runtime residue", ...nodeScript("check-runtime-residue.mjs", hasFlag(options, "--strict") ? ["--strict"] : []) }];
@@ -265,6 +274,8 @@ function buildSteps() {
       return buildSync(commandArgs);
     case "design":
       return buildDesign(commandArgs);
+    case "intake":
+      return buildIntake(commandArgs);
     case "runtime":
       return buildRuntime(commandArgs);
     case "install":

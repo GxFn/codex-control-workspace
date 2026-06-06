@@ -196,8 +196,8 @@ git log --oneline -8
   - 失败能推出的结论：
   - 不能推出的结论：
   - 停止或不开始条件：
-- 测试单：
-- 测试交流入口：[test-exchange.md](test-exchange.md)
+- 测试 card：`<state-root>/test-cards/<id>.json`
+- 测试交流投影：[test-exchange.md](test-exchange.md)
 
 ## 回填区
 

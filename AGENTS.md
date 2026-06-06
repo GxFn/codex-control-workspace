@@ -116,9 +116,9 @@
 - **Design 交接接收**：需求讨论、bug / TODO / research / decision signal 和完整方案 handoff 优先由 `DesignWindow` 产出；总控只做接收审查、当前主线影响判断、正式入账和后续流程选择。正规流程是 `DesignWindow` 完成需求设计、目标和完成定义后，带 TODO / Backlog 挂载建议交回总控；总控正式写入全局 TODO、当前计划 TODO 或需求目录后，再按优先级、当前主线和目标阶段确认正常领取推进。`DesignWindow` 和总控都可以主动澄清隐藏目标、提出 2-3 个方案、推荐路线、列出取舍和确认问题，但这些默认只是“建议 / 候选 / 待确认”，不能直接变成已确认目标、执行范围、TODO 或分派任务包；最终决定权永远在开发者 / 用户一侧。`workspace-signal` / 小交流只在必要提醒或风险同步时使用，不能替代完整需求 handoff 和正式 TODO 入账。signal / handoff 不是执行计划，不能直接派发。
 - **TODO 维护**：只更新正确 TODO 文档和受影响调度状态；不自动进入需求设计或 wave，除非 TODO 改变主线阶段、窗口依赖或派发名单。
 - **分配计划**：用户要求“派发任务”“做一轮计划分配”“开始执行分配计划”时，必须先回到当前目标和完成定义，判断目标是否已经达到、剩余差距是什么、下一波是否直接推进该差距；再滚动当前 TODO / Backlog，并基于已确认文档和 TODO 依赖做阶段顺序、任务包、窗口覆盖、producer / consumer 依赖判断、分派表和可复制提示词。若当前计划没有最终完成定义、目标状态判断或后续阶段收束路线，必须先补计划或暂停确认，不能直接按 TODO 派发。
-- **规则治理 / skill 治理**：只修改 workspace 文档、脚本、模板或 skill 资产；先判断这次治理解决哪个真实流程缺口，不触碰产品源码，不创建测试单，除非治理变更影响当前计划或用户要求验证。
+- **规则治理 / skill 治理**：只修改 workspace 文档、脚本、模板或 skill 资产；先判断这次治理解决哪个真实流程缺口，不触碰产品源码，不创建测试 card / 任务包，除非治理变更影响当前计划或用户要求验证。
 - **验收 / 归档**：读取回填证据，独立复核原始证据，做功能完整性检查、TODO 滚动和必要归档。证据不足时先判断总控能否自测复核。
-- **测试交接**：只有真实项目验证、cold-start / rescan、复现、回归、Dashboard 手动观察、运行时监控或跨仓库集成环境证据，才通过 `.workspace-active/workspace/current/test-exchange.md` 创建或更新 `TestWindow` 测试单。
+- **测试交接**：只有真实项目验证、cold-start / rescan、复现、回归、Dashboard 手动观察、运行时监控或跨仓库集成环境证据，才创建 `TestWindow` 测试边界；新流程先在当前 controller state-root 下写入 `test-cards/*.json`，再由总控决定是否生成任务包和投递。`test-exchange.md` 只作人读摘要 / exchange 投影，不作状态源。
 
 如果一个请求同时命中多个分区，先执行能解除当前阻塞的最小分区；其余事项记录为 TODO 或下一步。
 
@@ -153,7 +153,7 @@
 - 执行窗口回填 workspace 文档后，不得自行提交 control workspace 能力仓库；workspace 文档提交只能由主控窗口在验收、去重、修正索引和确认无空转后统一完成。
 - `TestWindow` 自身未提交的 probe、报告、脚本索引或临时测试资产不作为总控验收阻塞；只要回填证据足够、产品仓库和真实测试项目没有非预期改动，提交 hash 可以记录为 `无`。
 
-测试单、证据解释和验证命令细节见 `skills/dev/control-workspace-governance/references/testing-validation.md`。
+测试 card、证据解释和验证命令细节见 `skills/dev/control-workspace-governance/references/testing-validation.md`。
 
 ## 分派、TODO 与自动化硬边界
 
@@ -171,10 +171,10 @@
 - 总控窗口拥有 automation 合规审计和删除权。任何当前 automation 若无法对应当前用户目标、当前总控计划、合法 dispatch group / task、目标窗口、真实 thread id、`TestWindow` 边界或一次性投递策略，必须删除并记录原因；不得为了“不中断自动化”保留不合规循环。
 - direct thread dispatch 是正常工作流水线；自动化开启只表示当前总控计划允许无人值守持续闭环，不表示用户在电脑前的普通讨论、Design 需求设计、总控决策讨论或单窗口开发都自动进入无人值守循环。每次仍按最新用户输入和当前窗口职责判断。
 - 一旦用户明确开启无人值守自动化，默认进入 continuous / infinite loop 形态：总控在已确认最终目标、完成定义、仓库边界和可领取 TODO 内持续 review result、拉原始证据、裁决、补计划、创建下一批 dispatch 并继续 direct thread 投递；不得把阶段完成、计划刷新或“给用户看下一阶段计划”当成默认停点。停止条件只能是最终目标完成、硬门禁、用户停止、无可领取 TODO、证据不足必须人工裁决或当前计划明确禁止继续。
-- 新闭环默认入口是 `node scripts/controller-state.mjs` + `node scripts/codex-automation-loop.mjs`。`controller-state` 维护独立机器状态根、任务包、target result、reducer candidate 和显式总控决策；`codex-automation-loop` 只维护 dispatch packet / delivery envelope / direct-thread delivery evidence / controller return 等 transport 机器数据。常用命令语义：`prepare-dispatch-from-state` 只从 state root 创建总控分派包和投递信封；`build-delivery` 只创建投递信封；`submit-result` 只记录 dispatch-group transport result；`review-pack --state-root` / `review-results` 只汇总 ready / missing / blocked 结果和回调策略；`build-controller-return` 只按 state-root dispatch group 的 `controllerWindow` / `returnPolicy` 创建待发送到原发起总控的回跳信封；`stop-loop` 只关闭后续投递意图。任何命令都不能替代总控验收。
+- 新闭环默认入口是 `node scripts/controller-state.mjs` + `node scripts/codex-automation-loop.mjs`。`controller-state` 维护独立机器状态根、任务包、target result、reducer candidate 和显式总控决策；`codex-automation-loop` 只维护 dispatch packet / delivery envelope / direct-thread delivery evidence / controller return 等 transport 机器数据。常用命令语义：`prepare-dispatch-from-state` 只从 state root 为 eligible target task 创建总控分派包和投递信封，遇到 completed / archived / paused / blocked / review-ready demand 或 accepted / completed / blocked target task 必须 fail closed；`build-delivery` 只创建投递信封；`submit-result` 只记录 dispatch-group transport result；`review-pack --state-root` / `review-results` 只汇总 ready / missing / blocked / empty 结果和回调策略；`build-controller-return` 只按 state-root dispatch group 的 `controllerWindow` / `returnPolicy` 创建待发送到原发起总控的回跳信封；`stop-loop` 只关闭后续投递意图。任何命令都不能替代总控验收。
 - 正常启动 / 续跑优先走轻量闭环：总控先决定任务包和目标窗口，再生成 dispatch packet / delivery envelope；delivery adapter 使用 direct thread dispatch；缺真实 thread id、host send 能力不可用或目标线程不可投递时必须 fail closed 回到总控裁决，不创建旧 automation 投递路线；子窗口返回 result envelope；总控再 pull 原始证据裁决。不要把完整 preflight、全量 verify、长审计当作每次启动前置。
 - macOS keep-live / 防睡眠只属于无人值守 automation support，不是任务逻辑、投递 transport 或验收证据。若用户明确开启自动化，应同时开启 keep-live；若 keep-live 启动或停止失败，必须报告为自动化就绪风险，不得假装可靠。
-- direct thread 提示词必须是轻量唤醒信封，只放动态变量、规则名和对应 skill 指向；首行必须是任务语义，例如“继续当前窗口任务”或“继续总控验收”，不得以机制名开头抢占 UI 第一视线；不得把完整命令手册复制进提示词。direct send 成功只证明投递，不证明任务完成。
+- direct thread 提示词必须是轻量唤醒信封，只放最小动态变量和对应 skill 指向；首行必须是任务语义，例如“继续当前窗口任务”或“继续总控验收”，不得以机制名开头抢占 UI 第一视线；不得把完整命令手册或机器快照复制进提示词。目标窗口可见变量默认只保留 `currentWindow` / `taskId` / `stateRoot` / 可选 `dispatchGroup` / `skill`；总控回跳可见变量默认只保留 `stateRoot` / `dispatchGroup` / `trigger` / 非空异常 targets / `skill`。`controllerWindow`、`returnPolicy`、`reviewScope`、`groupStatus`、`demandKey`、`taskPackageId`、`stateRevision`、`humanContextRef` 和完整 `groupSnapshot` 留在 state root、dispatch group 或 delivery envelope 机器数据中。direct send 成功只证明投递，不证明任务完成。
 - 目标窗口只能执行 dispatch packet 指定给自己窗口的任务，并返回 `TargetResultEnvelope`；不得代领、代验、代写其它窗口结果，也不得从 result envelope 推导自己获得下一窗口或总控职责。
 - 子窗口默认不创建目标窗口下一跳 delivery。多窗口 fan-out、补证、重派或进入下一阶段，都由总控在 review 后决定；但当 delivery envelope 的 `returnRoute=controller` 且 `review-results` 显示 `DispatchGroup.returnPolicy` 允许回调时，目标窗口只允许用 `build-controller-return` 创建一次总控回跳 envelope，并且默认回到该 `DispatchGroup.controllerWindow` 指定的原发起总控；不得因为 workspace config 的全局 `controlWindow` 不同而改回其它总控。之后必须继续完成真实 direct-thread send、readback 和 `record-delivery-run`；只有存在 `status=sent` 且 `readback.ok=true` 的 `DirectThreadDeliveryRun`，才算真实回跳完成。这不是目标窗口下一跳。`group-ready` 必须携带整组 ready / blocked / missing 快照，`per-target` 必须携带当前触发窗口和剩余窗口快照，不能把单个回填误判为整组完成。
 - `TestWindow` 下一跳默认由总控调起；非 `TestWindow` 窗口不得创建、处理或验证 `TestWindow` delivery，除非当前计划和 delivery envelope 同时显式授权该例外。
@@ -194,14 +194,14 @@ TODO / Backlog、窗口覆盖、任务包和新闭环命令细节见 `skills/dev
 - workspace 可以保管总控通用能力，例如 `scripts/`、`skills/`、`templates/` 下的验证脚本、分派模板、文档模板、Codex skill 草案或跨窗口协作工具。此类能力必须服务于工作区总控、文档治理、验证或协作，不得复制或替代子仓库产品实现。
 - workspace 通用脚本默认应是 repo-neutral、参数化、无密钥、无用户绝对路径、无网络依赖；如果脚本会写入同级子仓库，必须是用户确认后的安装 scope 写入，或有当前总控文档明确授权，并优先让对应子仓库窗口执行。
 - workspace 内的 `skills/` 是可复用 skill 资产或草案的保管位置，不代表自动安装或自动启用；若某个 skill 需要安装到 Codex runtime、插件包或子仓库，必须在文档中明确安装位置、消费方和同步方式。
-- `.workspace-active/workspace/index.md` 是 workspace 级唯一活跃总控入口。当前状态、活跃 TODO、测试交流、Design inbox、自动化当前计划和正在执行的 workspace 总控计划优先写到 `.workspace-active/workspace/current/`；它是本机当前工作面，默认不提交。完成后再归档或提炼到 `../workspace-ledger/`。
+- `.workspace-active/workspace/index.md` 是 workspace 级唯一活跃总控入口。当前状态、活跃 TODO、测试 card / 测试交流投影、Design inbox、自动化当前计划和正在执行的 workspace 总控计划优先写到 `.workspace-active/workspace/current/` 或当前 controller state-root；它是本机当前工作面，默认不提交。完成后再归档或提炼到 `../workspace-ledger/`。
 - `../workspace-ledger/requirement-designs/` 保存较大需求的原始计划书、需求设计文档和代码实现依赖调研；不要把具体 wave 派发、执行验收或回填堆到这里。
 - Design 活跃草案和 `workspace-signal` / `workspace-handoff` 可以保存在外部 `DesignWindow/docs/current/`，也可以使用内部 `.workspace-active/workspace/current/design-handoff-board.md` 与 `../workspace-ledger/design/`；总控接收后再决定是否转写到 workspace 正式账本。Design 不直接改总控当前状态。
 - `../workspace-ledger/goal-stage-confirmation/` 保存“需求目标 + 分阶段确认”的长期流程；可复用模板统一保存到 `templates/`；具体某次任务的目标阶段确认文档写到 `.workspace-active/workspace/current/` 并从索引挂载。
 - 与某个子仓库强相关的长期协作文档，优先写到 `../workspace-ledger/CoreWindow/`、`../workspace-ledger/AgentWindow/`、`../workspace-ledger/DashboardWindow/`、`../workspace-ledger/PluginWindow/` 或 `../workspace-ledger/BaseWindow/`，并从 workspace 总控文档或索引挂回。
 - 通用 `codex-control-workspace` 仓库不再使用 `docs/` 根层级承载总控文档；旧 `docs/workspace/` starter / window-support 内容属于模板，统一放在 `templates/`。需要重写、续写或归档时，短期执行入口优先在 `.workspace-active/workspace/current/`，长期规则 / 契约 / 地图写入外层 `../workspace-ledger/`。
 - 子仓库内 `docs/` 只放随源码长期维护的产品文档、发布文档或用户文档；不要把跨仓库协作临时文档散落到子仓库内部。
-- 即使真实测试项目自身包含 `docs/`，开发协作文件、阶段计划、验收记录、扫描结果和 BaseWindow 验证记录仍统一通过 workspace 总控文档、内部 `.workspace-active/workspace/current/test-exchange.md`，或外部 `TestWindow/docs/` 记录；真实测试项目仓库内 `docs/` 只保存必要的长期项目文档。
+- 即使真实测试项目自身包含 `docs/`，开发协作文件、阶段计划、验收记录、扫描结果和 BaseWindow 验证记录仍统一通过 controller state-root、workspace 总控文档、内部 `.workspace-active/workspace/current/test-exchange.md` 投影，或外部 `TestWindow/docs/` 记录；真实测试项目仓库内 `docs/` 只保存必要的长期项目文档。
 - 长期文档不得写入用户本机绝对路径、API key、token 或其它私密信息。文档命名使用小写 kebab-case 和执行日 `YYYY-MM-DD`。
 
 详细文档落点、索引、模板字段和账本维护规则见 `skills/dev/control-workspace-governance/references/workspace-ledgers.md`。
@@ -209,7 +209,7 @@ TODO / Backlog、窗口覆盖、任务包和新闭环命令细节见 `skills/dev
 ## 需求到 Wave 流程
 
 - 成熟需求到执行路线见 `../workspace-ledger/workspace/requirement-to-wave-execution-flow.md`；总控只保留流程门禁，不在 `AGENTS.md` 重复所有步骤。
-- 正规需求路线是：Design 先完成 original plan、requirement design、目标、完成定义、阶段候选和 TODO / Backlog 挂载建议；总控接收后正式入 TODO / Backlog 或需求目录，再决定补代码调研、创建测试单、进入目标阶段确认或启动 wave。
+- 正规需求路线是：Design 先完成 original plan、requirement design、目标、完成定义、阶段候选和 TODO / Backlog 挂载建议；总控接收后正式入 TODO / Backlog、需求目录或 controller state-root intake，再决定补代码调研、创建测试 card / 任务包、进入目标阶段确认或启动执行。
 - 任务拆分不得只分配“抽象连接”“接口占位”“空 adapter”“无调用方 provider”“只改类型不落功能”的任务；如果某一阶段确实只做 contract，也必须有明确消费窗口、下一阶段消费方式和 targeted verification。
 - 任务级确认文档必须写清：用户原始目标、对应需求设计文档、总控理解、最终完成定义、非目标、影响窗口、producer / consumer 依赖链、阶段计划、当前阶段判断、验证策略、风险和确认问题。
 - 用户确认后，才能新建或激活具体 wave 执行计划。目标阶段确认文档只记录用户确认和阶段路线，不继续承载所有执行细节。激活 wave 后，`.workspace-active/workspace/index.md` 当前计划应切到 wave 执行计划，并只把当前无上游阻塞、发送后能实际推进的窗口改为 `待启动`。
@@ -218,13 +218,13 @@ TODO / Backlog、窗口覆盖、任务包和新闭环命令细节见 `skills/dev
 
 - 当用户要求检查、升级或选择 workspace 脚本，评估流水线是否可继续自动化，或判断是否需要脚本使用 skill 时，读取 `skills/dev/control-workspace-governance/SKILL.md`，并按 `references/script-pipeline.md` 执行细则。
 - `scripts/README.md` 是 workspace 脚本入口索引；新增、重命名或删除 `scripts/*.mjs` 后，必须同步更新该索引，并运行 `node scripts/check-script-docs.mjs`。
-- 新建或调整状态机需求根、开发者推进文档、Design handoff board、测试交流、归档入口或相关模板时，必须遵守 `scripts/README.md` 中的脚本可读格式说明。新需求使用 `templates/control-state-machine/` 与 `controller-state.mjs`；开发者推进文档只允许脚本更新统一状态块，其余补充走追加日志。不要随意重命名脚本依赖章节或改变状态机、target result、reducer candidate、窗口分派和回填证据的机器字段。
+- 新建或调整状态机需求根、开发者推进文档、Design handoff board、Design/Test intake、测试 card / 测试交流投影、归档入口或相关模板时，必须遵守 `scripts/README.md` 中的脚本可读格式说明。新需求使用 `templates/control-state-machine/` 与 `controller-state.mjs`；Design/Test 附件使用 `control-intake.mjs`；开发者推进文档只允许脚本更新统一状态块，其余补充走追加日志。不要随意重命名脚本依赖章节或改变状态机、target result、reducer candidate、窗口分派和回填证据的机器字段。
 - `node scripts/verify-control-center.mjs` 是默认总控验证编排；不要把它能自动覆盖的机械检查重复拆成口头流程，除非当前任务只需要其中一个更小脚本。
 - 写入型脚本必须默认 dry-run 或显式 check，只有用户目标或当前总控文档需要写入时才使用 `--write` / `--apply`。
 
 ## 统一窗口分派提示词
 
-当用户需要把下一波任务复制到其它 Codex 窗口时，总控窗口默认只输出一条轻量通用提示词，让各窗口根据当前总控文档自行领取分配给自己的任务。提示词是导航和唤醒信封，不是任务书；目标、范围、禁止事项、验证和回填字段必须写在当前计划、测试单、目标仓库 `AGENTS.md` 或相关 skill 中。详细发送 / 不发送判断见 `skills/dev/control-workspace-governance/references/window-dispatch.md`。
+当用户需要把下一波任务复制到其它 Codex 窗口时，总控窗口默认只输出一条轻量通用提示词，让各窗口根据当前总控文档自行领取分配给自己的任务。提示词是导航和唤醒信封，不是任务书；目标、范围、禁止事项、验证和回填字段必须写在当前计划、测试 card / 任务包、目标仓库 `AGENTS.md` 或相关 skill 中。详细发送 / 不发送判断见 `skills/dev/control-workspace-governance/references/window-dispatch.md`。
 
 ```text
 继续当前总控任务：<计划 / wave 名>。

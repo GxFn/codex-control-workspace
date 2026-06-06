@@ -64,6 +64,7 @@ if (withScriptTests) {
       "scripts/collect-repo-status.test.mjs",
       "scripts/controller-state.test.mjs",
       "scripts/control-state-machine-route-fixtures.test.mjs",
+      "scripts/control-intake.test.mjs",
       "scripts/check-repository-residue.test.mjs",
       "scripts/check-script-docs.test.mjs",
       "scripts/control-workspace-install.test.mjs",

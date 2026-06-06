@@ -5,6 +5,6 @@
   "type": "module",
   "scripts": {
     "verify": "node scripts/verify-control-center.mjs --with-script-tests",
-    "test": "node --test scripts/archive-global-todo-board.test.mjs scripts/codex-automation-loop.test.mjs scripts/collect-repo-status.test.mjs scripts/controller-state.test.mjs scripts/control-state-machine-route-fixtures.test.mjs scripts/check-repository-residue.test.mjs scripts/check-script-docs.test.mjs scripts/control-workspace-install.test.mjs scripts/import-design-handoffs.test.mjs scripts/next-control-work.test.mjs scripts/workspace-control.test.mjs"
+    "test": "node --test scripts/archive-global-todo-board.test.mjs scripts/codex-automation-loop.test.mjs scripts/collect-repo-status.test.mjs scripts/controller-state.test.mjs scripts/control-state-machine-route-fixtures.test.mjs scripts/control-intake.test.mjs scripts/check-repository-residue.test.mjs scripts/check-script-docs.test.mjs scripts/control-workspace-install.test.mjs scripts/import-design-handoffs.test.mjs scripts/next-control-work.test.mjs scripts/workspace-control.test.mjs"
   }
 }

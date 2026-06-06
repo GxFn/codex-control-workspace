@@ -2,13 +2,13 @@
 
 本目录是 ControlWorkspace 内置的测试协调窗口入口。若用户配置了外部 `TestWindow` 仓库，外部仓库自己的 `AGENTS.md` 和本 workspace 写入的 scope 管理块优先生效；本文件用于没有外部测试仓库时承接旧 TestWindow 的真实场景验证边界。
 
-**重要**：本目录不是产品源码仓库，也不是用户真实业务项目。它只保留测试单、测试策略、验证证据链接、复现说明和必要的测试辅助资产。
+**重要**：本目录不是产品源码仓库，也不是用户真实业务项目。它只保留测试边界投影、测试策略、验证证据链接、复现说明和必要的测试辅助资产。
 
 ## Codex Automation Closed Loop
 
 - 如果本窗口通过 ControlWorkspace 的 direct-thread delivery 唤醒，先读取 workspace `AGENTS.md`、当前总控文档、`skills/dev/codex-automation-target/SKILL.md` 和本文件。
-- 只执行 dispatch packet 指定给 `TestWindow` 的任务，并返回 `TargetResultEnvelope`；不得代领、处理、验证或总结其它窗口任务。
-- 自动化 smoke 中的 `TestWindow` 可以只是非测试型可见窗口目标；除非当前总控文档或测试单明确要求真实测试，否则不得运行真实项目测试、cold-start、Dashboard 手动观察或回归验证。
+- 只执行 dispatch packet 指定给 `TestWindow` 的任务，并返回 `TargetResultEnvelope`；不得代领、处理、验证或总结其它窗口任务。任务必须可回溯到 controller state-root 的 task package，真实测试任务还必须可回溯到 `test-cards/*.json`。
+- 自动化 smoke 中的 `TestWindow` 可以只是非测试型可见窗口目标；除非当前 state-root 任务包和 test card 明确要求真实测试，否则不得运行真实项目测试、cold-start、Dashboard 手动观察或回归验证。
 - 子窗口默认不创建目标窗口下一跳 delivery；补证、重派或下一阶段都由总控 review 后决定。若 delivery `returnRoute=controller` 且 `review-results` 显示 `DispatchGroup.returnPolicy` 允许回调，只允许通过 `build-controller-return` 创建一次总控回跳 envelope，并默认回到 `DispatchGroup.controllerWindow` 指定的原发起总控；之后必须继续完成真实 direct-thread send、readback 和 `record-delivery-run`。只有存在 `status=sent` 且 `readback.ok=true` 的 `DirectThreadDeliveryRun`，才算真实回跳完成。`group-ready` 必须携带整组 ready / blocked / missing 快照；`per-target` 必须携带当前触发窗口和剩余窗口快照，不能把单个回填误判为整组完成。
 
 ## 窗口定位
@@ -26,8 +26,8 @@
 
 ## 需要测试时
 
-- 先读取当前总控文档、目标仓库 `AGENTS.md`、相关脚本说明和真实入口，再执行测试。
-- 测试前必须写清“验证什么闭环”：入口、触发动作、真实数据、状态变化、消费方、失败路径和完成标准。
+- 先读取当前总控 state-root 的 `developer-progress.md`、`controller-state.json`、对应 `task-packages/*.json`，以及真实测试任务对应的 `test-cards/*.json`；再读取目标仓库 `AGENTS.md`、相关脚本说明和真实入口。
+- 测试前必须复核 test card 中的边界门禁：“验证什么闭环”、入口、触发动作、真实数据、状态变化、消费方、失败路径、成功 / 失败 / 不能推出什么和停止条件。
 - 测试结论必须基于真实命令、真实 API、真实日志、真实 UI 状态或真实文件证据；不要只凭推断判断通过。
 - 如果命令无法运行，记录原因、环境限制和下一步建议，不能把未运行命令写成通过。
 
@@ -35,7 +35,8 @@
 
 - 本窗口规则：`AGENTS.md`。
 - 长期测试策略：`docs/testing-operation-policy.md`。
-- 测试单模板：`templates/test-handoff-template.md`。
+- 测试 card 模板：`templates/test-handoff-template.md`。
 - 长期验证报告、复现记录和监控记录：本窗口 `docs/`。
-- 跨仓库当前测试交流入口：`../current/test-exchange.md`。
+- 真实测试边界机器入口：当前总控 state-root 下的 `test-cards/*.json`。
+- 跨仓库当前测试交流投影：`../current/test-exchange.md`，只作人读摘要，不作状态源。
 - 临时输出、日志截取和本地缓存：`tmp/`，默认不进入 git。

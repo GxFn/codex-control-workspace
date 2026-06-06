@@ -39,11 +39,30 @@ test("--print design preserves focused handoff validation arguments", () => {
   assert.match(result.stdout, /node scripts\/import-design-handoffs\.mjs --json --id PCVM-2026-05-25/);
 });
 
+test("--print intake maps Design/Test intake to the state-root bridge", () => {
+  const result = run([
+    "--print",
+    "intake",
+    "test-card",
+    "--state-root",
+    ".workspace-active/workspace/current/example-demand",
+    "--test-id",
+    "TEST-1",
+    "--json",
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stdout,
+    /node scripts\/control-intake\.mjs test-card --state-root \.workspace-active\/workspace\/current\/example-demand --test-id TEST-1 --json/,
+  );
+});
+
 test("--print scripts --tests includes script validation and all script tests", () => {
   const result = run(["--print", "scripts", "--tests"]);
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /node scripts\/check-script-docs\.mjs/);
   assert.match(result.stdout, /node --test .*scripts\/codex-automation-loop\.test\.mjs/);
+  assert.match(result.stdout, /scripts\/control-intake\.test\.mjs/);
   assert.match(result.stdout, /scripts\/import-design-handoffs\.test\.mjs/);
   assert.match(result.stdout, /scripts\/next-control-work\.test\.mjs/);
   assert.match(result.stdout, /scripts\/workspace-control\.test\.mjs/);

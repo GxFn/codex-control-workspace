@@ -425,7 +425,7 @@ node ${relativeScript} status --json
 node ${relativeScript} write-agents --window ${repo.windowName} --write
 
 控制仓库相对路径：${controlPath}
-如目录、职责或控制计划不一致，停止并回报总控。`;
+如目录、职责或 stateRoot / 控制仓库配置不一致，停止并回报总控。`;
 }
 
 function promptsPayload() {
@@ -455,6 +455,11 @@ const ROOT_AGENTS_END = "<!-- codex-control-workspace:root-agents:end -->";
 
 function scopeBlock(context, repo) {
   const absolutePath = repositoryAbsPath(context.controlRoot, repo);
+  const samePathRepos = repositoriesSharingPath(context, repo);
+  const primaryRepo = primaryRepositoryForScope(context, repo);
+  const samePathWindowNames = samePathRepos.map((item) => item.windowName);
+  const hasWindowAliases = samePathWindowNames.length > 1;
+  const windowNamesInline = samePathWindowNames.map((name) => `\`${name}\``).join(" / ");
   const controlRelative = slash(path.relative(absolutePath, context.controlRoot)) || ".";
   const parentAgents = relativePathFrom(absolutePath, path.join(context.parentRoot, "AGENTS.md"));
   const activeIndex = relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceIndexPath ?? ".workspace-active/workspace/index.md"));
@@ -463,8 +468,20 @@ function scopeBlock(context, repo) {
   const windowLedger = relativePathFrom(absolutePath, windowLedgerDirFor({
     workspaceRoot: context.controlRoot,
     config: context.config,
-    windowName: repo.windowName,
+    windowName: primaryRepo.windowName,
   }));
+  const windowLedgerText = hasWindowAliases
+    ? `- Window ledger: \`${windowLedger}\`
+- Window ledgers for this repository:
+${samePathRepos.map((item) => {
+  const itemLedger = relativePathFrom(absolutePath, windowLedgerDirFor({
+    workspaceRoot: context.controlRoot,
+    config: context.config,
+    windowName: item.windowName,
+  }));
+  return `  - \`${item.windowName}\`: \`${itemLedger}\``;
+}).join("\n")}`
+    : `- Window ledger: \`${windowLedger}\``;
   const designBoard = relativePathFrom(
     absolutePath,
     resolveMaybeRelative(context.controlRoot, context.config.designHandoffBoard ?? ".workspace-active/workspace/current/design-handoff-board.md"),
@@ -473,15 +490,26 @@ function scopeBlock(context, repo) {
     absolutePath,
     resolveMaybeRelative(context.controlRoot, context.config.testExchangePath ?? ".workspace-active/workspace/current/test-exchange.md"),
   );
-  const isDesign = repo.windowName === context.config.designWindow;
-  const isTest = repo.windowName === context.config.testWindow;
+  const isDesign = samePathWindowNames.includes(context.config.designWindow);
+  const isTest = samePathWindowNames.includes(context.config.testWindow);
   const roleNote = [];
   if (isDesign) {
     roleNote.push(`- Design handoff board: \`${designBoard}\``);
-  } else if (isTest) {
+  }
+  if (isTest) {
     roleNote.push(`- Test exchange: \`${testExchange}\``);
   }
   const roleNoteText = roleNote.length > 0 ? `\n${roleNote.join("\n")}` : "";
+  const windowNameText = hasWindowAliases
+    ? `- Window name: \`${primaryRepo.windowName}\`
+- Window aliases for this repository: ${windowNamesInline}`
+    : `- Window name: \`${primaryRepo.windowName}\``;
+  const taskTargetText = hasWindowAliases
+    ? `本接入卡列出的窗口之一（${windowNamesInline}）`
+    : `\`${primaryRepo.windowName}\``;
+  const dispatchPacketRule = hasWindowAliases
+    ? `- 本仓库只处理本接入卡列出的窗口 dispatch packet（${windowNamesInline}）；执行前必须按提示词、delivery envelope 或当前计划里的 \`currentWindow\` 分流，并返回对应窗口的 \`TargetResultEnvelope\`；不得代领、代验或处理其它窗口任务。`
+    : `- 本窗口只处理 \`${primaryRepo.windowName}\` 对应的 dispatch packet，并返回 \`TargetResultEnvelope\`；不得代领、代验或处理其它窗口任务。`;
   return `${AGENTS_START}
 ## Workspace 接入卡
 
@@ -490,27 +518,27 @@ function scopeBlock(context, repo) {
 ### 坐标
 
 - Control workspace: \`${controlRelative}\`
-- Window name: \`${repo.windowName}\`
+${windowNameText}
 - Parent workspace AGENTS: \`${parentAgents}\`
 - Active workspace index: \`${activeIndex}\`
 - Active workspace status: \`${activeStatus}\`
 - Current plan directory: \`${currentDir}\`
-- Window ledger: \`${windowLedger}\`${roleNoteText}
+${windowLedgerText}${roleNoteText}
 
 ### 领取 workspace 任务时
 
 1. 先读本文件。
 2. 再读父级 \`${parentAgents}\`。
 3. 再读 \`${activeIndex}\` 和 \`${activeStatus}\`。
-4. 如果有当前计划、任务包或 direct-thread delivery，只按 \`${currentDir}\` 中明确分配给 \`${repo.windowName}\` 的内容执行。
+4. 如果有当前计划、任务包或 direct-thread delivery，只按 \`${currentDir}\` 中明确分配给${taskTargetText}的内容执行。
 5. 目标、范围、禁止事项、验证命令和回填字段以当前计划 / 任务包和本仓库规则为准；提示词只是唤醒入口，不是唯一任务说明。
 
 ### Direct Thread Dispatch 最小门禁
 
 - Direct-thread delivery 是正常工作投递流水线，不改变本窗口职责，也不扩大任务范围；具体任务以 dispatch packet、当前计划和本仓库规则为准。
-- Delivery prompt 只承载动态变量、规则名和 skill 指向；不得把提示词当成完整命令手册。状态机路线用 \`currentWindow\` / \`taskId\` / \`dispatchGroup\` / \`stateRoot\` / \`humanContextRef\` 等变量按 \`codex-automation-target\` skill 执行；缺少 \`stateRoot\` 或变量冲突时停止回报。
-- 本窗口只处理 \`${repo.windowName}\` 对应的 dispatch packet，并返回 \`TargetResultEnvelope\`；不得代领、代验或处理其它窗口任务。
-- 子窗口默认不创建目标窗口下一跳 delivery；补证、重派和下一阶段都由总控 review 后决定。若 delivery \`returnRoute=controller\` 且 \`review-results\` 显示 \`DispatchGroup.returnPolicy\` 允许回调，只允许通过 \`build-controller-return\` 创建一次总控回跳 envelope，并默认回到 \`DispatchGroup.controllerWindow\` 指定的原发起总控；之后必须继续完成真实 direct-thread send、readback 和 \`record-delivery-run\`。只有存在 \`status=sent\` 且 \`readback.ok=true\` 的 \`DirectThreadDeliveryRun\`，才算真实回跳完成。\`group-ready\` 必须携带整组 ready / blocked / missing 快照；\`per-target\` 必须携带当前触发窗口和剩余窗口快照，不能把单个回填误判为整组完成。
+- Delivery prompt 只承载少量动态变量和 skill 指向；不得把提示词当成完整命令手册。状态机路线的可见变量只需要 \`currentWindow\` / \`taskId\` / \`stateRoot\` / 可选 \`dispatchGroup\`；\`controllerWindow\`、\`returnPolicy\`、\`humanContextRef\`、\`stateRevision\` 等机器字段从 state root、dispatch group 和 delivery envelope 读取。缺少 \`stateRoot\` 或变量冲突时停止回报。
+${dispatchPacketRule}
+- 子窗口默认不创建目标窗口下一跳 delivery；补证、重派和下一阶段都由总控 review 后决定。若 delivery \`returnRoute=controller\` 且 \`review-results\` 显示 \`DispatchGroup.returnPolicy\` 允许回调，只允许通过 \`build-controller-return\` 创建一次总控回跳 envelope，并默认回到 \`DispatchGroup.controllerWindow\` 指定的原发起总控；之后必须继续完成真实 direct-thread send、readback 和 \`record-delivery-run\`。只有存在 \`status=sent\` 且 \`readback.ok=true\` 的 \`DirectThreadDeliveryRun\`，才算真实回跳完成。完整 group snapshot 留在 controller-return envelope；可见 prompt 只显示非空异常 targets，不能把单个回填误判为整组完成。
 - 非 TestWindow 不得创建、处理或验证 TestWindow delivery，除非当前计划和 delivery envelope 同时显式授权。
 - Thread id 只能写入 control workspace 的本地 runtime；不得写入 tracked 文档、回填正文或 GitHub。
 
@@ -518,6 +546,22 @@ function scopeBlock(context, repo) {
 
 - 长期跨仓库协作文档、计划、验收、扫描和边界记录写入 \`${windowLedger}\`；本仓库 \`docs/\` 只放随源码维护的产品、发布或用户文档。
 ${AGENTS_END}`;
+}
+
+function repositoriesSharingPath(context, repo) {
+  const absolutePath = repositoryAbsPath(context.controlRoot, repo);
+  return normalizedRepositories(context.config).filter((candidate) => {
+    return repositoryAbsPath(context.controlRoot, candidate) === absolutePath;
+  });
+}
+
+function primaryRepositoryForScope(context, repo) {
+  const samePathRepos = repositoriesSharingPath(context, repo);
+  return samePathRepos.find((candidate) => candidate.windowName === context.config.testWindow)
+    ?? samePathRepos.find((candidate) => candidate.windowName === context.config.designWindow)
+    ?? samePathRepos.find((candidate) => candidate.managedAgents !== false)
+    ?? samePathRepos[0]
+    ?? repo;
 }
 
 function scopeBlockContent(existing) {
@@ -531,9 +575,20 @@ function scopeBlockContent(existing) {
 
 function expectedScopeCoordinates(context, repo) {
   const absolutePath = repositoryAbsPath(context.controlRoot, repo);
+  const samePathRepos = repositoriesSharingPath(context, repo);
+  const samePathWindowNames = samePathRepos.map((item) => item.windowName);
+  const ledgerByWindow = Object.fromEntries(samePathRepos.map((item) => [
+    item.windowName,
+    relativePathFrom(absolutePath, windowLedgerDirFor({
+      workspaceRoot: context.controlRoot,
+      config: context.config,
+      windowName: item.windowName,
+    })),
+  ]));
   const coordinate = {
     controlWorkspace: slash(path.relative(absolutePath, context.controlRoot)) || ".",
     windowName: repo.windowName,
+    windowNames: samePathWindowNames,
     parentAgents: relativePathFrom(absolutePath, path.join(context.parentRoot, "AGENTS.md")),
     activeIndex: relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceIndexPath ?? ".workspace-active/workspace/index.md")),
     activeStatus: relativePathFrom(absolutePath, path.resolve(context.controlRoot, context.config.workspaceCurrentStatusPath ?? ".workspace-active/workspace/current/workspace-current-status.md")),
@@ -543,6 +598,7 @@ function expectedScopeCoordinates(context, repo) {
       config: context.config,
       windowName: repo.windowName,
     })),
+    ledgerByWindow,
   };
   if (repo.windowName === context.config.designWindow) {
     coordinate.designHandoffBoard = relativePathFrom(
@@ -562,24 +618,36 @@ function expectedScopeCoordinates(context, repo) {
 function coordinateChecks(block, coordinates) {
   const checks = [
     ["controlWorkspace", `- Control workspace: \`${coordinates.controlWorkspace}\``],
-    ["windowName", `- Window name: \`${coordinates.windowName}\``],
     ["parentAgents", `- Parent workspace AGENTS: \`${coordinates.parentAgents}\``],
     ["activeIndex", `- Active workspace index: \`${coordinates.activeIndex}\``],
     ["activeStatus", `- Active workspace status: \`${coordinates.activeStatus}\``],
     ["currentPlanDirectory", `- Current plan directory: \`${coordinates.currentPlanDirectory}\``],
-    ["windowLedger", `- Window ledger: \`${coordinates.windowLedger}\``],
   ];
+  if (coordinates.windowNames.length > 1) {
+    checks.push([
+      "windowName",
+      (content) => content.includes("- Window aliases for this repository:")
+        && coordinates.windowNames.every((name) => content.includes(`\`${name}\``)),
+    ]);
+    checks.push([
+      "windowLedger",
+      (content) => Object.entries(coordinates.ledgerByWindow)
+        .every(([name, ledger]) => content.includes(`  - \`${name}\`: \`${ledger}\``)),
+    ]);
+  } else {
+    checks.push(["windowName", `- Window name: \`${coordinates.windowName}\``]);
+    checks.push(["windowLedger", `- Window ledger: \`${coordinates.windowLedger}\``]);
+  }
   if (coordinates.designHandoffBoard) {
     checks.push(["designHandoffBoard", `- Design handoff board: \`${coordinates.designHandoffBoard}\``]);
   }
   if (coordinates.testExchange) {
     checks.push(["testExchange", `- Test exchange: \`${coordinates.testExchange}\``]);
   }
-  return checks.map(([key, needle]) => ({
-    key,
-    expected: needle,
-    ok: block.includes(needle),
-  }));
+  return checks.map(([key, expected]) => {
+    const ok = typeof expected === "function" ? expected(block) : block.includes(expected);
+    return { key, expected: typeof expected === "function" ? "<predicate>" : expected, ok };
+  });
 }
 
 function accessProfileFor(context, repo) {
@@ -591,6 +659,7 @@ function accessProfileFor(context, repo) {
   const block = scopeBlockContent(agents);
   const coordinates = expectedScopeCoordinates(context, repo);
   const checks = coordinateChecks(block, coordinates);
+  const hasWindowAliases = coordinates.windowNames.length > 1;
   const automationChecks = [
     {
       key: "targetResultEnvelope",
@@ -598,7 +667,10 @@ function accessProfileFor(context, repo) {
     },
     {
       key: "singleWindowDispatchPacket",
-      ok: block.includes(`只处理 \`${repo.windowName}\` 对应的 dispatch packet`),
+      ok: hasWindowAliases
+        ? block.includes("只处理本接入卡列出的窗口 dispatch packet")
+          && coordinates.windowNames.every((name) => block.includes(`\`${name}\``))
+        : block.includes(`只处理 \`${repo.windowName}\` 对应的 dispatch packet`),
     },
     {
       key: "noTargetNextHop",

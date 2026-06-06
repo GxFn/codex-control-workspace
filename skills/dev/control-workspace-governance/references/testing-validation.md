@@ -25,16 +25,18 @@ workspace governance work.
 7. 哪些结论不能推出？
 8. 什么条件下应停止，而不是启动测试？
 
-没有这组判断，不得创建测试单、不得发送测试窗口、不得把测试结果写成主线事实。
+没有这组判断，不得创建测试 card / 任务包、不得发送测试窗口、不得把测试结果写成主线事实。
 
 ## TestWindow Handoff
 
-- 只在测试确实需要真实项目环境、cold-start / rescan、Dashboard 手动观察、运行时监控、真实项目复现 / 回归或跨仓库集成环境证据时，才通过 `.workspace-active/workspace/current/test-exchange.md` 创建或更新测试单。
+- 只在测试确实需要真实项目环境、cold-start / rescan、Dashboard 手动观察、运行时监控、真实项目复现 / 回归或跨仓库集成环境证据时，才创建 `TestWindow` 测试边界。
 - 只在测试对象属于 Codex Plugin / host MCP / 本地环境 / IDE 投递读回时，才把 IDE / Plugin 测试职责窗口写为 `执行窗口`；不得为了方便把这类测试写给真实项目 `TestWindow`。
-- 测试单先按 `templates/test-handoff-template.md` 填写，再挂入 `.workspace-active/workspace/current/test-exchange.md`；测试单状态为 `待启动` 时才建议用户发送给 `TestWindow`。
-- 测试单必须写清总控自测排除理由、需要的真实场景、测试前边界与多条件判断、验证命令、回填证据和停止条件。
+- 新流程先用 `node scripts/control-intake.mjs test-card --state-root <state-root> ... --write --json` 写入 state-root 下的 `test-cards/*.json`。这个 card 是测试边界机器数据，不是 dispatch、不是测试结果、不是验收。
+- 总控复核 test card 后，如确认需要发送测试窗口，再用 `controller-state.mjs add-task-package --source-ref test-cards/<id>.json --target-window <TestWindow>` 建任务包；随后才允许 direct-thread delivery 或手工提示词。
+- `test-exchange.md` 只作为短人读摘要 / exchange 投影；不得手工把它当机器状态源，也不得通过它绕过 state-root task package。
+- 测试 card 必须写清总控自测排除理由、需要的真实场景、测试前边界与多条件判断、验证命令、回填证据和停止条件。
 - 总控可以制定测试目标、验收标准、观察点、风险和回填要求；只有交给 `TestWindow` 的真实场景测试，测试脚本、测试配置、复现记录和长期验证报告才放在 `TestWindow/` 下。
-- 总控与 `TestWindow` 的任务和结果交流必须通过测试交流文档，不在普通聊天里口头传递测试范围、结果和下一步判断。
+- 总控与 `TestWindow` 的任务和结果交流必须可回溯到 state-root 的 test card / task package / target result；普通聊天不能替代测试范围、结果和下一步判断。
 
 ## Evidence And Acceptance
 
@@ -55,9 +57,11 @@ workspace governance work.
 
 ## Related Entrypoints
 
-- 测试交流入口：`.workspace-active/workspace/current/test-exchange.md`
+- 测试边界机器入口：`<state-root>/test-cards/*.json`
+- 测试交流投影入口：`.workspace-active/workspace/current/test-exchange.md`
 - 测试执行长期规则：内部模式为 `../workspace-ledger/testing/docs/testing-operation-policy.md`；外部模式为 `TestWindow/docs/testing-operation-policy.md`
 - IDE / Plugin 测试职责窗口：读取 workspace config 的 `ideTestWindow`；没有该字段时，必须在当前计划中显式写清窗口名。
 - 默认测试参数：`TestWindow/config/defaults.json`
-- 测试单模板：`templates/test-handoff-template.md`
-- 机械记录：测试边界写入 state-root 任务包 / `test-exchange.md`，由总控人工复核；没有单独测试边界脚本作为验收替代。
+- 测试 card 模板：`templates/test-handoff-template.md`
+- 测试边界脚本：`scripts/control-intake.mjs test-card`
+- 机械记录：测试边界先写入 state-root `test-cards/*.json`，再由总控决定是否生成任务包和派发；脚本不能替代总控验收。

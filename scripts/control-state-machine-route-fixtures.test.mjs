@@ -310,6 +310,11 @@ test("unattended route prepares dispatch and controller return from stateRoot wi
   assert.equal(preparedPayload.envelope.controlPlan, undefined);
   assert.equal(preparedPayload.packet.stateRef.stateRoot, stateRootRef);
   assert.doesNotMatch(preparedPayload.packet.prompt, /controlPlan:/);
+  assert.doesNotMatch(preparedPayload.packet.prompt, /humanContextRef:/);
+  assert.doesNotMatch(preparedPayload.packet.prompt, /stateRevision:/);
+  assert.doesNotMatch(preparedPayload.packet.prompt, /taskPackageId:/);
+  assert.doesNotMatch(preparedPayload.packet.prompt, /demandKey:/);
+  assert.doesNotMatch(preparedPayload.packet.prompt, /rules:/);
 
   const submit = runAutomation([
     "submit-result",
@@ -346,6 +351,14 @@ test("unattended route prepares dispatch and controller return from stateRoot wi
   assert.equal(returnPayload.envelope.stateRef.stateRoot, stateRootRef);
   assert.equal(returnPayload.envelope.humanContextRef, `${stateRootRef}/developer-progress.md`);
   assert.doesNotMatch(returnPayload.envelope.prompt, /controlPlan:/);
+  assert.doesNotMatch(returnPayload.envelope.prompt, /humanContextRef:/);
+  assert.doesNotMatch(returnPayload.envelope.prompt, /stateRevision:/);
+  assert.doesNotMatch(returnPayload.envelope.prompt, /taskPackageId:/);
+  assert.doesNotMatch(returnPayload.envelope.prompt, /demandKey:/);
+  assert.doesNotMatch(returnPayload.envelope.prompt, /returnPolicy:/);
+  assert.doesNotMatch(returnPayload.envelope.prompt, /reviewScope:/);
+  assert.doesNotMatch(returnPayload.envelope.prompt, /groupStatus:/);
+  assert.doesNotMatch(returnPayload.envelope.prompt, /rules:/);
   assert.doesNotMatch(returned.stdout, /019e-state-root-controller-thread/);
 
   writeJson(path.join(stateRoot, manifest.result.evidenceRef), { ok: true, route: "unattended" });
@@ -403,17 +416,8 @@ test("failure route waits on missing results, surfaces blocked evidence, and rej
   assert.match(reducedBlocked.candidateId, /^tc-/);
   const staleCandidate = reducedBlocked.candidateId;
 
-  const extra = runController([
-    "add-task-package",
-    "--state-root",
-    stateRootRef,
-    "--task-package-id",
-    "CSMR-FAILURE-EXTRA",
-    "--summary",
-    "Advance the revision before using the candidate.",
-    "--write",
-  ], root);
-  assert.equal(extra.status, 0, extra.stderr || extra.stdout);
+  const revisionAdvance = reduceResults(root, stateRootRef);
+  assert.match(revisionAdvance.candidateId, /^tc-/);
 
   const stale = runController([
     "decide-review",
@@ -430,8 +434,7 @@ test("failure route waits on missing results, surfaces blocked evidence, and rej
   assert.notEqual(stale.status, 0);
   assert.match(stale.stdout, /is stale/);
 
-  const reducedAgain = reduceResults(root, stateRootRef);
-  const decision = decideReview(root, stateRootRef, reducedAgain.candidateId, manifest);
+  const decision = decideReview(root, stateRootRef, revisionAdvance.candidateId, manifest);
   renderProgress(root, stateRootRef);
   const state = readJson(path.join(stateRoot, "controller-state.json"));
   const progress = readFileSync(path.join(stateRoot, "developer-progress.md"), "utf8");

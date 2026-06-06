@@ -44,26 +44,24 @@ Controller wakeups should be task-first and compact:
 继续总控验收：<windowA>、<windowB> 回填。
 
 变量：
-- dispatchGroup: <group>
-- triggerTarget: <window>
-- triggerTaskId: <task>
 - stateRoot: <path>
-- humanContextRef: <path>
-- returnPolicy: group-ready
-- reviewScope: group
-- groupStatus: ready
-- rules: 用完即弃；review-results；按 groupSnapshot 判断单个回填、继续等待或整组验收；仅在证据通过且目标未完成时创建下一批 dispatch。
+- dispatchGroup: <group>
+- trigger: <window> / <task>
+- skill: codex-control-workspace/skills/dev/codex-automation-controller/SKILL.md
 ```
 
 Do not start the visible prompt with the automation mechanism name. Do not paste
 command manuals into the prompt. For `returnPolicy=group-ready`, the visible
-title uses the returned window names, not the dispatch group id; keep the group
-id in the variables for review and diagnostics.
+title uses the returned window names, not the dispatch group id.
 
-Keep happy-path prompt variables compact. Do not print `completedTargets`, and
-do not print empty `blockedTargets` / `missingTargets`. The full machine
-snapshot remains in `ControllerReturnEnvelope.groupSnapshot`. Only expose
-non-empty exception state in the prompt, such as:
+Keep happy-path prompt variables compact. The visible prompt only needs
+`stateRoot`, `dispatchGroup`, `trigger`, and `skill`. Do not print
+`controllerWindow`, `returnPolicy`, `reviewScope`, `groupStatus`, `demandKey`,
+`taskPackageId`, `stateRevision`, `humanContextRef`, `completedTargets`, or a
+long `rules` line. Those fields stay in `controller-state.json`,
+`DispatchGroup`, `ControllerReturnEnvelope.groupSnapshot`, and
+`humanContextRef` inside the local delivery envelope. Only expose non-empty
+exception state in the prompt, such as:
 
 ```text
 - blockedTargets: <windows>
@@ -79,24 +77,37 @@ target callback for whole-group completion.
 
 1. **Orient**
    - Read workspace `AGENTS.md`, workspace index/status, the current
-     state-root `developer-progress.md` / `controller-state.json`, and this
-     skill.
+     state-root `controller-state.json` / `developer-progress.md`, and this
+     skill. Treat `stateRoot` as the visible authority pointer; use the local
+     delivery envelope only for transport metadata such as `groupSnapshot`,
+     `returnPolicy`, `controllerWindow`, and `humanContextRef`.
    - State that this is the total-control window.
    - Direct thread delivery has no automation cleanup step. If a previous local
      automation is still present, treat it as stale runtime state and stop for
      total-control cleanup rather than continuing a legacy route.
 
 2. **Review target results**
-   - For the compact controller evidence surface, run:
+   - For state-root review and completion state, run:
+
+```text
+node scripts/codex-automation-loop.mjs review-pack --state-root <stateRoot> --json
+```
+
+   - If it reports `decision=completed`, stop without creating another
+     delivery. If it reports missing evidence refs, repair evidence paths before
+     reducing results or deciding.
+   - If it reports `decision=no-target-tasks`, do not treat the empty group as
+     ready. Add a real task package first, or stop if no useful work remains.
+   - For dispatch-group transport evidence, run:
 
 ```text
 node scripts/codex-automation-loop.mjs review-pack --group <dispatchGroup> --json
 ```
 
-   - Use the review pack to find result files, commits, evidence refs,
+   - Use the group review pack to find result files, commits, evidence refs,
      verification summaries, target delivery status, and controller-return
-     status. The review pack is not a verdict; total control still pulls raw
-     evidence before acceptance.
+     status. The group review pack is not a verdict; total control still pulls
+     raw evidence before acceptance.
    - When debugging readiness only, run:
 
 ```text
@@ -113,6 +124,9 @@ node scripts/codex-automation-loop.mjs review-results --group <dispatchGroup> --
    - `blocked` means at least one target reported a block; total control still
      reads the evidence before deciding whether it is a product block,
      environment block, or reporting block.
+     If total control records `decision=blocked`, stop for explicit user /
+     controller unblock. Do not add a follow-up task package merely to keep the
+     loop moving.
    - `needs-controller-review` means envelopes are present; pull raw evidence
      from commits, diffs, command outputs, runtime JSON, logs, reports, or
      screenshots before writing an acceptance verdict.
@@ -168,6 +182,11 @@ node scripts/codex-automation-loop.mjs build-window-config --window <window> --r
      the whole group. `--controller-window` must be this controller window's
      registered name, so automation started by controller A returns to
      controller A instead of the global workspace default.
+     `prepare-dispatch-from-state` is allowed only for eligible target tasks:
+     `pending`, `needs-rework`, or `missing-result`. It fails closed for
+     completed / archived / paused / blocked demands, review-ready demands
+     that still require `decide-review`, and target tasks already accepted,
+     completed, or blocked.
 
 ```text
 node scripts/codex-automation-loop.mjs prepare-dispatch-from-state --state-root <stateRoot> --target-task-id <taskId> --group <dispatchGroup> --controller-window <currentControllerWindow> --return-policy group-ready --human-context-ref <stateRoot>/developer-progress.md --require-thread --write --json

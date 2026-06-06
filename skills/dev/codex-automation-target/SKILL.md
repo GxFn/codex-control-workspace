@@ -19,16 +19,18 @@ Target wakeups should be task-first and compact:
 变量：
 - currentWindow: <window>
 - taskId: <taskId>
-- controllerWindow: <controller>
 - stateRoot: <path>
-- humanContextRef: <path>
 - dispatchGroup: <group>
-- rules: 用完即弃；只执行本窗口任务；返回 TargetResultEnvelope；不创建子窗口下一跳；按 dispatch group returnPolicy 和 controllerWindow 判断是否执行一次总控回跳（build + send/readback + record）。
+- skill: ../codex-control-workspace/skills/dev/codex-automation-target/SKILL.md
 ```
 
 Do not require the prompt to repeat command manuals. Derive commands from the
-variables and this skill. If the variables conflict with the target repository,
-state root, or human context document, stop and report instead of guessing.
+visible variables, this skill, and the local dispatch/delivery envelope. Do not
+expect `controllerWindow`, `returnPolicy`, `taskPackageId`, `stateRevision`,
+`humanContextRef`, or a long `rules` line in the prompt; those belong to the
+state root, dispatch group, and delivery envelope. If the variables conflict
+with the target repository, state root, or human context document, stop and
+report instead of guessing.
 
 ## Target Flow
 
@@ -41,9 +43,15 @@ state root, or human context document, stop and report instead of guessing.
 
 2. **Orient**
    - Read workspace `AGENTS.md`, workspace index/status, the dispatch packet's
-     `stateRoot` / `humanContextRef` documents, this skill, and the target
-     repository `AGENTS.md`.
+     `stateRoot` `controller-state.json` / `developer-progress.md`, this
+     skill, and the target repository `AGENTS.md`. If a custom
+     `humanContextRef` exists, read it from the delivery envelope rather than
+     requiring it in the prompt.
    - State current window identity and repository responsibility.
+   - If the target repository access card lists multiple window aliases for
+     one physical repository, route strictly by `currentWindow` from the
+     prompt / delivery envelope / current plan. Do not treat shared `AGENTS.md`
+     as permission to execute a sibling window's task.
    - Do not use legacy `claim` to discover work. The dispatch packet / prompt
      is the assigned work boundary.
 

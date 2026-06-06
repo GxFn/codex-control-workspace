@@ -31,7 +31,7 @@ dispatch, acceptance, or product implementation.
 | `.workspace-local/workspace.config.json` | local install scope | Machine-specific repository/window map override. | no |
 | `.workspace-local/codex-automation-loop/thread-registry/<window>.json` | local runtime | Real Codex thread registration for one window. | no |
 | `.workspace-local/codex-automation-loop/window-config/<window>.json` | local runtime | Derived child-window dispatch config, safe to regenerate from workspace config + thread registry. | no |
-| `.workspace-local/codex-automation-loop/dispatch-groups/<group>.json` | total control | First-class dispatch group protocol: expected targets, control plan, and return policy. | no |
+| `.workspace-local/codex-automation-loop/dispatch-groups/<group>.json` | total control | First-class dispatch group protocol: state ref, expected targets, controller window, and return policy. | no |
 | `.workspace-local/codex-automation-loop/dispatch-packets/*.json` | total control | Controller-created work packet. | no |
 | `.workspace-local/codex-automation-loop/delivery-envelopes/*.json` | total control / delivery adapter | Mechanical delivery plan that references a dispatch packet. | no |
 | `.workspace-local/codex-automation-loop/delivery-runs/*.json` | delivery adapter | Actual direct-thread send attempt, readback, and failure evidence. | no |
@@ -117,6 +117,20 @@ duplicating raw thread ids into tracked docs.
 
 No field in `window-config` may contain raw thread ids. Store only file refs or
 redacted/hashes when a diagnostic needs identity continuity.
+
+Multiple configured windows may intentionally point at the same repository path
+when one physical support repo carries distinct responsibilities. Example:
+`AlembicTest-IDE` and `AlembicTest` share `../AlembicTest`, but their task
+boundaries differ. The generated `AGENTS.md` access card must list all window
+aliases for that repository, list each window ledger, and require the target to
+route by the `currentWindow` in the prompt, delivery envelope, or current plan.
+Do not solve this by overwriting the same access card with alternating window
+names.
+
+Unmanaged real projects such as a protected `BiliDili` test project are skipped
+by `write-agents --all --include-unmanaged` unless the caller also uses
+`--include-real-project`. That flag should be reserved for an explicit
+install-scope decision, not routine automation cleanup.
 
 ## Dispatch Group
 
@@ -215,6 +229,14 @@ automation payloads. It should become a direct-thread plan:
   "createdAt": "2026-05-31T00:00:00.000Z"
 }
 ```
+
+The visible `prompt` is intentionally smaller than the envelope. Target prompts
+show only `currentWindow`, `taskId`, `stateRoot`, optional `dispatchGroup`, and
+the target skill path. Controller-return prompts show only `stateRoot`,
+`dispatchGroup`, `trigger`, optional non-empty exception targets, and the
+controller skill path. Keep `controllerWindow`, `returnPolicy`, `reviewScope`,
+`groupStatus`, `demandKey`, `taskPackageId`, `stateRevision`, and
+`humanContextRef` in machine JSON rather than repeating them in the prompt.
 
 When the user explicitly enables unattended automation for the current state
 root:

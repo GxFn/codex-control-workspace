@@ -25,6 +25,7 @@ Usage:
   node scripts/controller-state.mjs import-target-result --state-root <path> --target-task-id <id> --target-window <window> --status <completed|blocked|needs-review> [--result-id <id>] [--evidence-ref <ref>] [--verification <text>] [--risk <text>] [--summary <text>] [--write] [--json]
   node scripts/controller-state.mjs reduce-results --state-root <path> [--write] [--json]
   node scripts/controller-state.mjs decide-review --state-root <path> --candidate-id <id> --decision <accept|rework|blocked> --reason <text> [--evidence-ref <ref>] [--write] [--json]
+  node scripts/controller-state.mjs complete-demand --state-root <path> --reason <text> --evidence-ref <ref> [--write] [--json]
 
 Design:
   This script manages the machine state root for the new control state-machine
@@ -244,6 +245,8 @@ function commandInit() {
     events: path.join(stateRoot, "controller-events.jsonl"),
     projection: path.join(stateRoot, "projection.json"),
     progress: path.join(stateRoot, progressDoc),
+    intake: path.join(stateRoot, "intake"),
+    testCards: path.join(stateRoot, "test-cards"),
     taskPackages: path.join(stateRoot, "task-packages"),
     targetResults: path.join(stateRoot, "target-results"),
     evidence: path.join(stateRoot, "evidence"),
@@ -359,6 +362,8 @@ function commandInit() {
     unifiedStatus,
   });
   const directories = [
+    files.intake,
+    files.testCards,
     files.taskPackages,
     files.targetResults,
     files.evidence,
@@ -426,6 +431,15 @@ function commandAddTaskPackage() {
   const packageFile = path.join(stateRoot, "task-packages", `${slug(taskPackageId)}.json`);
   const state = readJson(stateFile, "controller state");
 
+  if (["completed", "archived", "paused"].includes(state.state)) {
+    fail(`cannot add task package while demand is ${state.state}: ${state.demandKey}`);
+  }
+  if (["review-ready", "accepting", "waiting-results"].includes(state.state)) {
+    fail(`cannot add task package while demand is ${state.state}; reduce or decide current results before adding more work.`);
+  }
+  if (state.state === "blocked" || (state.blockers ?? []).length > 0) {
+    fail(`cannot add task package while demand is blocked; record an explicit rework or unblock decision first.`);
+  }
   if (existsSync(packageFile)) {
     fail(`task package already exists: ${relative(packageFile)}`);
   }
@@ -439,6 +453,9 @@ function commandAddTaskPackage() {
   const createdAt = nowIso();
   const nextRevision = Number(state.revision ?? 0) + 1;
   const eventId = nextEventId(createdAt, nextRevision);
+  const nextMainState = state.state === "intake" || state.state === "needs-rework"
+    ? "planned"
+    : state.state;
   const targetTasks = targetWindow
     ? [
         {
@@ -463,8 +480,13 @@ function commandAddTaskPackage() {
   };
   const nextState = {
     ...state,
+    state: nextMainState,
+    stateReason: `task package added: ${taskPackageId}`,
     revision: nextRevision,
     updatedAt: createdAt,
+    allowedActions: targetTasks.length > 0
+      ? ["prepare-dispatch-from-state", "add-task-package", "render-progress-doc"]
+      : ["add-task-package", "render-progress-doc"],
     taskPackages: [
       ...(state.taskPackages ?? []),
       {
@@ -496,7 +518,7 @@ function commandAddTaskPackage() {
     actor: "controller",
     type: "task-package.added",
     from: state.state,
-    to: state.state,
+    to: nextMainState,
     reason: `task package added: ${taskPackageId}`,
     evidenceRefs: sourceRef ? [sourceRef] : [],
     allowedWrites: [
@@ -557,12 +579,18 @@ function commandImportTargetResult() {
     fail(`--status must be one of: ${[...allowedStatuses].join(", ")}`);
   }
   const state = readJson(path.join(stateRoot, "controller-state.json"), "controller state");
+  if (["completed", "archived"].includes(state.state)) {
+    fail(`cannot import target result while demand is ${state.state}: ${state.demandKey}`);
+  }
   const targetTask = (state.targetTasks ?? []).find((item) => item.targetTaskId === targetTaskId);
   if (!targetTask) {
     fail(`unknown target task: ${targetTaskId}`);
   }
   if (targetTask.targetWindow !== targetWindow) {
     fail(`target task ${targetTaskId} belongs to ${targetTask.targetWindow}, not ${targetWindow}`);
+  }
+  if (["accepted"].includes(targetTask.status)) {
+    fail(`target task ${targetTaskId} is already ${targetTask.status}; create a new task package for follow-up work.`);
   }
   const resultId = getValue("--result-id", `tr-${slug(targetTaskId)}`);
   const resultFile = path.join(stateRoot, "target-results", `${slug(resultId)}.json`);
@@ -627,6 +655,9 @@ function commandReduceResults() {
   const stateFile = path.join(stateRoot, "controller-state.json");
   const eventsFile = path.join(stateRoot, "controller-events.jsonl");
   const state = readJson(stateFile, "controller state");
+  if (["completed", "archived"].includes(state.state)) {
+    fail(`cannot reduce results while demand is ${state.state}: ${state.demandKey}`);
+  }
   const targetTasks = state.targetTasks ?? [];
   if (targetTasks.length === 0) {
     fail("controller state has no target tasks to reduce.");
@@ -817,8 +848,10 @@ function commandDecideReview() {
     revision: nextRevision,
     updatedAt: createdAt,
     allowedActions: decision === "accept"
-      ? ["add-task-package", "render-progress-doc"]
-      : ["add-task-package", "render-progress-doc"],
+      ? ["add-task-package", "complete-demand", "render-progress-doc"]
+      : decision === "rework"
+        ? ["add-task-package", "render-progress-doc"]
+        : ["render-progress-doc"],
     blockers: decision === "blocked"
       ? [
           ...(state.blockers ?? []),
@@ -898,6 +931,100 @@ function commandDecideReview() {
     },
     [
       `${write ? "Recorded" : "Would record"} controller review decision ${decision}.`,
+      "No dispatch, automation, or progress doc body update was performed.",
+    ],
+  );
+}
+
+function commandCompleteDemand() {
+  const stateRoot = stateRootFromArg();
+  const reason = requireValue("--reason");
+  const evidenceRefs = valuesFor("--evidence-ref");
+  if (evidenceRefs.length === 0) {
+    fail("complete-demand requires at least one --evidence-ref.");
+  }
+  const stateFile = path.join(stateRoot, "controller-state.json");
+  const eventsFile = path.join(stateRoot, "controller-events.jsonl");
+  const state = readJson(stateFile, "controller state");
+  if (state.state === "completed") {
+    fail(`demand is already completed: ${state.demandKey}`);
+  }
+  const openTasks = (state.targetTasks ?? []).filter((task) => task.status !== "accepted");
+  const openPackages = (state.taskPackages ?? []).filter((taskPackage) => taskPackage.status !== "accepted");
+  if (openTasks.length > 0 || openPackages.length > 0) {
+    fail(`complete-demand requires all task packages and target tasks to be accepted; open tasks: ${openTasks.map((item) => item.targetTaskId).join(", ") || "none"}; open packages: ${openPackages.map((item) => item.taskPackageId).join(", ") || "none"}`);
+  }
+  if ((state.blockers ?? []).length > 0) {
+    fail("complete-demand cannot close a demand with active blockers.");
+  }
+
+  const createdAt = nowIso();
+  const nextRevision = Number(state.revision ?? 0) + 1;
+  const eventId = nextEventId(createdAt, nextRevision);
+  const nextState = {
+    ...state,
+    state: "completed",
+    stateReason: reason,
+    revision: nextRevision,
+    updatedAt: createdAt,
+    allowedActions: ["render-progress-doc"],
+    decisionsRequired: [],
+    review: {
+      ...(state.review ?? {}),
+      status: "demand-completed",
+    },
+    projection: {
+      ...(state.projection ?? {}),
+      status: "stale",
+    },
+  };
+  const event = {
+    eventId,
+    createdAt,
+    actor: "controller",
+    type: "demand.completed",
+    from: state.state,
+    to: "completed",
+    reason,
+    evidenceRefs,
+    allowedWrites: [
+      "controller-state.json",
+      "controller-events.jsonl",
+    ],
+    forbiddenConclusions: [
+      "completion-creates-dispatch",
+      "completion-skips-evidence-review",
+      "completion-updates-progress-doc-body",
+    ],
+    stateRevision: nextRevision,
+  };
+
+  if (write) {
+    writeJson(stateFile, nextState);
+    appendJsonLine(eventsFile, event);
+  }
+
+  output(
+    {
+      ok: true,
+      command: "complete-demand",
+      wrote: write,
+      demandKey: state.demandKey,
+      stateRoot: relative(stateRoot),
+      previousState: state.state,
+      nextState: "completed",
+      stateRevision: nextRevision,
+      eventId,
+      projectionStatus: "stale",
+      appendLog: {
+        type: "decision",
+        decision: `completed: ${reason}`,
+        eventId,
+        evidenceRef: evidenceRefs.join(", "),
+      },
+    },
+    [
+      `${write ? "Recorded" : "Would record"} demand completion for ${state.demandKey}.`,
       "No dispatch, automation, or progress doc body update was performed.",
     ],
   );
@@ -1002,6 +1129,9 @@ try {
       break;
     case "decide-review":
       commandDecideReview();
+      break;
+    case "complete-demand":
+      commandCompleteDemand();
       break;
     case "help":
     case "--help":

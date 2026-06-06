@@ -33,10 +33,11 @@ Use this reference when creating, moving, syncing, or archiving ControlWorkspace
 ## Primary Ledgers
 
 - `.workspace-active/workspace/index.md` is the only workspace-level control entrypoint. Every cross-repo plan, current status, task dispatch, document mount, acceptance index, and historical migration entry must be traceable from it.
-- `.workspace-active/workspace/current/` holds current status, active TODO, test exchanges, and active workspace control plans.
+- `.workspace-active/workspace/current/` holds current status, active TODO, test exchange projections, and active workspace control plans / state roots.
 - `.workspace-active/workspace/current/workspace-current-status.md` is a short current snapshot, not the place for large historical backfill.
 - `.workspace-active/workspace/current/global-todo-board.md` is the cross-plan TODO / Backlog ledger.
-- `.workspace-active/workspace/current/test-exchange.md` is the total-control exchange point for real `TestWindow` handoffs and evidence.
+- Active controller state roots hold real `TestWindow` test boundary cards under `test-cards/*.json` and target results under `target-results/*.json`.
+- `.workspace-active/workspace/current/test-exchange.md` is a short human-readable projection / exchange point for real `TestWindow` handoffs and evidence, not the state source.
 - `../workspace-ledger/design/` is the internal `DesignWindow` surface when no external design repository is configured. It must include local rules, operating policy, alignment checklist, and original-plan / requirement-design / signal / handoff templates.
 - `../workspace-ledger/testing/` is the internal `TestWindow` surface when no external test repository is configured. It must include local rules, testing operation policy, and the test handoff template.
 - `.workspace-active/` is the ignored active working surface. It may hold current task documents and local runtime state, but completed / historical project records must be archived into `../workspace-ledger/`.

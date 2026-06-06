@@ -37,7 +37,8 @@ Script-readable document format:
 - New demands start from a controller state root created by
   `controller-state.mjs init`.
 - The root contains machine-owned `demand.json`, `controller-state.json`,
-  `controller-events.jsonl`, `task-packages/*.json`, `target-results/*.json`,
+  `controller-events.jsonl`, `intake/*.json`, `test-cards/*.json`,
+  `task-packages/*.json`, `target-results/*.json`,
   `transition-candidates/*.json`, and one developer-readable
   `developer-progress.md`.
 - `developer-progress.md` is not state authority. Scripts may update only its
@@ -46,20 +47,23 @@ Script-readable document format:
   sections managed by `append-progress-log.mjs`.
 - Design handoff inboxes, test exchange docs, current indexes, archive maps, and
   compact summaries are evidence surfaces; keep them concise and link back to
-  the active progress document rather than duplicating it.
+  the active progress document rather than duplicating it. Design/Test machine
+  intake for an active demand belongs under that demand's state root.
 
 Current scripts:
 
 - `workspace-control.mjs`: command-style aggregator for common control-center
   workflows. It maps friendly subcommands such as `status`, `verify`, `sync`,
-  `design`, `runtime`, `install`, `scripts`, `loop`, and `next-work` onto the
-  current scripts without replacing their dry-run / write gates. Use `--print`
-  to inspect the exact commands before running them.
+  `design`, `intake`, `runtime`, `install`, `scripts`, `loop`, and `next-work`
+  onto the current scripts without replacing their dry-run / write gates. Use
+  `--print` to inspect the exact commands before running them.
 - `controller-state.mjs`: state-root manager. `init` creates a per-demand
   machine directory from `templates/control-state-machine/`; `add-task-package`
-  writes task package JSON; `import-target-result` stores result evidence;
-  `reduce-results` creates review candidates; `decide-review` records explicit
-  total-control judgment. It does not dispatch work or parse Markdown as state.
+  writes task package JSON and moves an intake / rework demand back to
+  `planned`; `import-target-result` stores result evidence; `reduce-results`
+  creates review candidates; `decide-review` records explicit total-control
+  judgment; `complete-demand` records the final completion transition after
+  accepted task evidence. It does not dispatch work or parse Markdown as state.
 - `render-progress-doc.mjs`: reads a state root, rebuilds `projection.json`, and
   replaces only the `Unified Status` marker block inside
   `developer-progress.md`.
@@ -72,12 +76,23 @@ Current scripts:
   target result envelopes, reviews group readiness, builds controller-return
   envelopes, manages keep-live state, and writes stop markers. It does not read
   current plan Markdown as authority, create old Codex automations, send host
-  thread messages, or accept evidence.
+  thread messages, or accept evidence. `prepare-dispatch-from-state` fails
+  closed for completed / archived / paused demands, review-ready demands that
+  still need a controller decision, blocked demands, and target tasks that are
+  already accepted, completed, or blocked.
+- `control-intake.mjs`: state-root intake bridge for Design and Test surfaces.
+  `design-handoff` validates a formal Design board row and writes
+  `intake/design-handoff-*.json`; `test-card` writes a complete pre-test
+  boundary machine card under `test-cards/*.json`. It does not mutate
+  `controller-state.json`, create dispatches, accept Design handoffs, accept
+  test results, or complete demands.
 - `control-workspace-install.mjs`: sibling-directory installation helper. It
   discovers repositories, writes user-confirmed `workspace.config.json` scope,
   unpacks source `AGENTS.md` into the parent workspace root, prints child-window
-  prompts, writes managed child access-card blocks, and syncs internal or
-  external Design/Test support templates.
+  prompts, writes managed child access-card blocks, supports same-repository
+  window aliases such as `AlembicTest-IDE` / `AlembicTest`, protects configured
+  real-project windows unless `--include-real-project` is explicit, and syncs
+  internal or external Design/Test support templates.
 - `collect-repo-status.mjs`: summarizes branch, HEAD, dirty state, upstream,
   ahead / behind counts, untracked files, and latest commit for each configured
   child repository.
@@ -131,9 +146,10 @@ Run them through `node scripts/workspace-control.mjs scripts --tests`. The
 current set is `archive-global-todo-board.test.mjs`,
 `codex-automation-loop.test.mjs`, `collect-repo-status.test.mjs`,
 `controller-state.test.mjs`, `control-state-machine-route-fixtures.test.mjs`,
-`check-repository-residue.test.mjs`, `check-script-docs.test.mjs`,
-`control-workspace-install.test.mjs`, `import-design-handoffs.test.mjs`,
-`next-control-work.test.mjs`, and `workspace-control.test.mjs`.
+`control-intake.test.mjs`, `check-repository-residue.test.mjs`,
+`check-script-docs.test.mjs`, `control-workspace-install.test.mjs`,
+`import-design-handoffs.test.mjs`, `next-control-work.test.mjs`, and
+`workspace-control.test.mjs`.
 
 ## Common Routes
 
@@ -147,7 +163,8 @@ command catalog and selection table, read
 | Current repo / closed-loop health | `node scripts/workspace-control.mjs status` |
 | Full control-center verification | `node scripts/workspace-control.mjs verify` |
 | Render a controller state-root progress doc | `node scripts/workspace-control.mjs sync --state-root <state-root> --write` |
-| Design handoff intake | `node scripts/workspace-control.mjs design --id <DESIGN-KEY> --json` |
+| Design handoff discovery / validation | `node scripts/workspace-control.mjs design --id <DESIGN-KEY> --json` |
+| Attach Design/Test machine intake to a state root | `node scripts/workspace-control.mjs intake <design-handoff|test-card> ... --state-root <state-root>` |
 | Script docs plus script tests | `node scripts/workspace-control.mjs scripts --tests` |
 | Runtime residue read-only check | `node scripts/workspace-control.mjs runtime` |
 | Codex Automation Closed Loop commands | `node scripts/workspace-control.mjs loop <subcommand> ...` |
@@ -162,5 +179,6 @@ inspect the underlying script calls before execution.
 
 Real-project test scripts, when an external `TestWindow` exists, live under that
 repository's `scripts/` directory so the control workspace root `scripts/`
-directory stays focused on governance. If `TestWindow` is internal, keep only
-handoff templates and evidence links in `.workspace-active/workspace/current/test-exchange.md`.
+directory stays focused on governance. Test boundaries for an active demand are
+machine cards under that demand's state root; `test-exchange.md` is only a
+short human exchange/projection surface when needed.

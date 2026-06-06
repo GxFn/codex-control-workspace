@@ -26,7 +26,7 @@ Use `node scripts/codex-automation-loop.mjs` from the control workspace root.
 | Register target thread | `register-thread --window <window> --thread-id <id> --write --json` | Stores a real Codex thread id under ignored local runtime. JSON output redacts the id. |
 | Build child-window file config | `build-window-config --window <window> --require-thread --write --json` | Writes a local `CodexSubwindowDispatchConfig` with dispatchability, role, registry file reference, return route, and automation keep-live requirements. It never exposes raw thread ids. |
 | Create a delivery envelope | `build-delivery --packet-file <packetFile> --require-thread --write --json` | Writes a `DeliveryEnvelope`; the delivery adapter must use direct thread dispatch. If a real thread id or host send capability is unavailable, fail closed for total-control judgment. |
-| Prepare state-root dispatch mechanically | `prepare-dispatch-from-state --state-root <path> --target-task-id <task> --group <group> --controller-window <controller> --human-context-ref <path> --require-thread --write --json` | Default route for new work. Reads `controller-state.json` and task-package JSON, then writes window config, dispatch packet / group, and delivery envelope with `stateRef` / `humanContextRef`. It does not read a Markdown plan as authority and stops before host thread send/readback. |
+| Prepare state-root dispatch mechanically | `prepare-dispatch-from-state --state-root <path> --target-task-id <task> --group <group> --controller-window <controller> --human-context-ref <path> --require-thread --write --json` | Default route for eligible new work. Reads `controller-state.json` and task-package JSON, then writes window config, dispatch packet / group, and delivery envelope with `stateRef` / `humanContextRef`. It does not read a Markdown plan as authority and stops before host thread send/readback. It fails closed for terminal / paused / blocked / review-ready demands and accepted / completed / blocked target tasks. |
 | Record delivery evidence | `record-delivery-run --delivery-file <deliveryFile> --status sent --readback-ok true --evidence "<evidence>" --write --json` | Records the local host send/readback result for a delivery envelope. This is transport evidence only, not task acceptance. |
 | Start keep-live watcher | `start-keep-live --automation-run-id <id> --write --json` | Starts a local macOS watcher for unattended-run keep-live support and records state/control files under ignored runtime. This is readiness support only, not delivery or acceptance. |
 | Stop keep-live watcher | `stop-keep-live --automation-run-id <id> --reason "<reason>" --write --json` | Stops the local watcher through its control marker and records whether worker / child processes exited. |
@@ -111,10 +111,17 @@ until a matching `DirectThreadDeliveryRun` has `status="sent"` and
 
 - Prompt first line must describe the real task: `继续当前窗口任务：...` or
   `继续总控验收：...`.
-- Prompt body carries dynamic values and rule names only.
+- Prompt body carries only compact dynamic values and the skill pointer.
 - Target dispatch prompts default to the script-generated multi-line `变量：`
-  block. Do not hand-pack `currentWindow/taskId/stateRoot/humanContextRef/dispatchGroup`
-  into one long sentence.
+  block: `currentWindow`, `taskId`, `stateRoot`, optional `dispatchGroup`, and
+  `skill`. Do not hand-pack values into one long sentence.
+- Controller-return prompts use `stateRoot`, `dispatchGroup`, `trigger`, optional
+  non-empty exception targets, and `skill`.
+- Do not surface `controllerWindow`, `returnPolicy`, `reviewScope`,
+  `groupStatus`, `demandKey`, `taskPackageId`, `stateRevision`,
+  `humanContextRef`, completed targets, or long `rules` text in the visible
+  prompt. Those stay in the state root, dispatch group, delivery envelope, and
+  controller-return envelope.
 - `不创建下一跳` means no target-window next hop. It does not mean no
   controller return. The only allowed return is a controller-return envelope
   allowed by the dispatch group's `returnPolicy`.
@@ -133,6 +140,15 @@ Use `review-pack` when the repeated local-file hopping itself becomes noise.
 It keeps the same readiness decision, but lays out result files, evidence refs,
 commits, verification summaries, target delivery status, and controller-return
 status in one object. It remains a preparation aid, not a verdict.
+If a result names path-like evidence refs and any of those paths are missing,
+`review-pack` marks `missingEvidenceRefsPresent=true`,
+`controllerReviewReady=false`, and the next action is to fix the evidence refs
+before a controller verdict.
+For state-root target results, path-like evidence refs may be relative to the
+state root or to the control workspace root. Missing path refs still gate the
+verdict until total control repairs or explains the evidence boundary.
+If a state root has no target tasks, `review-pack --state-root` returns
+`decision=no-target-tasks`, `groupStatus=empty`, and `controllerReviewReady=false`.
 
 Total control must still inspect:
 

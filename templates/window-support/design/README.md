@@ -7,4 +7,5 @@ Use this directory when the user does not have an external `DesignWindow` reposi
 - Operating policy: `docs/design-window-operating-policy.md`
 - Alignment checklist: `docs/workspace-alignment-checklist.md`
 - Templates: root `templates/` and the local copies created by `sync-templates`
-- Import command: `node scripts/import-design-handoffs.mjs --write`
+- Discovery command: `node scripts/import-design-handoffs.mjs --write`
+- Control intake command after total-control acceptance: `node scripts/control-intake.mjs design-handoff --state-root <state-root> --design-key <Design Key> --write --json`

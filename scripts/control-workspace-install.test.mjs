@@ -136,8 +136,12 @@ test("write-agents is dry-run by default and writes managed access cards with --
   assert.match(baseAgents, /Current plan directory: `\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/current`/);
   assert.match(baseAgents, /Window ledger: `\.\.\/workspace-ledger\/BaseWindow`/);
   assert.match(baseAgents, /Direct-thread delivery 是正常工作投递流水线/);
-  assert.match(baseAgents, /Delivery prompt 只承载动态变量、规则名和 skill 指向/);
+  assert.match(baseAgents, /Delivery prompt 只承载少量动态变量和 skill 指向/);
+  assert.match(baseAgents, /可见变量只需要 `currentWindow` \/ `taskId` \/ `stateRoot` \/ 可选 `dispatchGroup`/);
+  assert.match(baseAgents, /`controllerWindow`、`returnPolicy`、`humanContextRef`、`stateRevision` 等机器字段从 state root、dispatch group 和 delivery envelope 读取/);
   assert.match(baseAgents, /返回 `TargetResultEnvelope`/);
+  assert.match(baseAgents, /完整 group snapshot 留在 controller-return envelope/);
+  assert.doesNotMatch(baseAgents, /controlPlan/);
   assert.doesNotMatch(baseAgents, /回填必须包含完成范围/);
   assert.doesNotMatch(baseAgents, /可以在本窗口 \/ 本仓库边界内使用 Codex 子 agent/);
   assert.doesNotMatch(baseAgents, /完整能力改成薄实现/);
@@ -219,6 +223,40 @@ test("write-agents can explicitly include unmanaged Design/Test windows while sk
   assert.match(testAgents, /Window name: `TestWindow`/);
   assert.match(testAgents, /Test exchange: `\.\.\/codex-control-workspace\/\.workspace-active\/workspace\/current\/test-exchange\.md`/);
   assert.doesNotMatch(testAgents, /不得成为默认测试队列/);
+});
+
+test("write-agents supports multiple workspace windows sharing one AGENTS.md", () => {
+  const fixture = makeFixture();
+  const sharedTest = path.join(fixture.parent, "SharedTest");
+  mkdirSync(sharedTest, { recursive: true });
+  const configPath = path.join(fixture.control, "workspace.config.json");
+  const config = JSON.parse(readFileSync(configPath, "utf8"));
+  config.testWindow = "TestWindow";
+  config.repositories = [
+    { windowName: "BaseWindow", path: "../BaseWindow", role: "Base runtime", managedAgents: true },
+    { windowName: "TestIDE", path: "../SharedTest", role: "IDE test", managedAgents: false },
+    { windowName: "TestWindow", path: "../SharedTest", role: "Real test", managedAgents: false },
+  ];
+  writeFile(configPath, JSON.stringify(config, null, 2));
+
+  const payload = runJson(fixture, ["write-agents", "--all", "--include-unmanaged", "--write"]);
+  assert.deepEqual(
+    payload.results.map((result) => result.windowName),
+    ["BaseWindow", "TestIDE", "TestWindow"],
+  );
+
+  const sharedAgents = readFileSync(path.join(sharedTest, "AGENTS.md"), "utf8");
+  assert.match(sharedAgents, /Window aliases for this repository: `TestIDE` \/ `TestWindow`/);
+  assert.match(sharedAgents, /Window ledgers for this repository:/);
+  assert.match(sharedAgents, /`TestIDE`: `\.\.\/workspace-ledger\/TestIDE`/);
+  assert.match(sharedAgents, /`TestWindow`: `\.\.\/workspace-ledger\/TestWindow`/);
+  assert.match(sharedAgents, /只处理本接入卡列出的窗口 dispatch packet/);
+  assert.match(sharedAgents, /currentWindow/);
+
+  const ideProfile = runJson(fixture, ["access-profiles", "--window", "TestIDE"]).profiles[0];
+  const testProfile = runJson(fixture, ["access-profiles", "--window", "TestWindow"]).profiles[0];
+  assert.equal(ideProfile.ok, true);
+  assert.equal(testProfile.ok, true);
 });
 
 test("sync-root-agents unpacks parent AGENTS with control-repo paths", () => {

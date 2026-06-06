@@ -14,7 +14,7 @@ Status: idle / no active demand
 ## Current Ledgers
 
 - Global TODO: [global-todo-board.md](global-todo-board.md)
-- Test exchange: [test-exchange.md](test-exchange.md)
+- Test exchange projection: [test-exchange.md](test-exchange.md)
 - Current map: [index.md](index.md)
 
 ## Window Dispatch

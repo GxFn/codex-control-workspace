@@ -59,7 +59,7 @@ Design Key：<READABLE-TOPIC-YYYY-MM-DD>
 
 - 加入 `global-todo-board`。
 - 作为当前 wave 的阻塞 / 返修候选。
-- 创建 `TestWindow` 测试单。
+- 总控评审是否需要创建 `TestWindow` 测试 card / 任务包。
 - 开启原始计划确认。
 - 继续由 DesignWindow 做需求设计。
 - 等当前主线完成后再评估。

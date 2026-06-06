@@ -8,7 +8,7 @@
 
 `ControlWorkspace` 总控窗口负责定义测试目标、分派测试窗口、验收回填证据和调整后续计划；`TestWindow` 负责需要真实环境的测试执行与证据整理。
 
-以下操作默认归 `TestWindow`，且必须由用户或当前总控测试单授权：
+以下操作默认归 `TestWindow`，且必须由用户确认过的当前总控 state-root 任务包授权；真实测试还必须能追溯到同一 state-root 下的 `test-cards/*.json`：
 
 - 启动或重启测试运行时。
 - 触发 cold-start / rescan / clean rebuild。
@@ -31,16 +31,17 @@
 
 ## 脚本归属
 
-真实项目测试脚本放在 `TestWindow/scripts/`。Control workspace 根 `scripts/` 只保留总控治理、文档校验、边界检查、索引归档和派发检查脚本；不要把真实项目测试脚本放回总控根目录。
+真实项目测试脚本放在 `TestWindow/scripts/`。Control workspace 根 `scripts/` 只保留总控治理、文档校验、边界检查、Design/Test state-root intake、索引归档和派发检查脚本；不要把真实项目测试脚本放回总控根目录。
 
 ## 文档归属
 
-长期测试计划、复现记录、监控记录和验证报告写入 `TestWindow/docs/`。跨仓库总控计划仍写在 `../workspace-ledger/workspace/`，但只链接或引用 `TestWindow` 回填的测试证据，不承载测试执行细节。
+长期测试计划、复现记录、监控记录和验证报告写入 `TestWindow/docs/`。跨仓库总控计划仍写在 controller state-root 和 `../workspace-ledger/workspace/`，但只链接或引用 `TestWindow` 回填的测试证据，不承载测试执行细节。`test-exchange.md` 只作人读摘要 / exchange 投影，不是测试授权或状态源。
 
 ## 回填要求
 
 `TestWindow` 完成测试后，回填至少包含：
 
+- state-root、task package、target task 和 test card 引用。
 - 测试目标与触发入口。
 - 使用配置或关键参数。
 - job id / session id / UI URL 摘要。

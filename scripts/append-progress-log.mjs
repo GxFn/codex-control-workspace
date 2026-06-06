@@ -46,6 +46,20 @@ function output(payload, textLines = []) {
   console.log(`Agent next: ${complete.agentNext}`);
 }
 
+function usageLines() {
+  return [
+    "Append an entry to a controller state-root developer progress document.",
+    "",
+    "Usage:",
+    "  node scripts/append-progress-log.mjs --state-root <path> --type task-package --task-package-id <id> --summary <text> [--source-ref <ref>] [--write] [--json]",
+    "  node scripts/append-progress-log.mjs --state-root <path> --type backfill --target-task-id <id> --target-window <window> [--evidence-ref <ref>] [--write] [--json]",
+    "  node scripts/append-progress-log.mjs --state-root <path> --type decision --decision <text> [--event-id <id>] [--evidence-ref <ref>] [--write] [--json]",
+    "",
+    "Notes:",
+    "  The script appends human-readable log entries only; it does not change machine state, dispatch work, or accept evidence.",
+  ];
+}
+
 function fail(message) {
   output({ ok: false, command: "append-progress-log", error: message });
   process.exitCode = 1;
@@ -180,6 +194,19 @@ function appendToSection(content, heading, entry) {
 }
 
 try {
+  if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
+    output(
+      {
+        ok: true,
+        command: "append-progress-log",
+        usage: usageLines(),
+        agentNext: "Use the matching append type after total-control judgment; help does not modify files.",
+      },
+      usageLines(),
+    );
+    throw new CliExit("help");
+  }
+
   const type = requireValue("--type");
   const heading = sectionByType.get(type);
   if (!heading) fail(`--type must be one of: ${[...sectionByType.keys()].join(", ")}`);
